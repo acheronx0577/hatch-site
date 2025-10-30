@@ -129,6 +129,8 @@ const defaultPreferences: CustomerPreferences = {
 
 const CustomerExperienceContext = createContext<CustomerExperienceContextValue | undefined>(undefined)
 
+const DISABLE_REMOTE_PREFS = import.meta.env.VITE_SUPABASE_DISABLE_REMOTE === 'true'
+
 interface RemoteProfileMetadata {
   customer_portal?: CustomerPreferences
   [key: string]: unknown
@@ -190,6 +192,11 @@ export const CustomerExperienceProvider: React.FC<{ children: React.ReactNode }>
 
   const hydrateFromRemote = useCallback(async () => {
     if (!userId) {
+      setIsLoading(false)
+      return
+    }
+
+    if (DISABLE_REMOTE_PREFS) {
       setIsLoading(false)
       return
     }

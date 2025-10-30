@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID ?? process.env.VITE_TENANT_ID ?? 'tenant-hatch';
 
 export default async function MlsPreflightPage() {
-  const profiles = await listMlsProfiles(TENANT_ID);
+  const { items: profiles } = await listMlsProfiles(TENANT_ID);
 
   return (
     <div className="max-w-xl space-y-4">

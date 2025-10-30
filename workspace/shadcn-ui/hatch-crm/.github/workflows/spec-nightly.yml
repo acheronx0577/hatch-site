@@ -1,0 +1,129 @@
+name: OpenAPI Nightly Drift
+
+on:
+  schedule:
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: spec-nightly
+  cancel-in-progress: false
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: --max-old-space-size=2048
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install (skip postinstall)
+        run: pnpm install --ignore-scripts
+
+      - name: Regenerate lite spec
+        run: pnpm run spec:all
+
+      - name: Fetch base spec from main
+        run: |
+          git fetch origin main --depth=1
+          mkdir -p .spec-base
+          if git show origin/main:openapi/openapi.lite.json > .spec-base/base.json 2>/dev/null; then
+            echo "Fetched base spec from origin/main."
+          else
+            echo "Base spec not found on origin/main; using regenerated spec as baseline."
+            cp openapi/openapi.lite.json .spec-base/base.json
+          fi
+          cp openapi/openapi.lite.json .spec-base/new.json
+
+      - name: Summarize drift (paths/tags)
+        id: drift
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const base = JSON.parse(fs.readFileSync(path.resolve('.spec-base/base.json'), 'utf8'));
+          const next = JSON.parse(fs.readFileSync(path.resolve('.spec-base/new.json'), 'utf8'));
+
+          const basePaths = new Set(Object.keys(base.paths || {}));
+          const nextPaths = new Set(Object.keys(next.paths || {}));
+
+          const addedPaths = [...nextPaths].filter((p) => !basePaths.has(p));
+          const removedPaths = [...basePaths].filter((p) => !nextPaths.has(p));
+          const changedPaths = [...nextPaths].filter(
+            (p) => basePaths.has(p) && JSON.stringify(base.paths[p]) !== JSON.stringify(next.paths[p])
+          );
+
+          const baseTags = new Set((base.tags || []).map((t) => t.name));
+          const nextTags = new Set((next.tags || []).map((t) => t.name));
+
+          const addedTags = [...nextTags].filter((t) => !baseTags.has(t));
+          const removedTags = [...baseTags].filter((t) => !nextTags.has(t));
+
+          const summaryLines = [
+            '### OpenAPI Drift Summary',
+            `- Added paths: **${addedPaths.length}**`,
+            `- Removed paths: **${removedPaths.length}**`,
+            `- Changed paths: **${changedPaths.length}**`,
+            `- Added tags: **${addedTags.length}**`,
+            `- Removed tags: **${removedTags.length}**`,
+            '',
+            addedPaths.length ? '**Added paths:**\\n' + addedPaths.map((p) => `- \\`${p}\\``).join('\\n') : '',
+            removedPaths.length ? '**Removed paths:**\\n' + removedPaths.map((p) => `- \\`${p}\\``).join('\\n') : '',
+            changedPaths.length ? '**Changed paths:**\\n' + changedPaths.map((p) => `- \\`${p}\\``).join('\\n') : '',
+            addedTags.length ? '**Added tags:** ' + addedTags.join(', ') : '',
+            removedTags.length ? '**Removed tags:** ' + removedTags.join(', ') : ''
+          ].filter(Boolean);
+
+          const summary = summaryLines.join('\\n');
+          fs.writeFileSync(path.resolve('.spec-base/summary.md'), summary);
+          console.log(summary);
+
+          const hasDrift = Boolean(
+            addedPaths.length ||
+              removedPaths.length ||
+              changedPaths.length ||
+              addedTags.length ||
+              removedTags.length
+          );
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `has_drift=${hasDrift}\\n`);
+          NODE
+
+      - name: Upload spec artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-lite-nightly
+          path: |
+            openapi/openapi.lite.json
+            .spec-base/summary.md
+
+      - name: Post job summary
+        if: always()
+        run: |
+          echo "## Nightly OpenAPI Drift" >> "$GITHUB_STEP_SUMMARY"
+          cat .spec-base/summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Warn on drift
+        if: steps.drift.outputs.has_drift == 'true'
+        run: echo "::warning ::OpenAPI drift detected in nightly build. See summary above and artifact."
+
+      - name: Enforce drift on main
+        if: github.ref == 'refs/heads/main' && steps.drift.outputs.has_drift == 'true'
+        run: |
+          echo "OpenAPI drift detected on main; failing nightly."
+          exit 1

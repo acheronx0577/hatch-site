@@ -1,0 +1,841 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Hatch CRM API (Lite)",
+    "description": "Accounts, Opportunities, Cases, Files, Reporting",
+    "version": "0.1.0"
+  },
+  "tags": [
+    { "name": "Accounts" },
+    { "name": "Opportunities" },
+    { "name": "Cases" },
+    { "name": "Files" },
+    { "name": "Reporting" }
+  ],
+  "paths": {
+    "/accounts": {
+      "get": {
+        "tags": ["Accounts"],
+        "operationId": "listAccounts",
+        "summary": "List accounts",
+        "parameters": [
+          { "name": "q", "in": "query", "required": false, "schema": { "type": "string" } },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+          },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/AccountResponse" }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "post": {
+        "tags": ["Accounts"],
+        "operationId": "createAccount",
+        "summary": "Create account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateAccount" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created account",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/accounts/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "get": {
+        "tags": ["Accounts"],
+        "operationId": "getAccount",
+        "summary": "Get account",
+        "responses": {
+          "200": {
+            "description": "Account",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountResponse" }
+              }
+            }
+          },
+          "404": { "description": "Not found" }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "patch": {
+        "tags": ["Accounts"],
+        "operationId": "updateAccount",
+        "summary": "Update account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateAccount" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated account",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AccountResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "delete": {
+        "tags": ["Accounts"],
+        "operationId": "deleteAccount",
+        "summary": "Soft delete account",
+        "responses": {
+          "200": {
+            "description": "Deleted identifier",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "description": "Deleted account identifier" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/opportunities": {
+      "get": {
+        "tags": ["Opportunities"],
+        "operationId": "listOpportunities",
+        "summary": "List opportunities",
+        "parameters": [
+          { "name": "q", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "stage", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "accountId", "in": "query", "required": false, "schema": { "type": "string" } },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+          },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Opportunity list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/OpportunityResponse" }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "post": {
+        "tags": ["Opportunities"],
+        "operationId": "createOpportunity",
+        "summary": "Create opportunity",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateOpportunity" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created opportunity",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OpportunityResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/opportunities/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "get": {
+        "tags": ["Opportunities"],
+        "operationId": "getOpportunity",
+        "summary": "Get opportunity",
+        "responses": {
+          "200": {
+            "description": "Opportunity",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OpportunityResponse" }
+              }
+            }
+          },
+          "404": { "description": "Not found" }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "patch": {
+        "tags": ["Opportunities"],
+        "operationId": "updateOpportunity",
+        "summary": "Update opportunity",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateOpportunity" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated opportunity",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/OpportunityResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "delete": {
+        "tags": ["Opportunities"],
+        "operationId": "deleteOpportunity",
+        "summary": "Soft delete opportunity",
+        "responses": {
+          "200": {
+            "description": "Deleted identifier",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "description": "Soft-deleted opportunity id" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/cases": {
+      "get": {
+        "tags": ["Cases"],
+        "operationId": "listCases",
+        "summary": "List cases",
+        "parameters": [
+          { "name": "q", "in": "query", "required": false, "schema": { "type": "string" } },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["New", "Working", "Escalated", "Resolved", "Closed"]
+            }
+          },
+          {
+            "name": "priority",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["Low", "Medium", "High", "Urgent"]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 200 }
+          },
+          { "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Case list",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CaseListResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "post": {
+        "tags": ["Cases"],
+        "operationId": "createCase",
+        "summary": "Create case",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateCase" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created case",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CaseResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/cases/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "get": {
+        "tags": ["Cases"],
+        "operationId": "getCase",
+        "summary": "Get case",
+        "responses": {
+          "200": {
+            "description": "Case",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CaseResponse" }
+              }
+            }
+          },
+          "404": { "description": "Not found" }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "patch": {
+        "tags": ["Cases"],
+        "operationId": "updateCase",
+        "summary": "Update case",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateCase" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated case",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CaseResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      },
+      "delete": {
+        "tags": ["Cases"],
+        "operationId": "deleteCase",
+        "summary": "Delete case",
+        "responses": {
+          "200": {
+            "description": "Deleted identifier",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "description": "Deleted case identifier" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/files/upload-url": {
+      "post": {
+        "tags": ["Files"],
+        "operationId": "createUploadUrl",
+        "summary": "Create file upload URL",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateUploadUrl" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload URL response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FileUploadResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/files/link": {
+      "post": {
+        "tags": ["Files"],
+        "operationId": "linkFile",
+        "summary": "Link file to record",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LinkFile" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Linked file summary",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LinkedFileSummary" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/files/{object}/{id}": {
+      "parameters": [
+        { "name": "object", "in": "path", "required": true, "schema": { "type": "string" } },
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "get": {
+        "tags": ["Files"],
+        "operationId": "listFilesForRecord",
+        "summary": "List linked files",
+        "responses": {
+          "200": {
+            "description": "Linked files",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/LinkedFileSummary" }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/files/{id}": {
+      "parameters": [
+        { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+      ],
+      "delete": {
+        "tags": ["Files"],
+        "operationId": "deleteFile",
+        "summary": "Soft delete file",
+        "responses": {
+          "200": {
+            "description": "Deleted identifier",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string", "description": "Marked deleted file id" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/reporting/metrics": {
+      "get": {
+        "tags": ["Reporting"],
+        "operationId": "getMetrics",
+        "summary": "Get metric series",
+        "parameters": [
+          {
+            "name": "key",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "enum": ["leads.conversion", "messaging.deliverability", "cc.risk", "pipeline.value"] }
+          },
+          { "name": "from", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" } },
+          { "name": "to", "in": "query", "required": false, "schema": { "type": "string", "format": "date-time" } },
+          { "name": "granularity", "in": "query", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Metric series",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/MetricsPoint" }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    },
+    "/reporting/recompute": {
+      "post": {
+        "tags": ["Reporting"],
+        "operationId": "recomputeMetrics",
+        "summary": "Schedule recompute",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/RecomputeBody" }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MetricsRecomputeResponse" }
+              }
+            }
+          }
+        },
+        "security": [{ "bearerAuth": [] }]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "CreateAccount": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "website": { "type": "string", "format": "uri" },
+          "industry": { "type": "string" },
+          "annualRevenue": { "type": "number" },
+          "phone": { "type": "string" },
+          "billingAddress": { "type": "object", "additionalProperties": {} },
+          "shippingAddress": { "type": "object", "additionalProperties": {} }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "UpdateAccount": {
+        "allOf": [{ "$ref": "#/components/schemas/CreateAccount" }],
+        "type": "object"
+      },
+      "AccountResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "website": { "type": ["string", "null"], "format": "uri" },
+          "industry": { "type": ["string", "null"] },
+          "annualRevenue": { "type": ["number", "null"] },
+          "phone": { "type": ["string", "null"] },
+          "billingAddress": { "type": ["object", "null"], "additionalProperties": {} },
+          "shippingAddress": { "type": ["object", "null"], "additionalProperties": {} },
+          "ownerId": { "type": ["string", "null"] },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "CreateOpportunity": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "stage": { "type": "string" },
+          "accountId": { "type": "string" },
+          "amount": { "type": "number" },
+          "currency": { "type": "string" },
+          "closeDate": { "type": "string", "format": "date" }
+        },
+        "required": ["name", "stage"],
+        "additionalProperties": false
+      },
+      "UpdateOpportunity": {
+        "allOf": [{ "$ref": "#/components/schemas/CreateOpportunity" }],
+        "type": "object"
+      },
+      "OpportunityAccountSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "OpportunityTransactionSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "stage": { "type": ["string", "null"] }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "OpportunityResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "stage": { "type": ["string", "null"] },
+          "accountId": { "type": ["string", "null"] },
+          "amount": { "type": ["number", "null"] },
+          "currency": { "type": ["string", "null"] },
+          "closeDate": { "type": ["string", "null"], "format": "date" },
+          "ownerId": { "type": ["string", "null"] },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" },
+          "account": { "$ref": "#/components/schemas/OpportunityAccountSummary" },
+          "transaction": { "$ref": "#/components/schemas/OpportunityTransactionSummary" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "CreateCase": {
+        "type": "object",
+        "properties": {
+          "subject": { "type": "string" },
+          "status": { "type": "string", "enum": ["New", "Working", "Escalated", "Resolved", "Closed"] },
+          "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Urgent"] },
+          "origin": { "type": "string", "enum": ["Email", "Phone", "Web", "Other"] },
+          "description": { "type": "string" },
+          "accountId": { "type": "string" },
+          "contactId": { "type": "string" }
+        },
+        "required": ["subject"],
+        "additionalProperties": false
+      },
+      "UpdateCase": {
+        "type": "object",
+        "properties": {
+          "subject": { "type": "string" },
+          "status": { "type": "string", "enum": ["New", "Working", "Escalated", "Resolved", "Closed"] },
+          "priority": { "type": "string", "enum": ["Low", "Medium", "High", "Urgent"] },
+          "origin": { "type": "string", "enum": ["Email", "Phone", "Web", "Other"] },
+          "description": { "type": "string" },
+          "accountId": { "type": "string" },
+          "contactId": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "CaseAccountSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "CaseContactSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "email": { "type": ["string", "null"], "format": "email" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "CaseResponse": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "subject": { "type": ["string", "null"] },
+          "status": { "type": ["string", "null"], "enum": ["New", "Working", "Escalated", "Resolved", "Closed"] },
+          "priority": { "type": ["string", "null"], "enum": ["Low", "Medium", "High", "Urgent"] },
+          "origin": { "type": ["string", "null"], "enum": ["Email", "Phone", "Web", "Other"] },
+          "description": { "type": ["string", "null"] },
+          "accountId": { "type": ["string", "null"] },
+          "contactId": { "type": ["string", "null"] },
+          "ownerId": { "type": ["string", "null"] },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" },
+          "account": { "$ref": "#/components/schemas/CaseAccountSummary" },
+          "contact": { "$ref": "#/components/schemas/CaseContactSummary" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "CaseListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CaseResponse" }
+          },
+          "nextCursor": { "type": ["string", "null"] }
+        },
+        "required": ["items"],
+        "additionalProperties": false
+      },
+      "CreateUploadUrl": {
+        "type": "object",
+        "properties": {
+          "fileName": { "type": "string" },
+          "mimeType": { "type": "string" },
+          "byteSize": { "type": "integer", "minimum": 1 }
+        },
+        "required": ["fileName", "byteSize"],
+        "additionalProperties": false
+      },
+      "LinkFile": {
+        "type": "object",
+        "properties": {
+          "fileId": { "type": "string" },
+          "object": { "type": "string" },
+          "recordId": { "type": "string" }
+        },
+        "required": ["fileId", "object", "recordId"],
+        "additionalProperties": false
+      },
+      "FileMetadata": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "fileName": { "type": ["string", "null"] },
+          "mimeType": { "type": ["string", "null"] },
+          "byteSize": { "type": ["number", "null"] },
+          "storageKey": { "type": ["string", "null"] },
+          "status": { "type": ["string", "null"] },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+        },
+        "required": ["id"],
+        "additionalProperties": true
+      },
+      "FileUploadResponse": {
+        "type": "object",
+        "properties": {
+          "fileId": { "type": "string" },
+          "storageKey": { "type": "string" },
+          "uploadUrl": { "type": "string", "format": "uri" },
+          "metadata": { "type": "object", "additionalProperties": {} }
+        },
+        "required": ["fileId", "storageKey", "uploadUrl", "metadata"],
+        "additionalProperties": false
+      },
+      "LinkedFileSummary": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "object": { "type": "string" },
+          "recordId": { "type": "string" },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" },
+          "file": { "type": "object", "additionalProperties": {} }
+        },
+        "required": ["id", "object", "recordId", "file"],
+        "additionalProperties": false
+      },
+      "MetricsPoint": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string", "format": "date-time" },
+          "valueNum": { "type": ["number", "null"] },
+          "valueJson": { "type": ["object", "null"], "additionalProperties": {} }
+        },
+        "required": ["date"],
+        "additionalProperties": false
+      },
+      "RecomputeBody": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["leads.conversion", "messaging.deliverability", "cc.risk", "pipeline.value"] }
+          },
+          "from": { "type": "string", "format": "date-time" },
+          "to": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      },
+      "MetricsRecomputeResponse": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["leads.conversion", "messaging.deliverability", "cc.risk", "pipeline.value"] }
+          },
+          "range": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "string", "format": "date-time" },
+              "to": { "type": "string", "format": "date-time" }
+            },
+            "required": ["from", "to"],
+            "additionalProperties": false
+          },
+          "status": { "type": "string" }
+        },
+        "required": ["keys", "range", "status"],
+        "additionalProperties": false
+      }
+    }
+  }
+}

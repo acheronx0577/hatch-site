@@ -1,36 +1,37 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import type { FastifyRequest } from 'fastify';
 
-import { TeamService } from './team.service'
-import { CreateTeamMemberDto } from './dto/create-team-member.dto'
-import { UpdateTeamMemberDto } from './dto/update-team-member.dto'
+import { resolveRequestContext } from '../common/request-context';
+import { TeamService } from './team.service';
+import { CreateTeamMemberDto } from './dto/create-team-member.dto';
+import { UpdateTeamMemberDto } from './dto/update-team-member.dto';
 
 @Controller('team')
 export class TeamController {
   constructor(private readonly team: TeamService) {}
 
   @Get()
-  async list(@Query('tenantId') tenantId: string) {
-    if (!tenantId) {
-      throw new BadRequestException('tenantId is required')
-    }
-    return this.team.list(tenantId)
+  async list(@Req() req: FastifyRequest) {
+    const ctx = resolveRequestContext(req);
+    return this.team.list(ctx.tenantId);
   }
 
   @Post()
-  async create(@Body() dto: CreateTeamMemberDto) {
-    if (!dto.tenantId) {
-      throw new BadRequestException('tenantId is required')
-    }
-    return this.team.create(dto)
+  async create(@Body() dto: CreateTeamMemberDto, @Req() req: FastifyRequest) {
+    const ctx = resolveRequestContext(req);
+    return this.team.create({
+      ...dto,
+      tenantId: dto.tenantId ?? ctx.tenantId
+    });
   }
 
   @Patch(':id')
   async update(@Param('id') id: string, @Body() dto: UpdateTeamMemberDto) {
-    return this.team.update(id, dto)
+    return this.team.update(id, dto);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string) {
-    return this.team.remove(id)
+    return this.team.remove(id);
   }
 }

@@ -5,6 +5,11 @@ import {
   createConversation,
   postConversationMessage,
   markConversationRead,
+  createLeadTouchpoint,
+  type CreateLeadTouchpointPayload,
+  type MessageChannelType,
+  type LeadTouchpointType,
+  type RecordLeadTouchpointResponse,
   type ConversationDetail,
   type ConversationListItem,
   type ConversationMessage
@@ -56,9 +61,21 @@ export function MessengerWidget({ onClose, initialContactId, onInitialContactCon
     setLoadingList(true)
     try {
       const response = await listConversations(TENANT_ID, { pageSize: 30 })
-      setConversations(response.items)
-      if (!selectedConversationId && response.items.length > 0) {
-        setSelectedConversationId(response.items[0].id)
+      const updatedItems = response.items.map((conversation) => ({
+        ...conversation,
+        person:
+          conversation.person ??
+          {
+            id: conversation.id,
+            firstName: 'Unknown',
+            lastName: null,
+            primaryEmail: null,
+            primaryPhone: null
+          }
+      }))
+      setConversations(updatedItems)
+      if (!selectedConversationId && updatedItems.length > 0) {
+        setSelectedConversationId(updatedItems[0].id)
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to load conversations'
@@ -73,6 +90,11 @@ export function MessengerWidget({ onClose, initialContactId, onInitialContactCon
     void fetchConversations()
   }, [fetchConversations, user])
 
+  const selectedConversation = useMemo(
+    () => conversations.find((conversation) => conversation.id === selectedConversationId) ?? null,
+    [conversations, selectedConversationId]
+  )
+
   useEffect(() => {
     if (!user || !selectedConversationId) {
       setConversationDetail(null)
@@ -82,7 +104,18 @@ export function MessengerWidget({ onClose, initialContactId, onInitialContactCon
       setLoadingDetail(true)
       try {
         const detail = await getConversation(selectedConversationId, TENANT_ID, { limit: 50 })
-        setConversationDetail(detail)
+        setConversationDetail({
+          ...detail,
+          person:
+            detail.person ??
+            selectedConversation?.person ?? {
+              id: selectedConversationId,
+              firstName: 'Unknown',
+              lastName: null,
+              primaryEmail: null,
+              primaryPhone: null
+            }
+        })
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unable to load conversation'
         toast({ variant: 'destructive', title: 'Failed to load conversation', description: message })
@@ -91,7 +124,7 @@ export function MessengerWidget({ onClose, initialContactId, onInitialContactCon
       }
     }
     void run()
-  }, [selectedConversationId, toast, user])
+  }, [selectedConversation, selectedConversationId, toast, user])
 
   const createConversationFor = useCallback(
     async (personId: string) => {
@@ -103,7 +136,17 @@ export function MessengerWidget({ onClose, initialContactId, onInitialContactCon
           personId: personId.trim()
         })
         setSelectedConversationId(detail.id)
-        setConversationDetail(detail)
+        setConversationDetail({
+          ...detail,
+          person:
+            detail.person ?? {
+              id: personId,
+              firstName: 'Unknown',
+              lastName: null,
+              primaryEmail: null,
+              primaryPhone: null
+            }
+        })
         setComposerValue('')
         setNewPersonId('')
         await fetchConversations()
@@ -141,6 +184,11 @@ export function MessengerWidget({ onClose, initialContactId, onInitialContactCon
         tenantId: TENANT_ID,
         body: composerValue.trim()
       })
+      const resolvedPersonId =
+        message.personId ??
+        conversationDetail?.person?.id ??
+        selectedConversation?.person?.id ??
+        null
       setComposerValue('')
       setConversationDetail((prev) => {
         if (!prev) return prev
@@ -152,6 +200,46 @@ export function MessengerWidget({ onClose, initialContactId, onInitialContactCon
           unreadCount: prev.unreadCount
         }
       })
+      if (resolvedPersonId) {
+        let recordedAt = message.createdAt
+        let touchpointResponse: RecordLeadTouchpointResponse | null = null
+        const payload: CreateLeadTouchpointPayload = {
+          type: 'MESSAGE' as LeadTouchpointType,
+          channel: 'IN_APP' as MessageChannelType,
+          summary: 'In-app conversation reply',
+          body: message.body ?? undefined,
+          metadata: {
+            conversationId: selectedConversationId,
+            messageId: message.id,
+            direction: message.direction
+          },
+          occurredAt: message.createdAt
+        }
+        try {
+          touchpointResponse = await createLeadTouchpoint(resolvedPersonId, payload)
+          recordedAt =
+            touchpointResponse.lead.activityRollup?.lastTouchpointAt ??
+            touchpointResponse.lead.lastActivityAt ??
+            message.createdAt
+        } catch (error) {
+          console.error('Failed to record lead touchpoint', error)
+        } finally {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('hatch:conversation:touchpoint', {
+                detail: {
+                  personId: resolvedPersonId,
+                  timestamp: recordedAt,
+                  score: touchpointResponse?.lead.score,
+                  scoreTier: touchpointResponse?.lead.scoreTier,
+                  activityRollup: touchpointResponse?.lead.activityRollup,
+                  lastActivityAt: touchpointResponse?.lead.lastActivityAt ?? recordedAt
+                }
+              })
+            )
+          }
+        }
+      }
       await fetchConversations()
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to send message'
@@ -178,11 +266,6 @@ export function MessengerWidget({ onClose, initialContactId, onInitialContactCon
       setMarkingRead(false)
     }
   }
-
-  const selectedConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === selectedConversationId) ?? null,
-    [conversations, selectedConversationId]
-  )
 
   const isViewer = useMemo(() => {
     if (!conversationDetail || !profile?.id) return false

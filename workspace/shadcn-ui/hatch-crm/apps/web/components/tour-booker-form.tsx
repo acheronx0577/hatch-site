@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 
+import { ErrorBanner } from '@/components/error-banner';
+import { useApiError } from '@/hooks/use-api-error';
+import { useClearOnEdit } from '@/hooks/use-clear-on-edit';
 import { requestTour, type ContactListItem, type ListingSummary } from '@/lib/api';
 
 interface TourBookerFormProps {
@@ -16,11 +19,14 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
   const [startAt, setStartAt] = useState(new Date(Date.now() + 48 * 3600 * 1000).toISOString().slice(0, 16));
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { error, banner, showError, clearError } = useApiError();
+  const clearOnEdit = useClearOnEdit(clearError, [error]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
     setStatus(null);
+    clearError();
 
     try {
       const payload = {
@@ -33,7 +39,7 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
       const result = await requestTour(payload);
       setStatus(`Tour ${result.status} for contact`);
     } catch (error) {
-      setStatus((error as Error).message);
+      showError(error);
     } finally {
       setLoading(false);
     }
@@ -41,12 +47,16 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {banner && <ErrorBanner {...banner} onDismiss={clearError} />}
       <div>
         <label className="text-xs font-semibold uppercase text-slate-500">Contact</label>
         <select
           className="mt-1 w-full rounded border border-slate-200 p-2"
           value={contactId}
-          onChange={(event) => setContactId(event.target.value)}
+          onChange={(event) => {
+            clearOnEdit();
+            setContactId(event.target.value);
+          }}
         >
           {contacts.map((contact) => (
             <option key={contact.id} value={contact.id}>
@@ -61,7 +71,10 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
         <select
           className="mt-1 w-full rounded border border-slate-200 p-2"
           value={listingId}
-          onChange={(event) => setListingId(event.target.value)}
+          onChange={(event) => {
+            clearOnEdit();
+            setListingId(event.target.value);
+          }}
         >
           {listings.map((listing) => (
             <option key={listing.id} value={listing.id}>
@@ -77,7 +90,10 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
           type="datetime-local"
           className="mt-1 w-full rounded border border-slate-200 p-2"
           value={startAt}
-          onChange={(event) => setStartAt(event.target.value)}
+          onChange={(event) => {
+            clearOnEdit();
+            setStartAt(event.target.value);
+          }}
         />
       </div>
 
@@ -89,7 +105,7 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
         Request Tour
       </button>
 
-      {status && <p className="text-xs text-slate-500">{status}</p>}
+      {status && <p className="text-xs text-emerald-600">{status}</p>}
     </form>
   );
 }

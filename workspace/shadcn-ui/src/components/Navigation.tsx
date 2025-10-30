@@ -63,7 +63,7 @@ export default function Navigation() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
-            <HatchLogo className="h-8" />
+            <HatchLogo className="h-12 md:h-16" />
           </Link>
 
           {/* Navigation Items */}

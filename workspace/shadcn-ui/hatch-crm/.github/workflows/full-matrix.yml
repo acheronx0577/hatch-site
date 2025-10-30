@@ -1,0 +1,55 @@
+name: API + E2E Matrix
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        ports:
+          - '5432:5432'
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hatch
+        options: >-
+          --health-cmd="pg_isready -U postgres -d hatch"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/hatch
+      RUN_INTEGRATION_TESTS: 'true'
+      RUN_E2E_TESTS: 'true'
+      RUN_SDK_TESTS: 'true'
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install
+      - name: Prisma validate & generate
+        run: |
+          pnpm --filter @hatch/db exec prisma validate
+          pnpm --filter @hatch/db exec prisma generate
+      - name: Apply migrations & seed
+        run: |
+          pnpm --filter @hatch/db exec prisma migrate deploy
+          pnpm --filter @hatch/api exec ts-node scripts/seed_v1_baseline.ts
+      - name: API unit + integration
+        run: pnpm --filter @hatch/api test -- --run
+      - name: Web E2E (Playwright)
+        run: pnpm --filter @hatch/web exec playwright test
+      - name: SDK smoke
+        run: pnpm --filter packages/sdk-lite test -- --run

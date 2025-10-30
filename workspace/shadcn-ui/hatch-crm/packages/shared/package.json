@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "date-fns": "^3.6.0",
+    "fuzzball": "^2.2.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {

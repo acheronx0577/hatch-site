@@ -231,6 +231,34 @@ export type PropertyType =
   | 'Vacant Land' 
   | 'Development Land';
 
+export type LeadStatus =
+  | 'new'
+  | 'contacted'
+  | 'qualified'
+  | 'closed'
+  | 'cold'
+  | 'warm'
+  | 'hot'
+  | 'converted';
+
+export interface Lead {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  source: string;
+  status: LeadStatus;
+  score: number;
+  assignedAgent?: string;
+  propertyInterest?: string;
+  budget?: number;
+  notes?: string;
+  lastContact?: string;
+  propertyId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 // Form interface for Add Property
 export interface MLSPropertyForm {
   // Basic Property Info

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@prisma/client": ["scripts/stubs/prisma-client.ts"],
+      "@hatch/db": ["scripts/stubs/hatch-db.ts"],
+      "@hatch/shared": ["scripts/stubs/hatch-shared.ts"],
+      "@hatch/shared/*": ["scripts/stubs/hatch-shared.ts"]
+    }
+  }
+}

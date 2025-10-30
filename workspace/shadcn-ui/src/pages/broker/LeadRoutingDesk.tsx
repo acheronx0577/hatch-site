@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   fetchRoutingCapacity,
   fetchRoutingEvents,
@@ -472,7 +472,7 @@ function LeadRoutingDesk() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingRule, setEditingRule] = useState<LeadRoutingRule | null>(null)
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true)
     try {
       const [rulesData, capacityData, slaData, metricsData, eventsData] = await Promise.all([
@@ -496,11 +496,11 @@ function LeadRoutingDesk() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [toast])
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [loadData])
 
   const refreshSection = async () => {
     setRefreshing(true)

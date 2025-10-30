@@ -116,7 +116,7 @@ export default function Payment() {
               onClick={() => navigate('/')}
             >
               <HomeIcon className="h-6 w-6 text-blue-600 mr-2" />
-              <HatchLogo className="h-7" />
+              <HatchLogo className="h-12 md:h-16" />
             </div>
 
             {/* Navigation */}

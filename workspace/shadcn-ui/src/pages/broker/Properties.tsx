@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -143,13 +143,14 @@ export default function Properties() {
   }
 
   // Get leads for a specific property
-  const getPropertyLeads = (propertyId: string) => {
-    return leads.filter(lead => lead.propertyId === propertyId)
-  }
+  const getPropertyLeads = useCallback(
+    (propertyId: string) => leads.filter((lead) => lead.propertyId === propertyId),
+    [leads]
+  )
 
   const analyticsLeads = useMemo(
     () => (analyticsProperty ? getPropertyLeads(analyticsProperty.id) : []),
-    [analyticsProperty, leads]
+    [analyticsProperty, getPropertyLeads]
   )
 
   const createEditForm = (property: MLSProperty): PropertyEditForm => ({

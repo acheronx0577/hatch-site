@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -25,13 +25,7 @@ export function SubscriptionDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (user) {
-      fetchSubscriptionData()
-    }
-  }, [user])
-
-  const fetchSubscriptionData = async () => {
+  const fetchSubscriptionData = useCallback(async () => {
     if (!user) return
 
     try {
@@ -84,7 +78,13 @@ export function SubscriptionDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    if (user) {
+      fetchSubscriptionData()
+    }
+  }, [fetchSubscriptionData, user])
 
   const handleUpgrade = () => {
     window.location.href = '/pricing'

@@ -7,6 +7,7 @@ datasource db {
   provider          = "postgresql"
   url               = env("DATABASE_URL")
   shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+  extensions        = [citext()]
 }
 
 enum UserRole {
@@ -188,10 +189,55 @@ enum BuyerRepStatus {
   EXPIRED
 }
 
+enum LeadScoreTier {
+  A
+  B
+  C
+  D
+}
+
+enum LeadTaskStatus {
+  OPEN
+  DONE
+}
+
+enum LeadTouchpointType {
+  MESSAGE
+  CALL
+  MEETING
+  TASK
+  NOTE
+  OTHER
+}
+
 enum MergeStatus {
   PENDING
   ACCEPTED
   REJECTED
+}
+
+enum PermissionHolderType {
+  PROFILE
+  PERMISSION_SET
+}
+
+enum ShareGranteeType {
+  USER
+  ROLE
+  TEAM
+}
+
+enum ShareAccess {
+  READ
+  WRITE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  SHARE
+  LOGIN
 }
 
 enum AssignmentReasonType {
@@ -259,15 +305,65 @@ enum CalendarEventPriority {
   HIGH
 }
 
+enum SavedViewScope {
+  PRIVATE
+  TEAM
+  ORGANIZATION
+}
+
+enum CustomFieldEntity {
+  CONTACT
+  DEAL
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  MULTI_SELECT
+}
+
+enum SequenceEnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELED
+}
+
+enum SequenceStepStatus {
+  PENDING
+  SCHEDULED
+  SENT
+  SKIPPED
+  COMPLETED
+  FAILED
+  CANCELED
+}
+
 model Organization {
-  id          String       @id @default(cuid())
-  name        String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  tenants     Tenant[]
-  users       User[]
-  people      Person[]
-  teamMembers TeamMember[]
+  id                String              @id @default(cuid())
+  name              String
+  plan              String?             @default("standard")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  tenants           Tenant[]
+  users             User[]
+  people            Person[]
+  teamMembers       TeamMember[]
+  teams             Team[]
+  orgMemberships    UserOrgMembership[]
+  roles             Role[]
+  profiles          Profile[]
+  permissionSets    PermissionSet[]
+  objectPermissions ObjectPermission[]
+  fieldPermissions  FieldPermission[]
+  recordShares      RecordShare[]
+  companies         Company[]
+  households        Household[]
+  customFields      CustomField[]
+  sequences         Sequence[]
+  auditEvents       AuditEvent[]
 }
 
 model Tenant {
@@ -286,6 +382,8 @@ model Tenant {
   users                 User[]
   teams                 Team[]
   people                Person[]
+  companies             Company[]
+  households            Household[]
   listings              Listing[]
   consents              Consent[]
   tours                 Tour[]
@@ -310,6 +408,9 @@ model Tenant {
   consentBlocks         CommunicationBlock[]
   teamMembers           TeamMember[]
   savedViews            SavedView[]
+  sequences             Sequence[]
+  sequenceEnrollments   SequenceEnrollment[]
+  sequenceStepLogs      SequenceStepLog[]
   mergeProposals        ContactMergeProposal[]
   disclaimerPolicies    DisclaimerPolicy[]
   overrideLogs          OverrideLog[]
@@ -322,57 +423,89 @@ model Tenant {
   planAssignments       PlanAssignment[]
   capLedgers            CapLedger[]
   planSnapshots         PlanSnapshot[]
+  pipelines             Pipeline[]
+  stages                Stage[]
+  leadFits              LeadFit[]
+  events                Event[]
+  leadActivityRollups   LeadActivityRollup[]
+  leadNotes             LeadNote[]
+  leadTasks             LeadTask[]
+  leadTouchpoints       LeadTouchpoint[]
+  customFields          CustomField[]
+  customFieldValues     CustomFieldValue[]
+  customFieldLayouts    CustomFieldLayout[]
 }
 
 model User {
-  id                      String                    @id @default(cuid())
-  organizationId          String
-  tenantId                String
-  email                   String                    @unique
-  firstName               String
-  lastName                String
-  role                    UserRole
-  avatarUrl               String?
-  timezone                String?
-  createdAt               DateTime                  @default(now())
-  updatedAt               DateTime                  @updatedAt
-  organization            Organization              @relation(fields: [organizationId], references: [id])
-  tenant                  Tenant                    @relation(fields: [tenantId], references: [id])
-  memberships             TeamMembership[]
-  ownedPeople             Person[]                  @relation("PersonOwner")
-  commissionPlansCreated  CommissionPlan[]          @relation("CommissionPlanCreatedBy")
-  planAssignmentsCreated  PlanAssignment[]          @relation("PlanAssignmentCreatedBy")
-  planSnapshotsCreated    PlanSnapshot[]            @relation("PlanSnapshotCreatedBy")
-  capLedgers              CapLedger[]
-  tours                   Tour[]                    @relation("TourAgent")
-  messages                Message[]
-  createdConversations    Conversation[]            @relation("ConversationCreatedBy")
-  conversationMemberships ConversationParticipant[] @relation("ConversationParticipantUser")
-  assignments             Assignment[]
-  activities              Activity[]
-  calendarEvents          CalendarEvent[]           @relation("EventAssignedAgent")
-  actedConsents           Consent[]                 @relation("ConsentActor")
-  overrideAgreements      Agreement[]               @relation("AgreementOverride")
-  deliverabilityMetrics   DeliverabilityMetric[]
-  auditLogs               AuditLog[]
-  savedViews              SavedView[]
-  proposedMerges          ContactMergeProposal[]    @relation("MergeProposedBy")
-  resolvedMerges          ContactMergeProposal[]    @relation("MergeResolvedBy")
-  overrideEntries         OverrideLog[]             @relation("OverrideActor")
-  cooperationActions      ClearCooperationTimer[]   @relation("CooperationLastActor")
-  routingRulesCreated     RoutingRule[]             @relation("RoutingRuleCreatedBy")
-  routeEventsActor        LeadRouteEvent[]          @relation("RouteEventActor")
+  id                        String                    @id @default(cuid())
+  organizationId            String
+  tenantId                  String
+  email                     String                    @unique @db.Citext
+  firstName                 String
+  lastName                  String
+  role                      UserRole
+  status                    String                    @default("active")
+  avatarUrl                 String?
+  timezone                  String?
+  createdAt                 DateTime                  @default(now())
+  updatedAt                 DateTime                  @updatedAt
+  organization              Organization              @relation(fields: [organizationId], references: [id])
+  tenant                    Tenant                    @relation(fields: [tenantId], references: [id])
+  memberships               TeamMembership[]
+  orgMemberships            UserOrgMembership[]
+  permissionSetAssignments  PermissionSetAssignment[]
+  ownedPeople               Person[]                  @relation("PersonOwner")
+  commissionPlansCreated    CommissionPlan[]          @relation("CommissionPlanCreatedBy")
+  planAssignmentsCreated    PlanAssignment[]          @relation("PlanAssignmentCreatedBy")
+  planSnapshotsCreated      PlanSnapshot[]            @relation("PlanSnapshotCreatedBy")
+  capLedgers                CapLedger[]
+  tours                     Tour[]                    @relation("TourAgent")
+  messages                  Message[]
+  createdConversations      Conversation[]            @relation("ConversationCreatedBy")
+  conversationMemberships   ConversationParticipant[] @relation("ConversationParticipantUser")
+  assignments               Assignment[]
+  activities                Activity[]
+  calendarEvents            CalendarEvent[]           @relation("EventAssignedAgent")
+  actedConsents             Consent[]                 @relation("ConsentActor")
+  overrideAgreements        Agreement[]               @relation("AgreementOverride")
+  deliverabilityMetrics     DeliverabilityMetric[]
+  auditLogs                 AuditLog[]
+  savedViews                SavedView[]
+  proposedMerges            ContactMergeProposal[]    @relation("MergeProposedBy")
+  resolvedMerges            ContactMergeProposal[]    @relation("MergeResolvedBy")
+  overrideEntries           OverrideLog[]             @relation("OverrideActor")
+  cooperationActions        ClearCooperationTimer[]   @relation("CooperationLastActor")
+  routingRulesCreated       RoutingRule[]             @relation("RoutingRuleCreatedBy")
+  routeEventsActor          LeadRouteEvent[]          @relation("RouteEventActor")
+  leadNotesAuthored         LeadNote[]                @relation("LeadNoteAuthor")
+  leadTasksAssigned         LeadTask[]                @relation("LeadTaskAssignee")
+  leadTouchpoints           LeadTouchpoint[]
+  auditEvents               AuditEvent[]
+  companiesOwned            Company[]                 @relation("CompanyOwner")
+  householdsOwned           Household[]               @relation("HouseholdOwner")
+  sequencesCreated          Sequence[]                @relation("SequenceCreatedBy")
+  sequencesUpdated          Sequence[]                @relation("SequenceUpdatedBy")
+  sequenceEnrollments       SequenceEnrollment[]      @relation("SequenceEnrollmentOwner")
+  customFieldsCreated       CustomField[]             @relation("CustomFieldCreatedBy")
+  customFieldsUpdated       CustomField[]             @relation("CustomFieldUpdatedBy")
+  customFieldLayoutsCreated CustomFieldLayout[]       @relation("CustomFieldLayoutCreatedBy")
+  customFieldLayoutsUpdated CustomFieldLayout[]       @relation("CustomFieldLayoutUpdatedBy")
 }
 
 model Team {
   id          String           @id @default(cuid())
   tenantId    String
+  orgId       String
   name        String
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
   tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  org         Organization     @relation(fields: [orgId], references: [id])
   members     TeamMembership[]
   assignments Assignment[]
+  savedViews  SavedView[]
+
+  @@index([orgId])
 }
 
 model TeamMembership {
@@ -429,6 +562,13 @@ model Person {
   stage                   PersonStage               @default(NEW)
   tags                    String[]                  @default([])
   source                  String?
+  companyId               String?
+  householdId             String?
+  householdRole           String?
+  utmSource               String?
+  utmMedium               String?
+  utmCampaign             String?
+  gclid                   String?
   address                 String?
   leadScore               Float?
   buyerRepStatus          BuyerRepStatus            @default(NONE)
@@ -438,9 +578,16 @@ model Person {
   deletedAt               DateTime?
   createdAt               DateTime                  @default(now())
   updatedAt               DateTime                  @updatedAt
+  pipelineId              String?
+  stageId                 String?
+  stageEnteredAt          DateTime?
+  scoreTier               LeadScoreTier             @default(D)
+  scoreUpdatedAt          DateTime?
   tenant                  Tenant                    @relation(fields: [tenantId], references: [id])
   organization            Organization              @relation(fields: [organizationId], references: [id])
   owner                   User?                     @relation("PersonOwner", fields: [ownerId], references: [id])
+  company                 Company?                  @relation("CompanyContacts", fields: [companyId], references: [id])
+  household               Household?                @relation("HouseholdMembers", fields: [householdId], references: [id])
   consents                Consent[]
   listings                Listing[]                 @relation("PersonListings")
   tours                   Tour[]
@@ -458,26 +605,392 @@ model Person {
   routingLogs             RoutingLog[]
   calendarEvents          CalendarEvent[]
   mergeProposals          ContactMergeProposal[]    @relation("PersonMergeProposals")
+  pipeline                Pipeline?                 @relation("PipelinePersons", fields: [pipelineId], references: [id])
+  pipelineStage           Stage?                    @relation("StagePersons", fields: [stageId], references: [id])
+  leadFit                 LeadFit?
+  activityRollup          LeadActivityRollup?
+  leadNotes               LeadNote[]
+  leadTasks               LeadTask[]
+  siteEvents              Event[]
+  touchpoints             LeadTouchpoint[]
+  cases                   Case[]                    @relation("CaseContact")
+  primaryForCompanies     Company[]                 @relation("CompanyPrimaryContact")
+  sequenceEnrollments     SequenceEnrollment[]
+  customFieldValues       CustomFieldValue[]
 
   @@unique([tenantId, primaryEmail])
   @@unique([tenantId, primaryPhone])
   @@index([tenantId, deletedAt])
+  @@index([tenantId, pipelineId])
+  @@index([tenantId, stageId])
+  @@index([tenantId, companyId])
+  @@index([tenantId, householdId])
+}
+
+model Company {
+  id               String       @id @default(cuid())
+  tenantId         String
+  organizationId   String
+  ownerId          String?
+  name             String
+  legalName        String?
+  industry         String?
+  type             String?
+  website          String?
+  phone            String?
+  email            String?
+  tags             String[]     @default([])
+  source           String?
+  size             String?
+  primaryContactId String?
+  billingAddress   String?
+  shippingAddress  String?
+  notes            String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  tenant           Tenant       @relation(fields: [tenantId], references: [id])
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  owner            User?        @relation("CompanyOwner", fields: [ownerId], references: [id])
+  primaryContact   Person?      @relation("CompanyPrimaryContact", fields: [primaryContactId], references: [id])
+  contacts         Person[]     @relation("CompanyContacts")
+  deals            Deal[]
+
+  @@index([tenantId, name])
+  @@index([tenantId, ownerId])
+  @@index([tenantId, primaryContactId])
+}
+
+model Household {
+  id             String       @id @default(cuid())
+  tenantId       String
+  organizationId String
+  ownerId        String?
+  name           String?
+  timezone       String?
+  tags           String[]     @default([])
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  tenant         Tenant       @relation(fields: [tenantId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  owner          User?        @relation("HouseholdOwner", fields: [ownerId], references: [id])
+  members        Person[]     @relation("HouseholdMembers")
+
+  @@index([tenantId, ownerId])
+}
+
+model Pipeline {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  type      String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  stages    Stage[]
+  leads     Person[] @relation("PipelinePersons")
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model Stage {
+  id         String   @id @default(cuid())
+  tenantId   String
+  pipelineId String
+  name       String
+  order      Int
+  slaMinutes Int?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  pipeline   Pipeline @relation(fields: [pipelineId], references: [id])
+  leads      Person[] @relation("StagePersons")
+
+  @@unique([tenantId, pipelineId, name])
+  @@index([tenantId])
+  @@index([tenantId, pipelineId])
+}
+
+model LeadFit {
+  id             String   @id @default(cuid())
+  tenantId       String
+  personId       String   @unique
+  preapproved    Boolean  @default(false)
+  budgetMin      Int?
+  budgetMax      Int?
+  timeframeDays  Int?
+  geo            String?
+  inventoryMatch Int?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  person         Person   @relation(fields: [personId], references: [id])
+
+  @@index([tenantId])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  tenantId    String
+  personId    String?
+  anonymousId String?
+  name        String
+  timestamp   DateTime
+  properties  Json?
+  context     Json?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  person      Person?  @relation(fields: [personId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, personId])
+  @@index([tenantId, name, timestamp])
+}
+
+model LeadActivityRollup {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  personId           String    @unique
+  last7dListingViews Int       @default(0)
+  last7dSessions     Int       @default(0)
+  lastReplyAt        DateTime?
+  lastEmailOpenAt    DateTime?
+  lastTouchpointAt   DateTime?
+  updatedAt          DateTime  @updatedAt
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+  person             Person    @relation(fields: [personId], references: [id])
+
+  @@index([tenantId])
+}
+
+model LeadNote {
+  id        String   @id @default(cuid())
+  tenantId  String
+  personId  String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  person    Person   @relation(fields: [personId], references: [id])
+  author    User     @relation("LeadNoteAuthor", fields: [userId], references: [id])
+
+  @@index([tenantId, personId])
+}
+
+model LeadTouchpoint {
+  id         String             @id @default(cuid())
+  tenantId   String
+  personId   String
+  userId     String?
+  type       LeadTouchpointType
+  channel    MessageChannel?
+  occurredAt DateTime
+  summary    String?
+  body       String?
+  metadata   Json?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  tenant     Tenant             @relation(fields: [tenantId], references: [id])
+  person     Person             @relation(fields: [personId], references: [id])
+  user       User?              @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, personId, occurredAt])
+}
+
+model LeadTask {
+  id         String         @id @default(cuid())
+  tenantId   String
+  personId   String
+  assigneeId String?
+  title      String
+  dueAt      DateTime?
+  status     LeadTaskStatus @default(OPEN)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  tenant     Tenant         @relation(fields: [tenantId], references: [id])
+  person     Person         @relation(fields: [personId], references: [id])
+  assignee   User?          @relation("LeadTaskAssignee", fields: [assigneeId], references: [id])
+
+  @@index([tenantId, personId])
 }
 
 model SavedView {
-  id        String   @id @default(cuid())
-  tenantId  String
-  userId    String
-  name      String
-  filters   Json
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String         @id @default(cuid())
+  tenantId    String
+  userId      String
+  name        String
+  scope       SavedViewScope @default(PRIVATE)
+  teamId      String?
+  description String?
+  columns     Json?
+  sort        Json?
+  filters     Json
+  isDefault   Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
   user   User   @relation(fields: [userId], references: [id])
+  team   Team?  @relation(fields: [teamId], references: [id])
 
   @@unique([userId, name])
+  @@index([tenantId, scope])
+  @@index([tenantId, teamId])
+}
+
+model Sequence {
+  id              String               @id @default(cuid())
+  tenantId        String
+  organizationId  String
+  name            String
+  description     String?
+  tags            String[]             @default([])
+  steps           Json
+  throttlePerDay  Int?
+  quietHoursStart Int?
+  quietHoursEnd   Int?
+  active          Boolean              @default(true)
+  stopOnReply     Boolean              @default(true)
+  archivedAt      DateTime?
+  createdById     String?
+  updatedById     String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  tenant          Tenant               @relation(fields: [tenantId], references: [id])
+  organization    Organization         @relation(fields: [organizationId], references: [id])
+  createdBy       User?                @relation("SequenceCreatedBy", fields: [createdById], references: [id])
+  updatedBy       User?                @relation("SequenceUpdatedBy", fields: [updatedById], references: [id])
+  enrollments     SequenceEnrollment[]
+  stepLogs        SequenceStepLog[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, active])
+}
+
+model SequenceEnrollment {
+  id             String                   @id @default(cuid())
+  tenantId       String
+  sequenceId     String
+  personId       String
+  ownerId        String?
+  status         SequenceEnrollmentStatus @default(ACTIVE)
+  currentStep    Int                      @default(0)
+  startedAt      DateTime                 @default(now())
+  nextRunAt      DateTime?
+  lastExecutedAt DateTime?
+  completedAt    DateTime?
+  canceledAt     DateTime?
+  stopReason     String?
+  metadata       Json?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  tenant         Tenant                   @relation(fields: [tenantId], references: [id])
+  sequence       Sequence                 @relation(fields: [sequenceId], references: [id])
+  person         Person                   @relation(fields: [personId], references: [id])
+  owner          User?                    @relation("SequenceEnrollmentOwner", fields: [ownerId], references: [id])
+  stepLogs       SequenceStepLog[]
+
+  @@unique([sequenceId, personId])
+  @@index([tenantId, sequenceId])
+  @@index([tenantId, personId])
+  @@index([tenantId, status])
+}
+
+model SequenceStepLog {
+  id           String             @id @default(cuid())
+  tenantId     String
+  sequenceId   String
+  enrollmentId String
+  stepIndex    Int
+  stepPayload  Json?
+  channel      MessageChannel?
+  status       SequenceStepStatus @default(PENDING)
+  scheduledFor DateTime?
+  executedAt   DateTime?
+  completedAt  DateTime?
+  canceledAt   DateTime?
+  messageId    String?
+  errorMessage String?
+  metadata     Json?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  tenant       Tenant             @relation(fields: [tenantId], references: [id])
+  sequence     Sequence           @relation(fields: [sequenceId], references: [id])
+  enrollment   SequenceEnrollment @relation(fields: [enrollmentId], references: [id])
+
+  @@index([tenantId, sequenceId])
+  @@index([tenantId, enrollmentId])
+  @@index([tenantId, status])
+}
+
+model CustomField {
+  id             String             @id @default(cuid())
+  tenantId       String
+  organizationId String
+  entity         CustomFieldEntity
+  key            String
+  label          String
+  type           CustomFieldType
+  description    String?
+  placeholder    String?
+  helpText       String?
+  options        Json?
+  defaultValue   Json?
+  required       Boolean            @default(false)
+  archived       Boolean            @default(false)
+  createdById    String?
+  updatedById    String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  tenant         Tenant             @relation(fields: [tenantId], references: [id])
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  createdBy      User?              @relation("CustomFieldCreatedBy", fields: [createdById], references: [id])
+  updatedBy      User?              @relation("CustomFieldUpdatedBy", fields: [updatedById], references: [id])
+  values         CustomFieldValue[]
+
+  @@unique([tenantId, entity, key])
+  @@index([tenantId, entity])
+}
+
+model CustomFieldValue {
+  id        String      @id @default(cuid())
+  tenantId  String
+  fieldId   String
+  personId  String?
+  dealId    String?
+  value     Json?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  field     CustomField @relation(fields: [fieldId], references: [id])
+  person    Person?     @relation(fields: [personId], references: [id])
+  deal      Deal?       @relation(fields: [dealId], references: [id])
+
+  @@index([tenantId, fieldId])
+  @@index([tenantId, personId])
+  @@index([tenantId, dealId])
+}
+
+model CustomFieldLayout {
+  id          String            @id @default(cuid())
+  tenantId    String
+  entity      CustomFieldEntity
+  name        String
+  description String?
+  definition  Json
+  isDefault   Boolean           @default(false)
+  createdById String?
+  updatedById String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  tenant      Tenant            @relation(fields: [tenantId], references: [id])
+  createdBy   User?             @relation("CustomFieldLayoutCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?             @relation("CustomFieldLayoutUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([tenantId, entity, name])
+  @@index([tenantId, entity])
 }
 
 model ContactMergeProposal {
@@ -529,6 +1042,7 @@ model Listing {
   id              String                 @id @default(cuid())
   tenantId        String
   personId        String?
+  opportunityId   String?
   mlsId           String?
   status          ListingStatus          @default(COMING_SOON)
   addressLine1    String
@@ -554,6 +1068,9 @@ model Listing {
   clearCoopTimer  ClearCooperationTimer? @relation("ListingTimer")
   activities      Activity[]
   marketingEvents MarketingEvent[]
+  opportunity     Opportunity?           @relation(fields: [opportunityId], references: [id])
+
+  @@index([opportunityId])
 }
 
 model CalendarEvent {
@@ -632,43 +1149,65 @@ model Agreement {
 }
 
 model Deal {
-  id           String     @id @default(cuid())
-  tenantId     String
-  personId     String
-  listingId    String?
-  agreementId  String?
-  stage        DealStage  @default(OFFER)
-  forecastGci  Decimal?
-  actualGci    Decimal?
-  splitPlanRef String?
-  spendToDate  Decimal?   @default(0)
-  expectedNet  Decimal?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  tenant       Tenant     @relation(fields: [tenantId], references: [id])
-  person       Person     @relation(fields: [personId], references: [id])
-  listing      Listing?   @relation(fields: [listingId], references: [id])
-  agreement    Agreement? @relation(fields: [agreementId], references: [id])
-  offers       Offer[]
-  activities   Activity[]
+  id                 String             @id @default(cuid())
+  tenantId           String
+  personId           String
+  companyId          String?
+  /// TODO(migrate): enforce NOT NULL + ON DELETE CASCADE
+  listingId          String?
+  agreementId        String?
+  opportunityId      String?
+  /// TODO(migrate): ensure stage remains NOT NULL with default 'OFFER'
+  stage              DealStage          @default(OFFER)
+  forecastGci        Decimal?
+  actualGci          Decimal?
+  splitPlanRef       String?
+  spendToDate        Decimal?           @default(0)
+  expectedNet        Decimal?
+  commissionSnapshot Json?
+  milestoneChecklist Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  tenant             Tenant             @relation(fields: [tenantId], references: [id])
+  person             Person             @relation(fields: [personId], references: [id])
+  company            Company?           @relation(fields: [companyId], references: [id])
+  /// TODO(migrate): re_transactions.listingId ON DELETE CASCADE
+  listing            Listing?           @relation(fields: [listingId], references: [id])
+  agreement          Agreement?         @relation(fields: [agreementId], references: [id])
+  offers             Offer[]
+  activities         Activity[]
+  opportunity        Opportunity?       @relation(fields: [opportunityId], references: [id])
+  customFieldValues  CustomFieldValue[]
+
+  @@index([opportunityId])
+  @@index([tenantId, listingId]) // TODO(migrate): optimise transaction lookups by listing
+  @@index([tenantId, stage]) // TODO(migrate): support transaction stage filters
+  @@index([tenantId, companyId])
 }
 
 model Offer {
   id        String      @id @default(cuid())
   tenantId  String
+  /// TODO(migrate): enforce NOT NULL + ON DELETE CASCADE
   listingId String
   personId  String
   dealId    String?
+  /// TODO(migrate): ensure NOT NULL default 'SUBMITTED'
   status    OfferStatus @default(SUBMITTED)
+  /// TODO(migrate): persist scalar amount column (NOT NULL) alongside terms JSON
   terms     Json
   version   Int         @default(1)
   metadata  Json?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   tenant    Tenant      @relation(fields: [tenantId], references: [id])
+  /// TODO(migrate): re_offers.listingId ON DELETE CASCADE
   listing   Listing     @relation(fields: [listingId], references: [id])
   person    Person      @relation(fields: [personId], references: [id])
   deal      Deal?       @relation(fields: [dealId], references: [id])
+  /// TODO(migrate): partial unique index enforcing a single ACCEPTED offer per listing
+
+  @@index([tenantId, listingId, status]) // TODO(migrate): cover listing offer queries
 }
 
 model MLSProfile {
@@ -1199,13 +1738,18 @@ model QuietHourOverride {
 }
 
 model RoutingLog {
-  id        String   @id @default(cuid())
-  tenantId  String
-  personId  String
-  payload   Json
-  createdAt DateTime @default(now())
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  person    Person   @relation(fields: [personId], references: [id])
+  id          String   @id @default(cuid())
+  tenantId    String
+  personId    String
+  ruleName    String
+  prevOwnerId String?
+  newOwnerId  String?
+  details     Json?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  person      Person   @relation(fields: [personId], references: [id])
+
+  @@index([tenantId, personId])
 }
 
 model WebhookSubscription {
@@ -1233,4 +1777,397 @@ model WebhookDelivery {
   createdAt   DateTime            @default(now())
   webhook     WebhookSubscription @relation(fields: [webhookId], references: [id])
   outbox      Outbox              @relation(fields: [outboxId], references: [id])
+}
+
+model UserOrgMembership {
+  id         String       @id @default(cuid())
+  userId     String
+  orgId      String
+  roleId     String?
+  profileId  String?
+  isOrgAdmin Boolean      @default(false)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  user       User         @relation(fields: [userId], references: [id])
+  org        Organization @relation(fields: [orgId], references: [id])
+  role       Role?        @relation("RoleMemberships", fields: [roleId], references: [id])
+  profile    Profile?     @relation(fields: [profileId], references: [id])
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+  @@index([profileId])
+}
+
+model Role {
+  id        String              @id @default(cuid())
+  orgId     String
+  name      String
+  parentId  String?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  org       Organization        @relation(fields: [orgId], references: [id])
+  parent    Role?               @relation("RoleToRole", fields: [parentId], references: [id])
+  children  Role[]              @relation("RoleToRole")
+  members   UserOrgMembership[] @relation("RoleMemberships")
+
+  @@index([orgId])
+}
+
+model Profile {
+  id                String              @id @default(cuid())
+  orgId             String
+  name              String
+  isSystem          Boolean             @default(false)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  org               Organization        @relation(fields: [orgId], references: [id])
+  objectPermissions ObjectPermission[]  @relation("ProfileObjectPermissions")
+  fieldPermissions  FieldPermission[]   @relation("ProfileFieldPermissions")
+  memberships       UserOrgMembership[]
+
+  @@index([orgId])
+}
+
+model PermissionSet {
+  id                String                    @id @default(cuid())
+  orgId             String
+  name              String
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  org               Organization              @relation(fields: [orgId], references: [id])
+  assignments       PermissionSetAssignment[]
+  objectPermissions ObjectPermission[]        @relation("PermissionSetObjectPermissions")
+  fieldPermissions  FieldPermission[]         @relation("PermissionSetFieldPermissions")
+
+  @@index([orgId])
+}
+
+model PermissionSetAssignment {
+  id              String        @id @default(cuid())
+  userId          String
+  permissionSetId String
+  assignedAt      DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id])
+  permissionSet   PermissionSet @relation(fields: [permissionSetId], references: [id])
+
+  @@unique([userId, permissionSetId])
+  @@index([permissionSetId])
+}
+
+model ObjectPermission {
+  id              String               @id @default(cuid())
+  orgId           String
+  holderType      PermissionHolderType
+  holderId        String
+  object          String
+  canCreate       Boolean              @default(false)
+  canRead         Boolean              @default(true)
+  canUpdate       Boolean              @default(false)
+  canDelete       Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  org             Organization         @relation(fields: [orgId], references: [id])
+  profileId       String?
+  permissionSetId String?
+  profile         Profile?             @relation("ProfileObjectPermissions", fields: [profileId], references: [id])
+  permissionSet   PermissionSet?       @relation("PermissionSetObjectPermissions", fields: [permissionSetId], references: [id])
+
+  @@index([orgId, holderType, holderId, object])
+  @@index([profileId])
+  @@index([permissionSetId])
+}
+
+model FieldPermission {
+  id              String               @id @default(cuid())
+  orgId           String
+  holderType      PermissionHolderType
+  holderId        String
+  object          String
+  field           String
+  canRead         Boolean              @default(true)
+  canWrite        Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  org             Organization         @relation(fields: [orgId], references: [id])
+  profileId       String?
+  permissionSetId String?
+  profile         Profile?             @relation("ProfileFieldPermissions", fields: [profileId], references: [id])
+  permissionSet   PermissionSet?       @relation("PermissionSetFieldPermissions", fields: [permissionSetId], references: [id])
+
+  @@index([orgId, holderType, holderId, object, field])
+  @@index([profileId])
+  @@index([permissionSetId])
+}
+
+model RecordShare {
+  id          String           @id @default(cuid())
+  orgId       String
+  object      String
+  recordId    String
+  granteeType ShareGranteeType
+  granteeId   String
+  access      ShareAccess
+  createdAt   DateTime         @default(now())
+  org         Organization     @relation(fields: [orgId], references: [id])
+
+  @@index([orgId, object, recordId])
+}
+
+model AuditEvent {
+  id        String       @id @default(cuid())
+  orgId     String
+  actorId   String?
+  object    String?
+  recordId  String?
+  action    AuditAction
+  diff      Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime     @default(now())
+  org       Organization @relation(fields: [orgId], references: [id])
+  actor     User?        @relation(fields: [actorId], references: [id])
+
+  @@index([orgId, object, recordId])
+}
+
+/// Admin-configured validation rules per object
+model ValidationRule {
+  id        String   @id @default(uuid())
+  orgId     String
+  object    String // e.g., 'cases','opportunities','accounts','re_offers'
+  name      String
+  active    Boolean  @default(true)
+  // Simple JSON DSL, e.g. { "if": "status in ['Resolved','Closed']", "then_required": ["description"] }
+  dsl       Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, object, active])
+}
+
+/// Admin-configured assignment rules per object
+model AssignmentRule {
+  id        String   @id @default(uuid())
+  orgId     String
+  object    String
+  name      String
+  active    Boolean  @default(true)
+  // DSL example: { "when": "stage == 'Qualification' && amount >= 50000",
+  //                "assign": { "type": "round_robin", "pool": ["u1","u2"] } }
+  dsl       Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, object, active])
+}
+
+// TODO(migrate): consider NOT NULLs for object/name; add FKs to users for static assignees later
+
+model Account {
+  id              String        @id @default(uuid())
+  orgId           String
+  ownerId         String
+  name            String
+  website         String?
+  industry        String?
+  annualRevenue   Decimal?      @db.Decimal(18, 2)
+  phone           String?
+  billingAddress  Json?
+  shippingAddress Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+  opportunities   Opportunity[]
+  cases           Case[]        @relation("CaseAccount")
+
+  @@index([orgId, name])
+}
+
+model Opportunity {
+  id           String    @id @default(uuid())
+  orgId        String
+  ownerId      String
+  accountId    String?
+  name         String
+  stage        String
+  amount       Decimal?  @db.Decimal(18, 2)
+  currency     String    @default("USD")
+  closeDate    DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+  account      Account?  @relation(fields: [accountId], references: [id])
+  listings     Listing[]
+  transactions Deal[]
+
+  @@index([orgId, stage, closeDate])
+}
+
+model FileObject {
+  id         String     @id @default(uuid())
+  orgId      String
+  ownerId    String
+  fileName   String
+  mimeType   String?
+  byteSize   Int
+  storageKey String
+  status     String     @default("READY")
+  createdAt  DateTime   @default(now())
+  links      FileLink[]
+
+  @@index([orgId, storageKey])
+}
+
+model FileLink {
+  id        String     @id @default(uuid())
+  orgId     String
+  fileId    String
+  object    String
+  recordId  String
+  createdAt DateTime   @default(now())
+  file      FileObject @relation(fields: [fileId], references: [id])
+
+  @@index([orgId, object, recordId])
+}
+
+model DealDeskRequest {
+  id            String    @id @default(uuid())
+  orgId         String
+  requesterId   String
+  opportunityId String
+  status        String    @default("PENDING")
+  amount        Decimal?  @db.Decimal(18, 2)
+  discountPct   Decimal?  @db.Decimal(5, 2)
+  reason        String?
+  createdAt     DateTime  @default(now())
+  decidedAt     DateTime?
+  decidedBy     String?
+
+  @@index([orgId, status, opportunityId])
+}
+
+model OrgCommissionPlan {
+  id          String   @id @default(uuid())
+  orgId       String
+  name        String
+  brokerSplit Decimal  @db.Decimal(5, 2)
+  agentSplit  Decimal  @db.Decimal(5, 2)
+  tiers       Json?
+  createdAt   DateTime @default(now())
+
+  @@index([orgId, name])
+}
+
+model MetricsDaily {
+  id        String   @id @default(cuid())
+  orgId     String
+  key       String
+  date      DateTime
+  valueNum  Decimal?
+  valueJson Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, key, date])
+}
+
+model MetricsRun {
+  id         String    @id @default(cuid())
+  orgId      String
+  key        String
+  status     String
+  note       String?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([orgId, key, createdAt])
+}
+
+model Case {
+  id          String    @id @default(uuid())
+  orgId       String
+  ownerId     String
+  accountId   String?
+  contactId   String?
+  subject     String
+  status      String    @default("New") // New|Working|Escalated|Resolved|Closed
+  priority    String?   @default("Medium") // Low|Medium|High|Urgent
+  origin      String? // Email|Phone|Web|Other
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  account Account? @relation("CaseAccount", fields: [accountId], references: [id])
+  contact Person?  @relation("CaseContact", fields: [contactId], references: [id])
+
+  @@index([orgId, status, priority])
+}
+
+// TODO(migrate): add NOT NULL where noted by service checks; confirm FK options
+
+model Payout {
+  id            String    @id @default(uuid())
+  orgId         String
+  transactionId String?
+  opportunityId String?
+  payeeId       String
+  grossAmount   Decimal   @db.Decimal(18, 2)
+  brokerAmount  Decimal   @db.Decimal(18, 2)
+  agentAmount   Decimal   @db.Decimal(18, 2)
+  status        String    @default("PENDING")
+  dueOn         DateTime?
+  paidAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([orgId, status])
+}
+
+// S9: Record Types & Layouts
+model RecordType {
+  id        String         @id @default(cuid())
+  orgId     String
+  object    String
+  key       String
+  label     String
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  layouts   ObjectLayout[]
+
+  @@unique([orgId, object, key])
+  @@index([orgId, object])
+}
+
+model ObjectLayout {
+  id           String        @id @default(cuid())
+  orgId        String
+  object       String
+  kind         String
+  recordTypeId String?
+  profile      String?
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  recordType   RecordType?   @relation(fields: [recordTypeId], references: [id])
+  fields       FieldLayout[]
+
+  @@unique([orgId, object, kind, recordTypeId, profile])
+  @@index([orgId, object, kind])
+  @@index([orgId, object, kind, profile])
+  @@index([orgId, object, kind, recordTypeId, profile])
+}
+
+model FieldLayout {
+  id        String       @id @default(cuid())
+  layoutId  String
+  field     String
+  label     String?
+  visible   Boolean      @default(true)
+  order     Int
+  width     Int?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  layout    ObjectLayout @relation(fields: [layoutId], references: [id], onDelete: Cascade)
+
+  @@index([layoutId, order])
 }

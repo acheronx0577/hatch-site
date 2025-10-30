@@ -28,6 +28,7 @@ import {
   UserRole
 } from '@hatch/db';
 
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../common/dto/cursor-pagination-query.dto';
 import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestContext } from '../common/request-context';
@@ -137,9 +138,7 @@ export interface ContactListItem {
 
 export interface ContactListResponse {
   items: ContactListItem[];
-  total: number;
-  page: number;
-  pageSize: number;
+  nextCursor: string | null;
   savedView?: SavedView | null;
 }
 
@@ -250,47 +249,46 @@ export class ContactsService {
     if (ownerScope.allowedOwnerIds && ownerScope.allowedOwnerIds.length === 0) {
       return {
         items: [],
-        total: 0,
-        page: appliedQuery.page,
-        pageSize: appliedQuery.pageSize,
+        nextCursor: null,
         savedView
       };
     }
 
     const where = await this.buildListWhereClause(appliedQuery, tenantId, ownerScope.allowedOwnerIds);
     const orderBy = this.buildOrdering(appliedQuery);
-    const skip = (appliedQuery.page - 1) * appliedQuery.pageSize;
+    const pageSize = Math.min(appliedQuery.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
 
-    const [items, total] = await Promise.all([
-      this.prisma.person.findMany({
-        where,
-        skip,
-        take: appliedQuery.pageSize,
-        orderBy,
-        include: {
-          owner: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              role: true,
-              avatarUrl: true
-            }
-          },
-          consents: true,
-          deals: true,
-          agreements: true
-        }
-      }) as Promise<PersonListPayload[]>,
-      this.prisma.person.count({ where })
-    ]);
+    const people = (await this.prisma.person.findMany({
+      where,
+      take: pageSize + 1,
+      ...(appliedQuery.cursor ? { cursor: { id: appliedQuery.cursor }, skip: 1 } : {}),
+      orderBy,
+      include: {
+        owner: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+            avatarUrl: true
+          }
+        },
+        consents: true,
+        deals: true,
+        agreements: true
+      }
+    })) as PersonListPayload[];
+
+    let nextCursor: string | null = null;
+    if (people.length > pageSize) {
+      const next = people.pop();
+      nextCursor = next?.id ?? null;
+    }
 
     return {
-      items: items.map((person) => this.mapPersonToListItem(person)),
-      total,
-      page: appliedQuery.page,
-      pageSize: appliedQuery.pageSize,
+      items: people.map((person) => this.mapPersonToListItem(person)),
+      nextCursor,
       savedView
     };
   }
@@ -765,7 +763,7 @@ export class ContactsService {
   ): Promise<Prisma.PersonWhereInput> {
     const where: Prisma.PersonWhereInput = {
       tenantId,
-      deletedAt: query.includeDeleted === 'true' ? undefined : null
+      deletedAt: query.includeDeleted ? undefined : null
     };
 
     if (allowedOwners) {
@@ -820,11 +818,11 @@ export class ContactsService {
       andFilters.push({ buyerRepStatus: query.buyerRepStatus as BuyerRepStatus });
     }
 
-    if (query.doNotContact === 'true') {
+    if (query.doNotContact === true) {
       andFilters.push({ doNotContact: true });
     }
 
-    if (query.hasOpenDeal === 'true') {
+    if (query.hasOpenDeal === true) {
       andFilters.push({
         deals: {
           some: {
@@ -832,7 +830,7 @@ export class ContactsService {
           }
         }
       });
-    } else if (query.hasOpenDeal === 'false') {
+    } else if (query.hasOpenDeal === false) {
       andFilters.push({
         deals: {
           none: {
@@ -842,8 +840,8 @@ export class ContactsService {
       });
     }
 
-    if (query.search) {
-      const term = query.search.trim();
+    if (query.q) {
+      const term = query.q.trim();
       andFilters.push({
         OR: [
           { firstName: { contains: term, mode: 'insensitive' } },
@@ -866,17 +864,24 @@ export class ContactsService {
 
   private buildOrdering(query: ListContactsQueryDto): Prisma.PersonOrderByWithRelationInput[] {
     const direction = query.sortDirection === 'asc' ? 'asc' : 'desc';
+    const ordering: Prisma.PersonOrderByWithRelationInput[] = [];
     switch (query.sortBy) {
       case 'createdAt':
-        return [{ createdAt: direction }];
+        ordering.push({ createdAt: direction });
+        break;
       case 'stage':
-        return [{ stage: direction }, { lastActivityAt: 'desc' }];
+        ordering.push({ stage: direction }, { lastActivityAt: 'desc' });
+        break;
       case 'owner':
-        return [{ owner: { lastName: direction } }, { owner: { firstName: direction } }];
+        ordering.push({ owner: { lastName: direction } }, { owner: { firstName: direction } });
+        break;
       case 'lastActivity':
       default:
-        return [{ lastActivityAt: 'desc' }, { updatedAt: 'desc' }];
+        ordering.push({ lastActivityAt: 'desc' }, { updatedAt: 'desc' });
+        break;
     }
+    ordering.push({ id: direction });
+    return ordering;
   }
 
   private buildConsentFilter(statuses: ConsentStatus[], channel: ConsentChannel): Prisma.PersonWhereInput {
@@ -970,11 +975,27 @@ export class ContactsService {
     if (!view.filters) return;
     const filters = view.filters as Record<string, unknown>;
 
+    if (filters.search && filters.q === undefined) {
+      (query as unknown as Record<string, unknown>).q = filters.search;
+    }
+    if (filters.pageSize !== undefined && filters.limit === undefined) {
+      const parsedLimit = Number(filters.pageSize);
+      if (Number.isFinite(parsedLimit)) {
+        (query as unknown as Record<string, unknown>).limit = parsedLimit;
+      }
+    }
+
     const assign = <K extends keyof ListContactsQueryDto>(key: K) => {
       const filterValue = filters[key as string];
       if (filterValue !== undefined && filterValue !== null) {
         (query as unknown as Record<string, unknown>)[key as string] = filterValue;
       }
+    };
+    const assignBoolean = (key: keyof ListContactsQueryDto) => {
+      const value = filters[key as string];
+      if (value === undefined || value === null) return;
+      (query as unknown as Record<string, unknown>)[key as string] =
+        typeof value === 'string' ? value === 'true' : Boolean(value);
     };
 
     assign('stage');
@@ -989,14 +1010,13 @@ export class ContactsService {
     assign('emailConsent');
     assign('smsConsent');
     assign('buyerRepStatus');
-    assign('hasOpenDeal');
-    assign('includeDeleted');
-    assign('includeDeleted');
+    assignBoolean('hasOpenDeal');
+    assignBoolean('includeDeleted');
+    assignBoolean('doNotContact');
     assign('sortBy');
     assign('sortDirection');
-    assign('search');
-    assign('pageSize');
-    assign('page');
+    assign('q');
+    assign('limit');
   }
 
   private computeConsentSummary(consents: Consent[]): { email: ConsentBadge; sms: ConsentBadge } {

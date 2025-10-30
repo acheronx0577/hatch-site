@@ -24,6 +24,42 @@ export interface Subscription {
   plan?: SubscriptionPlan;
 }
 
+export interface Firm {
+  id: string;
+  name: string;
+  subscription_status?: string | null;
+  subscription_tier?: string | null;
+  seats_purchased?: number | null;
+  seats_used?: number | null;
+  tier?: string | null;
+  [key: string]: unknown;
+}
+
+export interface SubscriptionResponse {
+  firm: Firm;
+  membership: {
+    firm_id: string;
+    role?: string;
+    status?: string;
+    [key: string]: unknown;
+  };
+  current_plan: SubscriptionPlan;
+  usage: {
+    seats_used: number;
+    seats_available: number;
+    storage_used_gb: number;
+    api_calls_used: number;
+  };
+  billing: {
+    next_billing_date: Date;
+    amount_due: number;
+    payment_method: {
+      type: string;
+      last4?: string;
+    };
+  };
+}
+
 export interface UsageMetrics {
   listings_used: number;
   clients_used: number;
@@ -95,3 +131,35 @@ export interface SubscriptionContextType {
   updatePaymentMethod: (paymentMethodId: string) => Promise<boolean>;
   downloadInvoice: (invoiceId: string) => Promise<void>;
 }
+
+export const PRICING_PLANS: SubscriptionPlan[] = [
+  {
+    id: 'starter',
+    name: 'Starter',
+    description: 'For small teams getting started.',
+    price: 99,
+    interval: 'month',
+    features: ['Up to 5 seats', 'Standard support']
+  },
+  {
+    id: 'growth',
+    name: 'Growth',
+    description: 'Ideal for growing brokerages.',
+    price: 199,
+    interval: 'month',
+    features: ['Up to 15 seats', 'Priority support'],
+    max_listings: 500,
+    priority_support: true
+  },
+  {
+    id: 'scale',
+    name: 'Scale',
+    description: 'Advanced analytics and automation.',
+    price: 399,
+    interval: 'month',
+    features: ['Unlimited seats', 'Dedicated success manager'],
+    max_listings: 2000,
+    priority_support: true,
+    analytics_access: true
+  }
+];

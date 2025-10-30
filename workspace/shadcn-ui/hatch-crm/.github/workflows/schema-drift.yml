@@ -1,0 +1,44 @@
+name: Prisma Schema Drift
+
+on:
+  pull_request:
+    paths:
+      - 'workspace/shadcn-ui/hatch-crm/packages/db/prisma/**'
+      - 'workspace/shadcn-ui/hatch-crm/packages/db/src/**'
+      - 'workspace/shadcn-ui/hatch-crm/apps/api/src/**'
+      - 'workspace/shadcn-ui/hatch-crm/package.json'
+      - 'workspace/shadcn-ui/hatch-crm/pnpm-lock.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schema-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workspace/shadcn-ui/hatch-crm
+    env:
+      NODE_OPTIONS: --max-old-space-size=2048
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install workspace deps (skip postinstall)
+        run: pnpm install --ignore-scripts
+
+      - name: Check Prisma migrations match schema
+        run: pnpm --filter @hatch/db exec prisma migrate diff --from-migrations packages/db/prisma/migrations --to-schema-datamodel packages/db/prisma/schema.prisma --exit-code

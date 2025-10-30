@@ -2,7 +2,7 @@ import Stripe from 'stripe'
 
 // Initialize Stripe with secret key
 const stripe = new Stripe(import.meta.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
-  apiVersion: '2024-06-20',
+  apiVersion: '2025-08-27.basil',
 })
 
 export interface CreateCheckoutSessionParams {

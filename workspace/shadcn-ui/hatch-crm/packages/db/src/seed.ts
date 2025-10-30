@@ -1,7 +1,123 @@
-import { Prisma } from '@prisma/client';
+import { LeadScoreTier, Prisma } from '@prisma/client';
 import { addHours } from 'date-fns';
 
 import { prisma } from './index';
+
+interface PipelineSeedDefinition {
+  name: string;
+  type: string;
+  order: number;
+  stages: Array<{ name: string; slaMinutes?: number | null }>;
+}
+
+const S_SERIES_STAGES = Array.from({ length: 10 }, (_, index) => ({
+  name: `S${index + 1}`,
+  slaMinutes: null
+}));
+
+const DEFAULT_PIPELINES: PipelineSeedDefinition[] = [
+  {
+    name: 'S-Series',
+    type: 'buyer',
+    order: 0,
+    stages: S_SERIES_STAGES
+  },
+  {
+    name: 'Buyer',
+    type: 'buyer',
+    order: 1,
+    stages: [
+      { name: 'New', slaMinutes: 60 },
+      { name: 'Engaged', slaMinutes: 240 },
+      { name: 'Qualified', slaMinutes: 720 },
+      { name: 'Showing', slaMinutes: 1440 },
+      { name: 'Offer' },
+      { name: 'Under Contract' },
+      { name: 'Closed' },
+      { name: 'Nurture' }
+    ]
+  },
+  {
+    name: 'Seller',
+    type: 'seller',
+    order: 2,
+    stages: [
+      { name: 'New', slaMinutes: 60 },
+      { name: 'Discovery', slaMinutes: 240 },
+      { name: 'Pre-List', slaMinutes: 720 },
+      { name: 'Active Listing' },
+      { name: 'Under Contract' },
+      { name: 'Closed' },
+      { name: 'Nurture' }
+    ]
+  }
+];
+
+async function ensurePipelines(tenantId: string) {
+  const pipelines: Record<
+    string,
+    {
+      pipeline: { id: string };
+      stages: Array<{ id: string; name: string }>;
+    }
+  > = {};
+
+  for (const definition of DEFAULT_PIPELINES) {
+    const pipeline = await prisma.pipeline.upsert({
+      where: {
+        tenantId_name: {
+          tenantId,
+          name: definition.name
+        }
+      },
+      update: {
+        type: definition.type,
+        order: definition.order
+      },
+      create: {
+        tenantId,
+        name: definition.name,
+        type: definition.type,
+        order: definition.order
+      }
+    });
+
+    for (const [index, stageDefinition] of definition.stages.entries()) {
+      await prisma.stage.upsert({
+        where: {
+          tenantId_pipelineId_name: {
+            tenantId,
+            pipelineId: pipeline.id,
+            name: stageDefinition.name
+          }
+        },
+        update: {
+          order: index,
+          slaMinutes: stageDefinition.slaMinutes ?? null
+        },
+        create: {
+          tenantId,
+          pipelineId: pipeline.id,
+          name: stageDefinition.name,
+          order: index,
+          slaMinutes: stageDefinition.slaMinutes ?? null
+        }
+      });
+    }
+
+    const full = await prisma.pipeline.findUnique({
+      where: { id: pipeline.id },
+      include: { stages: { orderBy: { order: 'asc' } } }
+    });
+
+    pipelines[definition.name] = {
+      pipeline: { id: pipeline.id },
+      stages: full?.stages.map((stage) => ({ id: stage.id, name: stage.name })) ?? []
+    };
+  }
+
+  return pipelines;
+}
 
 async function main() {
   const organization = await prisma.organization.upsert({
@@ -70,39 +186,163 @@ async function main() {
     }
   });
 
+  const memberships: Array<{ id: string; userId: string; isOrgAdmin: boolean }> = [
+    { id: 'uom-broker', userId: broker.id, isOrgAdmin: true },
+    { id: 'uom-agent', userId: agent.id, isOrgAdmin: true },
+    { id: 'uom-isa', userId: isa.id, isOrgAdmin: true }
+  ];
+
+  for (const membership of memberships) {
+    await prisma.userOrgMembership.upsert({
+      where: { id: membership.id },
+      update: {
+        isOrgAdmin: membership.isOrgAdmin
+      },
+      create: {
+        id: membership.id,
+        userId: membership.userId,
+        orgId: organization.id,
+        isOrgAdmin: membership.isOrgAdmin
+      }
+    });
+  }
+
+  const pipelines = await ensurePipelines(tenant.id);
+  const sSeriesPipeline = pipelines['S-Series'];
+  if (!sSeriesPipeline) {
+    throw new Error('S-Series pipeline was not seeded');
+  }
+  const sSeriesStagesByName = Object.fromEntries(
+    sSeriesPipeline.stages.map((stage) => [stage.name, stage])
+  );
+  const stageS1Id = sSeriesStagesByName['S1']?.id;
+  const stageS3Id = sSeriesStagesByName['S3']?.id ?? stageS1Id;
+  const stageS5Id = sSeriesStagesByName['S5']?.id ?? stageS3Id;
+
+  const coldLeadData: Prisma.PersonUncheckedUpdateInput = {
+    organizationId: organization.id,
+    tenantId: tenant.id,
+    ownerId: isa.id,
+    firstName: 'Casey',
+    lastName: 'ColdLead',
+    primaryEmail: 'casey@example.com',
+    primaryPhone: '+14155550123',
+    stage: 'NEW',
+    tags: ['new-lead'],
+    source: 'portal',
+    pipelineId: sSeriesPipeline.pipeline.id,
+    stageId: stageS1Id ?? null,
+    stageEnteredAt: addHours(new Date(), -12),
+    leadScore: 18,
+    scoreTier: LeadScoreTier.D,
+    scoreUpdatedAt: new Date(),
+    lastActivityAt: addHours(new Date(), -48)
+  };
+
   const contactNoConsent = await prisma.person.upsert({
     where: { id: 'contact-no-consent' },
-    update: {},
+    update: coldLeadData,
     create: {
       id: 'contact-no-consent',
-      organizationId: organization.id,
-      tenantId: tenant.id,
-      ownerId: isa.id,
-      firstName: 'Casey',
-      lastName: 'ColdLead',
-      primaryEmail: 'casey@example.com',
-      primaryPhone: '+14155550123',
-      stage: 'NEW',
-      tags: ['new-lead'],
-      source: 'portal'
+      ...coldLeadData
     }
   });
 
+  const hotLeadData: Prisma.PersonUncheckedUpdateInput = {
+    organizationId: organization.id,
+    tenantId: tenant.id,
+    ownerId: agent.id,
+    firstName: 'Morgan',
+    lastName: 'Mover',
+    primaryEmail: 'morgan@example.com',
+    primaryPhone: '+14155550124',
+    stage: 'ACTIVE',
+    tags: ['hot'],
+    source: 'referral',
+    pipelineId: sSeriesPipeline.pipeline.id,
+    stageId: stageS5Id ?? stageS3Id ?? stageS1Id ?? null,
+    stageEnteredAt: addHours(new Date(), -36),
+    leadScore: 86,
+    scoreTier: LeadScoreTier.A,
+    scoreUpdatedAt: new Date(),
+    lastActivityAt: addHours(new Date(), -4)
+  };
+
   const contactWithBba = await prisma.person.upsert({
     where: { id: 'contact-bba' },
-    update: {},
+    update: hotLeadData,
     create: {
       id: 'contact-bba',
-      organizationId: organization.id,
+      ...hotLeadData
+    }
+  });
+
+  await prisma.leadFit.upsert({
+    where: { personId: contactWithBba.id },
+    update: {
+      preapproved: true,
+      budgetMin: 500000,
+      budgetMax: 1200000,
+      timeframeDays: 60,
+      geo: 'miami',
+      inventoryMatch: 18,
+      updatedAt: new Date()
+    },
+    create: {
+      id: 'leadfit-morgan',
       tenantId: tenant.id,
-      ownerId: agent.id,
-      firstName: 'Morgan',
-      lastName: 'Mover',
-      primaryEmail: 'morgan@example.com',
-      primaryPhone: '+14155550124',
-      stage: 'ACTIVE',
-      tags: ['hot'],
-      source: 'referral'
+      personId: contactWithBba.id,
+      preapproved: true,
+      budgetMin: 500000,
+      budgetMax: 1200000,
+      timeframeDays: 60,
+      geo: 'miami',
+      inventoryMatch: 18
+    }
+  });
+
+  await prisma.leadActivityRollup.upsert({
+    where: { personId: contactWithBba.id },
+    update: {
+      last7dListingViews: 6,
+      last7dSessions: 4,
+      lastReplyAt: new Date(),
+      lastEmailOpenAt: new Date()
+    },
+    create: {
+      id: 'activity-morgan',
+      tenantId: tenant.id,
+      personId: contactWithBba.id,
+      last7dListingViews: 6,
+      last7dSessions: 4,
+      lastReplyAt: new Date(),
+      lastEmailOpenAt: new Date()
+    }
+  });
+
+  await prisma.leadTask.upsert({
+    where: { id: 'task-follow-up' },
+    update: {},
+    create: {
+      id: 'task-follow-up',
+      tenantId: tenant.id,
+      personId: contactWithBba.id,
+      assigneeId: agent.id,
+      title: 'Schedule tour for Harbor Way',
+      dueAt: addHours(new Date(), 24),
+      status: 'OPEN'
+    }
+  });
+
+  await prisma.leadNote.upsert({
+    where: { id: 'note-morgan-initial' },
+    update: {},
+    create: {
+      id: 'note-morgan-initial',
+      tenantId: tenant.id,
+      personId: contactWithBba.id,
+      userId: agent.id,
+      body: 'Great conversation — interested in waterfront properties around Brickell.'
     }
   });
 
@@ -232,19 +472,101 @@ async function main() {
     }
   });
 
-  await prisma.message.create({
-    data: {
+  const conversation = await prisma.conversation.upsert({
+    where: { id: 'conversation-morgan' },
+    update: {},
+    create: {
+      id: 'conversation-morgan',
+      tenantId: tenant.id,
+      type: 'EXTERNAL',
+      personId: contactWithBba.id,
+      createdById: agent.id
+    }
+  });
+
+  const agentParticipant = await prisma.conversationParticipant.upsert({
+    where: { id: 'conversation-morgan-agent' },
+    update: {},
+    create: {
+      id: 'conversation-morgan-agent',
+      conversationId: conversation.id,
+      userId: agent.id,
+      role: 'OWNER'
+    }
+  });
+
+  const brokerParticipant = await prisma.conversationParticipant.upsert({
+    where: { id: 'conversation-morgan-broker' },
+    update: {},
+    create: {
+      id: 'conversation-morgan-broker',
+      conversationId: conversation.id,
+      userId: broker.id,
+      role: 'MEMBER'
+    }
+  });
+
+  await prisma.conversationParticipant.upsert({
+    where: { id: 'conversation-morgan-person' },
+    update: {},
+    create: {
+      id: 'conversation-morgan-person',
+      conversationId: conversation.id,
+      personId: contactWithBba.id,
+      role: 'MEMBER'
+    }
+  });
+
+  await prisma.message.createMany({
+    data: [
+      {
+        id: 'message-morgan-1',
+        tenantId: tenant.id,
+        conversationId: conversation.id,
+        personId: contactWithBba.id,
+        userId: agent.id,
+        channel: 'EMAIL',
+        direction: 'OUTBOUND',
+        subject: 'Tour confirmation',
+        body: 'Looking forward to seeing you at 123 Harbor Way',
+        toAddress: 'morgan@example.com',
+        fromAddress: 'agent@hatchcrm.test',
+        status: 'DELIVERED',
+        deliveredAt: new Date()
+      },
+      {
+        id: 'message-morgan-2',
+        tenantId: tenant.id,
+        conversationId: conversation.id,
+        personId: contactWithBba.id,
+        channel: 'IN_APP',
+        direction: 'INBOUND',
+        body: 'Thanks! Can we also see the unit at 789 Bayfront tomorrow?',
+        status: 'READ',
+        deliveredAt: new Date()
+      }
+    ],
+    skipDuplicates: true
+  });
+
+  await prisma.leadTouchpoint.upsert({
+    where: { id: 'touchpoint-morgan-conversation' },
+    update: {
+      occurredAt: addHours(new Date(), -2)
+    },
+    create: {
+      id: 'touchpoint-morgan-conversation',
       tenantId: tenant.id,
       personId: contactWithBba.id,
       userId: agent.id,
-      channel: 'EMAIL',
-      direction: 'OUTBOUND',
-      subject: 'Tour confirmation',
-      body: 'Looking forward to seeing you at 123 Harbor Way',
-      toAddress: 'morgan@example.com',
-      fromAddress: 'agent@hatchcrm.test',
-      status: 'DELIVERED',
-      deliveredAt: new Date()
+      type: 'MESSAGE',
+      channel: 'IN_APP',
+      occurredAt: addHours(new Date(), -2),
+      summary: 'Replied in messenger',
+      metadata: {
+        conversationId: conversation.id,
+        participantId: agentParticipant.id
+      }
     }
   });
 

@@ -6,8 +6,12 @@ const fallbackAnonKey =
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || fallbackSupabaseUrl
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || fallbackAnonKey
-const functionsBaseUrl =
-  import.meta.env.VITE_SUPABASE_FUNCTIONS_URL || `${supabaseUrl.replace(/\/$/, '')}/functions/v1`
+
+const defaultFunctionsUrl = import.meta.env.DEV
+  ? 'http://localhost:4000'
+  : `${supabaseUrl.replace(/\/$/, '')}/functions/v1`
+
+const functionsBaseUrl = (import.meta.env.VITE_SUPABASE_FUNCTIONS_URL || defaultFunctionsUrl).replace(/\/$/, '')
 
 if (!functionsBaseUrl) {
   console.warn('Supabase functions base URL is not configured. Set VITE_SUPABASE_URL or VITE_SUPABASE_FUNCTIONS_URL.')
@@ -21,9 +25,15 @@ export type RequestOptions = {
 
 export const buildHeaders = async (options?: RequestOptions) => {
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     apikey: supabaseAnonKey,
     ...(options?.headers ?? {}),
+  }
+
+  const hasFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData
+  const hasJsonPayload = options?.body !== undefined && !hasFormData
+
+  if (hasJsonPayload && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json'
   }
 
   const { data } = await supabase.auth.getSession()
@@ -44,12 +54,18 @@ export const request = async <T>(path: string, options?: RequestOptions): Promis
   }
 
   const method = options?.method ?? 'GET'
+  const hasFormData = typeof FormData !== 'undefined' && options?.body instanceof FormData
   const headers = await buildHeaders(options)
+  const body = hasFormData
+    ? (options?.body as BodyInit | null | undefined)
+    : options?.body !== undefined
+      ? JSON.stringify(options.body)
+      : undefined
 
   const response = await fetch(`${functionsBaseUrl}${path}`, {
     method,
     headers,
-    body: options?.body ? JSON.stringify(options.body) : undefined,
+    body,
   })
 
   const contentType = response.headers.get('Content-Type') ?? ''

@@ -1,107 +1,70 @@
-import {
-  Body,
-  Controller,
-  ForbiddenException,
-  Get,
-  Param,
-  Patch,
-  Post,
-  Query,
-  Req
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseInterceptors } from '@nestjs/common';
+import { ApiBody, ApiOkResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
-import { UserRole } from '@hatch/db';
-
-import { resolveRequestContext } from '../common/request-context';
+import { AuditInterceptor } from '../../platform/audit/audit.interceptor';
+import { Permit } from '../../platform/security/permit.decorator';
+import { ApiModule, ApiStandardErrors, resolveRequestContext } from '../common';
 import { CommissionPlansService } from './commission-plans.service';
-import { PlanAssignmentService } from './plan-assignment.service';
-import { CapLedgerService } from './cap-ledger.service';
-import { CreateCommissionPlanDto } from './dto/create-plan.dto';
-import { UpdateCommissionPlanDto } from './dto/update-plan.dto';
-import { AssignCommissionPlanDto } from './dto/assign-plan.dto';
-import { CapProgressQueryDto } from './dto/cap-progress.dto';
+import {
+  CommissionPlanListQueryDto,
+  CommissionPlanListResponseDto,
+  CommissionPlanResponseDto,
+  CreateCommissionPlanDto,
+  UpdateCommissionPlanDto
+} from './dto';
 
-const ensureRole = (role: UserRole, allowed: UserRole[]) => {
-  if (!allowed.includes(role)) {
-    throw new ForbiddenException('Insufficient permissions');
-  }
-};
-
+@ApiModule('Commission Plans')
+@ApiStandardErrors()
 @Controller('commission-plans')
+@UseInterceptors(AuditInterceptor)
 export class CommissionPlansController {
-  constructor(
-    private readonly plans: CommissionPlansService,
-    private readonly assignments: PlanAssignmentService,
-    private readonly capLedger: CapLedgerService
-  ) {}
+  constructor(private readonly service: CommissionPlansService) {}
 
   @Get()
-  async listPlans(@Req() req: FastifyRequest) {
+  @Permit('commission_plans', 'read')
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    schema: { type: 'integer', minimum: 1, maximum: 100 },
+    description: 'Page size (default 25, maximum 100)'
+  })
+  @ApiQuery({ name: 'cursor', required: false, description: 'Opaque pagination cursor from a prior response' })
+  @ApiOkResponse({ type: CommissionPlanListResponseDto })
+  async list(@Req() req: FastifyRequest, @Query() query: CommissionPlanListQueryDto) {
     const ctx = resolveRequestContext(req);
-    return this.plans.listPlans(ctx);
-  }
-
-  @Post()
-  async createPlan(@Body() dto: CreateCommissionPlanDto, @Req() req: FastifyRequest) {
-    const ctx = resolveRequestContext(req);
-    ensureRole(ctx.role, [UserRole.BROKER]);
-    return this.plans.createPlan(dto, ctx);
-  }
-
-  @Patch(':id')
-  async updatePlan(@Param('id') id: string, @Body() dto: UpdateCommissionPlanDto, @Req() req: FastifyRequest) {
-    const ctx = resolveRequestContext(req);
-    ensureRole(ctx.role, [UserRole.BROKER]);
-    return this.plans.updatePlan(id, dto, ctx);
-  }
-
-  @Post(':id/archive')
-  async archivePlan(@Param('id') id: string, @Req() req: FastifyRequest) {
-    const ctx = resolveRequestContext(req);
-    ensureRole(ctx.role, [UserRole.BROKER]);
-    return this.plans.archivePlan(id, ctx);
+    return this.service.list(ctx, query);
   }
 
   @Get(':id')
-  async getPlan(@Param('id') id: string, @Req() req: FastifyRequest) {
+  @Permit('commission_plans', 'read')
+  @ApiParam({ name: 'id', description: 'Commission plan identifier' })
+  @ApiOkResponse({ type: CommissionPlanResponseDto })
+  async get(@Req() req: FastifyRequest, @Param('id') id: string) {
     const ctx = resolveRequestContext(req);
-    return this.plans.getPlanOrThrow(id, ctx);
+    return this.service.get(ctx, id);
   }
 
-  @Get(':id/assignments')
-  async listAssignments(@Param('id') id: string, @Req() req: FastifyRequest) {
+  @Post()
+  @Permit('commission_plans', 'create')
+  @ApiBody({ type: CreateCommissionPlanDto })
+  @ApiOkResponse({ type: CommissionPlanResponseDto })
+  async create(@Req() req: FastifyRequest, @Body() dto: CreateCommissionPlanDto) {
     const ctx = resolveRequestContext(req);
-    ensureRole(ctx.role, [UserRole.BROKER, UserRole.TEAM_LEAD]);
-    return this.assignments.listAssignments(id, ctx);
+    return this.service.create(ctx, dto);
   }
 
-  @Post(':id/assignments')
-  async assignPlan(
+  @Patch(':id')
+  @Permit('commission_plans', 'update')
+  @ApiParam({ name: 'id', description: 'Commission plan identifier' })
+  @ApiBody({ type: UpdateCommissionPlanDto })
+  @ApiOkResponse({ type: CommissionPlanResponseDto })
+  async update(
+    @Req() req: FastifyRequest,
     @Param('id') id: string,
-    @Body() dto: AssignCommissionPlanDto,
-    @Req() req: FastifyRequest
+    @Body() dto: UpdateCommissionPlanDto
   ) {
     const ctx = resolveRequestContext(req);
-    ensureRole(ctx.role, [UserRole.BROKER]);
-    return this.assignments.assignPlan(id, dto, ctx);
-  }
-
-  @Post('assignments/:assignmentId/end')
-  async endAssignment(
-    @Param('assignmentId') assignmentId: string,
-    @Body('effectiveTo') effectiveTo: Date | null,
-    @Req() req: FastifyRequest
-  ) {
-    const ctx = resolveRequestContext(req);
-    ensureRole(ctx.role, [UserRole.BROKER]);
-    return this.assignments.endAssignment(assignmentId, effectiveTo ? new Date(effectiveTo) : null, ctx);
-  }
-
-  @Get('cap-progress')
-  async getCapProgress(@Query() query: CapProgressQueryDto, @Req() req: FastifyRequest) {
-    const ctx = resolveRequestContext(req);
-    ensureRole(ctx.role, [UserRole.BROKER, UserRole.TEAM_LEAD]);
-    return this.capLedger.getCapProgress(ctx, query);
+    return this.service.update(ctx, id, dto);
   }
 }

@@ -1,0 +1,16 @@
+{
+  "projectId": "prj_AsqxEqlaZfPN3jxUA9QBnuqKrArR",
+  "orgId": "team_kA91EP3GeV5cc4gEFUWoi4Ec",
+  "projectName": "hatch-site",
+  "settings": {
+    "createdAt": 1760383280128,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": "pnpm install --frozen-lockfile",
+    "buildCommand": "pnpm run build",
+    "outputDirectory": "dist",
+    "rootDirectory": ".",
+    "directoryListing": false,
+    "nodeVersion": "22.x"
+  }
+}

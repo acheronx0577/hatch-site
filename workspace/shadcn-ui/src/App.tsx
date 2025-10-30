@@ -41,6 +41,7 @@ import CustomerSearch from './pages/customer/CustomerSearch'
 
 // CRM
 import CRM from './pages/CRM'
+import LeadDetailPage from './pages/broker/LeadDetail'
 
 function App() {
   return (
@@ -64,6 +65,7 @@ function App() {
                 <Route path="/broker" element={<BrokerLayout />}>
                   <Route path="dashboard" element={<BrokerDashboard />} />
                   <Route path="crm" element={<CRM />} />
+                  <Route path="crm/leads/:id" element={<LeadDetailPage />} />
                   <Route path="properties" element={<BrokerProperties />} />
                   <Route path="leads" element={<BrokerLeads />} />
                   <Route path="team" element={<BrokerTeam />} />

@@ -134,6 +134,7 @@ const withRetry = async <T,>(operation: () => Promise<T>, options: { retries?: n
   throw lastError instanceof Error ? lastError : new Error('operation_failed')
 }
 
+/* eslint-disable-next-line react-refresh/only-export-components */
 export const useAuth = () => {
   const ctx = useContext(AuthContext)
   if (!ctx) {
@@ -150,9 +151,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const effectiveSession = devSession ?? supabaseSession
 
-  const memberships = effectiveSession?.memberships ?? []
+  const memberships = useMemo(() => effectiveSession?.memberships ?? [], [effectiveSession])
   const activeOrgId = effectiveSession?.activeOrgId ?? null
-  const policies = effectiveSession?.policies ?? []
+  const policies = useMemo(() => effectiveSession?.policies ?? [], [effectiveSession])
   const user = effectiveSession?.user ?? null
   const userId = user?.id ?? null
 

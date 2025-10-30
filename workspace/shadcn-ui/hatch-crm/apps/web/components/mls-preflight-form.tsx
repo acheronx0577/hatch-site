@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { ErrorBanner } from '@/components/error-banner';
+import { useApiError } from '@/hooks/use-api-error';
 import { type MlsProfile, runPreflight } from '@/lib/api';
 
 interface MlsPreflightFormProps {
@@ -14,16 +16,18 @@ export default function MlsPreflightForm({ tenantId, profiles }: MlsPreflightFor
   const [contentType, setContentType] = useState<'flyer' | 'email' | 'page'>('flyer');
   const [disclaimer, setDisclaimer] = useState(profiles[0]?.disclaimerText ?? '');
   const [showsComp, setShowsComp] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const { banner, showError, clearError } = useApiError();
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
-    setStatus(null);
+    setResult(null);
+    clearError();
 
     try {
-      const result = await runPreflight({
+      const outcome = await runPreflight({
         tenantId,
         mlsProfileId: profileId,
         contentType,
@@ -31,9 +35,14 @@ export default function MlsPreflightForm({ tenantId, profiles }: MlsPreflightFor
         displayedDisclaimer: disclaimer,
         showsCompensation: showsComp
       });
-      setStatus(result.pass ? 'Pass: compliant' : `Fail: ${result.violations.join(', ')}`);
+      if (outcome.pass) {
+        setResult('✅ Pass: compliant');
+      } else {
+        const violations = outcome.violations.length ? outcome.violations.join(', ') : 'No violations supplied';
+        setResult(`⚠️ Fail: ${violations}`);
+      }
     } catch (error) {
-      setStatus((error as Error).message);
+      showError(error);
     } finally {
       setLoading(false);
     }
@@ -41,6 +50,7 @@ export default function MlsPreflightForm({ tenantId, profiles }: MlsPreflightFor
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {banner && <ErrorBanner {...banner} onDismiss={clearError} />}
       <div>
         <label className="text-xs font-semibold uppercase text-slate-500">MLS Profile</label>
         <select
@@ -121,7 +131,7 @@ export default function MlsPreflightForm({ tenantId, profiles }: MlsPreflightFor
         Run Preflight
       </button>
 
-      {status && <p className="text-xs text-slate-500">{status}</p>}
+      {result && <p className="text-xs text-slate-600">{result}</p>}
     </form>
   );
 }

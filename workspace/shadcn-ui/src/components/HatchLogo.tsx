@@ -1,31 +1,26 @@
 import { cn } from '@/lib/utils'
+import hatchLogo from '@/assets/brand/hatch-logo.png'
 
 type HatchLogoProps = {
   className?: string
-  color?: string
+  /**
+   * If we ever add an icon-only treatment, this flag can switch assets.
+   * For now the full wordmark is the default.
+   */
   wordmark?: boolean
+  alt?: string
 }
 
-const DEFAULT_COLOR = '#1A6DF0'
+export function HatchLogo({ className, wordmark = true, alt = 'Hatch logo' }: HatchLogoProps) {
+  const logoSrc = hatchLogo
 
-export function HatchLogo({ className, color = DEFAULT_COLOR, wordmark = true }: HatchLogoProps) {
   return (
-    <span
-      className={cn('select-none leading-none tracking-tight', className)}
-      style={{
-        color,
-        fontFamily: '"Nunito", "Poppins", "Inter", "Helvetica Neue", sans-serif',
-        fontWeight: 700,
-        letterSpacing: '-0.03em',
-        fontSize: '1.75rem',
-        display: 'inline-flex',
-        alignItems: 'baseline',
-        gap: '0.05em'
-      }}
-    >
-      <span style={{ fontWeight: 800 }}>H</span>
-      {wordmark && <span style={{ fontWeight: 700 }}>atch</span>}
-    </span>
+    <img
+      src={logoSrc}
+      alt={alt}
+      className={cn('pointer-events-none select-none object-contain w-auto', className)}
+      draggable={false}
+    />
   )
 }
 

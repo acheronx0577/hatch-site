@@ -33,6 +33,8 @@ import {
 
 import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../common/dto/cursor-pagination-query.dto';
+import { RoutingRulesQueryDto } from './dto/routing-query.dto';
 
 type AssignPayload = {
   tenantId: string;
@@ -273,20 +275,41 @@ export class RoutingService {
     });
   }
 
-  async listRules(tenantId: string) {
+  async listRules(tenantId: string, query: RoutingRulesQueryDto) {
+    const take = Math.min(query.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
     const rules = await this.prisma.routingRule.findMany({
-      where: { tenantId },
-      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }]
+      where: {
+        tenantId,
+        ...(query.q
+          ? {
+              name: {
+                contains: query.q,
+                mode: 'insensitive'
+              }
+            }
+          : {}),
+        ...(query.mode ? { mode: query.mode as RoutingMode } : {})
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
+      ...(query.cursor
+        ? {
+            skip: 1,
+            cursor: { id: query.cursor }
+          }
+        : {})
     });
 
-    return rules.map((rule) => ({
-      ...rule,
-      conditions: this.safeParse(leadRoutingConditionsSchema, rule.conditions),
-      targets: this.safeParse(leadRoutingTargetSchema.array(), rule.targets),
-      fallback: this.safeParse(leadRoutingFallbackSchema, rule.fallback),
-      createdAt: rule.createdAt.toISOString(),
-      updatedAt: rule.updatedAt.toISOString()
-    }));
+    let nextCursor: string | null = null;
+    if (rules.length > take) {
+      const next = rules.pop();
+      nextCursor = next?.id ?? null;
+    }
+
+    return {
+      items: rules.map((rule) => this.toRoutingRuleDto(rule)),
+      nextCursor
+    };
   }
 
   async createRule(
@@ -321,12 +344,7 @@ export class RoutingService {
       }
     });
 
-    return {
-      ...rule,
-      conditions: parsed.conditions,
-      targets: parsed.targets,
-      fallback: parsed.fallback
-    };
+    return this.toRoutingRuleDto(rule);
   }
 
   async updateRule(
@@ -374,12 +392,7 @@ export class RoutingService {
       }
     });
 
-    return {
-      ...updated,
-      conditions: parsed.conditions,
-      targets: parsed.targets,
-      fallback: parsed.fallback
-    };
+    return this.toRoutingRuleDto(updated);
   }
 
   async deleteRule(id: string, tenantId: string) {
@@ -387,6 +400,30 @@ export class RoutingService {
       where: { id, tenantId }
     });
     return { id };
+  }
+
+  private toRoutingRuleDto(rule: Prisma.RoutingRuleGetPayload<Record<string, never>>) {
+    const conditions = this.safeParse(leadRoutingConditionsSchema, rule.conditions) ?? null;
+    const targets = (this.safeParse(leadRoutingTargetSchema.array(), rule.targets) ?? []) as
+      | Record<string, unknown>[]
+      | undefined;
+    const fallback = this.safeParse(leadRoutingFallbackSchema, rule.fallback) ?? null;
+
+    return {
+      id: rule.id,
+      tenantId: rule.tenantId,
+      name: rule.name,
+      priority: rule.priority,
+      mode: rule.mode,
+      enabled: rule.enabled,
+      conditions,
+      targets: targets ?? [],
+      fallback,
+      slaFirstTouchMinutes: rule.slaFirstTouchMinutes,
+      slaKeptAppointmentMinutes: rule.slaKeptAppointmentMinutes,
+      createdAt: rule.createdAt.toISOString(),
+      updatedAt: rule.updatedAt.toISOString()
+    };
   }
 
   async getCapacityView(tenantId: string) {
@@ -428,11 +465,11 @@ export class RoutingService {
   }
 
   async listRouteEvents(tenantId: string, options: { limit?: number; cursor?: string } = {}) {
-    const limit = Math.min(Math.max(options.limit ?? 25, 1), 100);
+    const take = Math.min(Math.max(options.limit ?? DEFAULT_PAGE_SIZE, 1), MAX_PAGE_SIZE);
     const events = await this.prisma.leadRouteEvent.findMany({
       where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
       ...(options.cursor
         ? {
             skip: 1,
@@ -441,10 +478,37 @@ export class RoutingService {
         : {})
     });
 
-    return events.map((event) => ({
-      ...event,
-      createdAt: event.createdAt.toISOString()
-    }));
+    let nextCursor: string | null = null;
+    if (events.length > take) {
+      const next = events.pop();
+      nextCursor = next?.id ?? null;
+    }
+
+    const items = events.map((event) => {
+      const payload =
+        ((event as any).payload ?? (event as any).data ?? {}) as Record<string, unknown>;
+      return {
+        id: event.id,
+        tenantId: event.tenantId,
+        leadId: event.leadId,
+        ruleId: event.matchedRuleId ?? null,
+        eventType: this.resolveRouteEventType(event),
+        payload,
+        createdAt: event.createdAt.toISOString()
+      };
+    });
+
+    return { items, nextCursor };
+  }
+
+  private resolveRouteEventType(event: LeadRouteEvent): string {
+    if (event.slaBreachedAt) {
+      return 'lead-routing.sla.breached';
+    }
+    if (event.slaSatisfiedAt) {
+      return 'lead-routing.sla.satisfied';
+    }
+    return 'lead-routing.assigned';
   }
 
   async getSlaDashboard(tenantId: string) {

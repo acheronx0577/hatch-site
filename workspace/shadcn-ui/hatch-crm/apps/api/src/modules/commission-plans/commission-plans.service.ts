@@ -1,170 +1,179 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { ActivityType, Prisma } from '@hatch/db';
-import type { CommissionPlanDefinition } from './validators/plan-definition.schema';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+
+import { Prisma } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
-import { RequestContext } from '../common/request-context';
-import { commissionPlanDefinitionSchema } from './validators/plan-definition.schema';
-import { CreateCommissionPlanDto } from './dto/create-plan.dto';
-import { UpdateCommissionPlanDto } from './dto/update-plan.dto';
+import type { RequestContext } from '../common/request-context';
+import { FlsService } from '../../platform/security/fls.service';
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '../common/dto/cursor-pagination-query.dto';
+import {
+  CommissionPlanListQueryDto,
+  CreateCommissionPlanDto,
+  UpdateCommissionPlanDto
+} from './dto';
 
-const requireTenant = (ctx: RequestContext) => {
-  if (!ctx.tenantId) {
-    throw new ForbiddenException('tenantId is required');
-  }
-  return ctx.tenantId;
-};
+interface CommissionComputation {
+  gross: number;
+  brokerAmount: number;
+  agentAmount: number;
+  schedule: Array<{ payee: 'BROKER' | 'AGENT'; amount: number }>;
+  planId?: string;
+}
+
+const DEFAULT_BROKER_SPLIT = 0.3;
+const DEFAULT_AGENT_SPLIT = 0.7;
 
 @Injectable()
 export class CommissionPlansService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly fls: FlsService) {}
 
-  async listPlans(ctx: RequestContext) {
-    const tenantId = requireTenant(ctx);
-    const plans = await this.prisma.commissionPlan.findMany({
-      where: { tenantId },
-      orderBy: [{ isArchived: 'asc' }, { name: 'asc' }]
+  async list(ctx: RequestContext, query: CommissionPlanListQueryDto) {
+    if (!ctx.orgId) {
+      return { items: [], nextCursor: null };
+    }
+
+    const take = Math.min(query.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
+    const plans = await this.prisma.orgCommissionPlan.findMany({
+      where: { orgId: ctx.orgId },
+      orderBy: { createdAt: 'desc' },
+      take: take + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {})
     });
-    return plans;
+
+    let nextCursor: string | null = null;
+    if (plans.length > take) {
+      const next = plans.pop();
+      nextCursor = next?.id ?? null;
+    }
+
+    const items = await Promise.all(plans.map((plan) => this.filterRecord(ctx, plan)));
+    return { items, nextCursor };
   }
 
-  async getPlanOrThrow(id: string, ctx: RequestContext) {
-    const tenantId = requireTenant(ctx);
-    const plan = await this.prisma.commissionPlan.findFirst({ where: { id, tenantId } });
+  async get(ctx: RequestContext, id: string) {
+    const plan = await this.requirePlan(ctx, id);
+    return this.filterRecord(ctx, plan);
+  }
+
+  async create(ctx: RequestContext, dto: CreateCommissionPlanDto) {
+    if (!ctx.orgId || !ctx.userId) {
+      throw new BadRequestException('Missing org or user context');
+    }
+
+    const writable = await this.fls.filterWrite(
+      { orgId: ctx.orgId, userId: ctx.userId },
+      'commission_plans',
+      dto
+    );
+
+    const plan = await this.prisma.orgCommissionPlan.create({
+      data: {
+        orgId: ctx.orgId,
+        name: writable.name ?? dto.name,
+        brokerSplit: writable.brokerSplit ?? dto.brokerSplit ?? DEFAULT_BROKER_SPLIT,
+        agentSplit: writable.agentSplit ?? dto.agentSplit ?? DEFAULT_AGENT_SPLIT,
+        tiers: writable.tiers !== undefined
+          ? ((writable.tiers ?? null) as unknown as Prisma.InputJsonValue | null)
+          : ((dto.tiers ?? null) as unknown as Prisma.InputJsonValue | null)
+      }
+    });
+
+    return this.filterRecord(ctx, plan);
+  }
+
+  async update(ctx: RequestContext, id: string, dto: UpdateCommissionPlanDto) {
+    const plan = await this.requirePlan(ctx, id);
+
+    const writable = await this.fls.filterWrite(
+      { orgId: ctx.orgId, userId: ctx.userId ?? plan.orgId },
+      'commission_plans',
+      dto
+    );
+
+    const updateData: Prisma.OrgCommissionPlanUncheckedUpdateInput = {};
+
+    if (writable.name !== undefined) {
+      updateData.name = writable.name;
+    }
+    if (writable.brokerSplit !== undefined) {
+      updateData.brokerSplit = writable.brokerSplit;
+    }
+    if (writable.agentSplit !== undefined) {
+      updateData.agentSplit = writable.agentSplit;
+    }
+    if (writable.tiers !== undefined) {
+      updateData.tiers = (writable.tiers ?? null) as unknown as Prisma.InputJsonValue | null;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return this.filterRecord(ctx, plan);
+    }
+
+    const updated = await this.prisma.orgCommissionPlan.update({
+      where: { id },
+      data: updateData
+    });
+
+    return this.filterRecord(ctx, updated);
+  }
+
+  async resolveForOpportunity(ctx: RequestContext, opportunityId: string): Promise<CommissionComputation> {
+    if (!ctx.orgId) {
+      throw new BadRequestException('Missing organisation context');
+    }
+
+    const opportunity = await this.prisma.opportunity.findFirst({
+      where: { id: opportunityId, orgId: ctx.orgId, deletedAt: null },
+      select: { id: true, amount: true }
+    });
+
+    if (!opportunity) {
+      throw new NotFoundException('Opportunity not found');
+    }
+
+    const plan =
+      (await this.prisma.orgCommissionPlan.findFirst({
+        where: { orgId: ctx.orgId },
+        orderBy: { createdAt: 'desc' }
+      })) ?? null;
+
+    const brokerSplit = plan ? Number(plan.brokerSplit) : DEFAULT_BROKER_SPLIT;
+    const agentSplit = plan ? Number(plan.agentSplit) : DEFAULT_AGENT_SPLIT;
+    const gross = Number(opportunity.amount ?? 0);
+
+    const brokerAmount = roundCurrency(gross * brokerSplit);
+    const agentAmount = roundCurrency(gross * agentSplit);
+
+    return {
+      gross,
+      brokerAmount,
+      agentAmount,
+      schedule: [
+        { payee: 'BROKER', amount: brokerAmount },
+        { payee: 'AGENT', amount: agentAmount }
+      ],
+      planId: plan?.id
+    };
+  }
+
+  private async requirePlan(ctx: RequestContext, id: string) {
+    if (!ctx.orgId) {
+      throw new BadRequestException('Missing organisation context');
+    }
+    const plan = await this.prisma.orgCommissionPlan.findFirst({
+      where: { id, orgId: ctx.orgId }
+    });
     if (!plan) {
       throw new NotFoundException('Commission plan not found');
     }
     return plan;
   }
 
-  async createPlan(dto: CreateCommissionPlanDto, ctx: RequestContext) {
-    const tenantId = requireTenant(ctx);
-    const definition = commissionPlanDefinitionSchema.parse(dto.definition) as CommissionPlanDefinition;
-
-    const data: Prisma.CommissionPlanCreateInput = {
-      tenant: { connect: { id: tenantId } },
-      name: dto.name,
-      type: dto.type,
-      description: dto.description,
-      definition: definition as Prisma.InputJsonValue,
-      postCapFee: dto.postCapFee ? (dto.postCapFee as unknown as Prisma.InputJsonValue) : null,
-      bonusRules: dto.bonusRules ? (dto.bonusRules as Prisma.InputJsonValue) : null,
-      isArchived: dto.archived ?? false,
-      version: 1,
-      createdBy: ctx.userId ? { connect: { id: ctx.userId } } : undefined
-    };
-
-    const result = await this.prisma.$transaction(async (tx) => {
-      const plan = await tx.commissionPlan.create({ data });
-      await tx.planSnapshot.create({
-        data: {
-          tenantId,
-          planId: plan.id,
-          version: plan.version,
-          payload: plan.definition as Prisma.InputJsonValue,
-          createdById: ctx.userId ?? null
-        }
-      });
-      await this.logActivity(tx, tenantId, ctx.userId, ActivityType.COMMISSION_PLAN_CREATED, {
-        planId: plan.id,
-        version: plan.version,
-        name: plan.name,
-        type: plan.type
-      });
-      return plan;
-    });
-
-    return result;
-  }
-
-  async updatePlan(id: string, dto: UpdateCommissionPlanDto, ctx: RequestContext) {
-    const tenantId = requireTenant(ctx);
-    const existing = await this.prisma.commissionPlan.findFirst({ where: { id, tenantId } });
-    if (!existing) {
-      throw new NotFoundException('Commission plan not found');
-    }
-
-    const definition = dto.definition
-      ? (commissionPlanDefinitionSchema.parse(dto.definition) as CommissionPlanDefinition)
-      : (existing.definition as CommissionPlanDefinition);
-
-    const nextVersion = existing.version + 1;
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const plan = await tx.commissionPlan.update({
-        where: { id },
-        data: {
-          name: dto.name ?? existing.name,
-          type: dto.type ?? existing.type,
-          description: dto.description ?? existing.description,
-          definition: definition as Prisma.InputJsonValue,
-          postCapFee: dto.postCapFee
-            ? (dto.postCapFee as unknown as Prisma.InputJsonValue)
-            : (existing.postCapFee as Prisma.InputJsonValue | null),
-          bonusRules: dto.bonusRules
-            ? (dto.bonusRules as Prisma.InputJsonValue)
-            : (existing.bonusRules as Prisma.InputJsonValue | null),
-          isArchived: dto.archived ?? existing.isArchived,
-          version: nextVersion
-        }
-      });
-
-      await tx.planSnapshot.create({
-        data: {
-          tenantId,
-          planId: plan.id,
-          version: plan.version,
-          payload: plan.definition as Prisma.InputJsonValue,
-          createdById: ctx.userId ?? null
-        }
-      });
-
-      await this.logActivity(tx, tenantId, ctx.userId, ActivityType.COMMISSION_PLAN_UPDATED, {
-        planId: plan.id,
-        version: plan.version,
-        changedFields: Object.keys(dto)
-      });
-
-      return plan;
-    });
-
-    return updated;
-  }
-
-  async archivePlan(id: string, ctx: RequestContext) {
-    const tenantId = requireTenant(ctx);
-    const plan = await this.prisma.commissionPlan.updateMany({
-      where: { id, tenantId, isArchived: false },
-      data: { isArchived: true }
-    });
-    if (plan.count === 0) {
-      throw new NotFoundException('Commission plan not found');
-    }
-    await this.prisma.activity.create({
-      data: {
-        tenantId,
-        userId: ctx.userId ?? null,
-        type: ActivityType.COMMISSION_PLAN_ARCHIVED,
-        payload: { planId: id } as Prisma.InputJsonValue
-      }
-    });
-    return { id };
-  }
-
-  private async logActivity(
-    tx: Prisma.TransactionClient,
-    tenantId: string,
-    userId: string | undefined,
-    type: ActivityType,
-    payload: Record<string, unknown>
-  ) {
-    await tx.activity.create({
-      data: {
-        tenantId,
-        userId: userId ?? null,
-        type,
-        payload: payload as Prisma.InputJsonValue
-      }
-    });
+  private async filterRecord(ctx: RequestContext, record: any) {
+    const filtered = await this.fls.filterRead(ctx, 'commission_plans', record);
+    return { id: record.id, ...filtered };
   }
 }
+
+const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;

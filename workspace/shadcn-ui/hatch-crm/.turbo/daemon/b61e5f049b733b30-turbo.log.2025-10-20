@@ -1,0 +1,95 @@
+2025-10-20T02:13:38.157271Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/.turbo-cookie"), AnchoredSystemPathBuf(".turbo/cookies/1.cookie")}
+2025-10-20T02:13:38.157280Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-10-20T02:13:38.258085Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf(".turbo/cookies/2.cookie"), AnchoredSystemPathBuf("packages/shared/.turbo/turbo-lint.log"), AnchoredSystemPathBuf(".turbo/cookies/3.cookie"), AnchoredSystemPathBuf("packages/config/.turbo/turbo-lint.log")}
+2025-10-20T02:13:38.258093Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }, WorkspacePackage { name: Other("@hatch/config"), path: AnchoredSystemPathBuf("packages/config") }, WorkspacePackage { name: Root, path: AnchoredSystemPathBuf("") }}))
+2025-10-20T02:13:39.758071Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/config/.turbo/turbo-lint.log"), AnchoredSystemPathBuf("packages/shared/.turbo/turbo-lint.log")}
+2025-10-20T02:13:39.758080Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }, WorkspacePackage { name: Other("@hatch/config"), path: AnchoredSystemPathBuf("packages/config") }}))
+2025-10-20T02:13:39.789133Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-10-20T02:13:39.789149Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-10-20T02:22:31.662375Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T02:22:31.662408Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T02:32:52.273256Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T02:32:52.273938Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T02:34:02.769063Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T02:34:02.769101Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T02:34:35.779406Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T02:34:35.779431Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T02:37:11.371580Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T02:37:11.371626Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T02:38:53.796531Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T02:38:53.805458Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T02:39:38.272278Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T02:39:38.272301Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T09:14:32.672463Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T09:14:32.672873Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T09:14:50.966778Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T09:14:50.966806Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T09:25:56.372908Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/listings/listings.controller.ts")}
+2025-10-20T09:25:56.373356Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T09:26:42.162468Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/listings/listings.service.ts")}
+2025-10-20T09:26:42.162674Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T09:26:59.669416Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/listings/listings.service.ts")}
+2025-10-20T09:26:59.669985Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T09:27:17.262021Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/listings/types.ts")}
+2025-10-20T09:27:17.262066Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T09:27:53.591085Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/listings/listings.service.ts")}
+2025-10-20T09:27:53.591110Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T09:28:22.596639Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/listings/listings.service.ts")}
+2025-10-20T09:28:22.596811Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:00:17.147773Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T10:00:17.149929Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:00:42.304552Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T10:00:42.304740Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:03:40.004420Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T10:03:40.004489Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:08:08.564390Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T10:08:08.566510Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:33:51.120889Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T10:33:51.121787Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:34:19.536548Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T10:34:19.536587Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:34:42.636381Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T10:34:42.636408Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:44:13.129597Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/listings/listings.service.ts")}
+2025-10-20T10:44:13.129886Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:56:01.339963Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T10:56:01.340621Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T10:56:44.113725Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/listings/listings.service.ts")}
+2025-10-20T10:56:44.113749Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:01:04.314882Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T11:01:04.314907Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:01:30.614660Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T11:01:30.614690Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:01:56.016741Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T11:01:56.016809Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:01:56.040932Z  WARN turborepo_lib::package_changes_watcher: hashes are the same, no need to rerun
+2025-10-20T11:27:05.017415Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/shared/src/mls-ingest/canonical.ts")}
+2025-10-20T11:27:05.017452Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }}))
+2025-10-20T11:27:21.134267Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/shared/src/mls-ingest/matcher.ts")}
+2025-10-20T11:27:21.134308Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }}))
+2025-10-20T11:27:29.718861Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/shared/src/mls-ingest/matcher.ts")}
+2025-10-20T11:27:29.719521Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }}))
+2025-10-20T11:27:34.917249Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/shared/src/mls-ingest/labels.ts")}
+2025-10-20T11:27:34.917276Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }}))
+2025-10-20T11:29:13.146886Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T11:29:13.146908Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:29:44.148034Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/shared/src/mls-ingest/matcher.ts")}
+2025-10-20T11:29:44.148051Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }}))
+2025-10-20T11:40:43.333268Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/shared/src/mls-ingest/labels.ts")}
+2025-10-20T11:40:43.333303Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }}))
+2025-10-20T11:40:49.932694Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/shared/src/mls-ingest/processors.ts")}
+2025-10-20T11:40:49.932716Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }}))
+2025-10-20T11:40:56.933527Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.controller.ts")}
+2025-10-20T11:40:56.933558Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:41:02.334174Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.controller.ts")}
+2025-10-20T11:41:02.334237Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:42:08.534536Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T11:42:08.534598Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:44:42.333738Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/api/src/modules/drafts/drafts.service.ts")}
+2025-10-20T11:44:42.333758Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/api"), path: AnchoredSystemPathBuf("apps/api") }}))
+2025-10-20T11:44:48.134263Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/web/lib/api.ts")}
+2025-10-20T11:44:48.134284Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/web"), path: AnchoredSystemPathBuf("apps/web") }}))
+2025-10-20T11:45:03.933795Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("apps/web/lib/api.ts")}
+2025-10-20T11:45:03.933806Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/web"), path: AnchoredSystemPathBuf("apps/web") }}))
+2025-10-20T11:49:44.735327Z  WARN turborepo_lib::package_changes_watcher: changed_files: {AnchoredSystemPathBuf("packages/shared/src/mls-ingest/matcher.ts")}
+2025-10-20T11:49:44.735352Z  WARN turborepo_lib::package_changes_watcher: changed_packages: Ok(Some({WorkspacePackage { name: Other("@hatch/shared"), path: AnchoredSystemPathBuf("packages/shared") }}))

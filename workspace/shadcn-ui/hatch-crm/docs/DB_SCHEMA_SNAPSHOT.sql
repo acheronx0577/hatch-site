@@ -1,0 +1,1 @@
+-- Placeholder schema snapshot. Execute `scripts/update-schema-snapshot.sh` with DATABASE_URL to dump the current database schema.

@@ -1,0 +1,153 @@
+:root {
+  /* Fonts */
+  --font-display: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-ui: "Inter", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Brand Blues */
+  --brand-blue-300: #6aa3ff;
+  --brand-blue-400: #3f89ff;
+  --brand-blue-500: #1f5fff;
+  --brand-blue-600: #0078ff;
+  --brand-blue-700: #005ccc;
+
+  /* Brand Greens */
+  --brand-green-300: #5be7a0;
+  --brand-green-400: #27d474;
+  --brand-green-500: #00c853;
+  --brand-green-600: #00a443;
+  --brand-green-700: #008536;
+
+  /* Neutrals — Ink */
+  --ink-50: #ffffff;
+  --ink-75: #f5f7fb;
+  --ink-100: #e4e8f3;
+  --ink-200: #c9d0e0;
+  --ink-300: #a7b1c5;
+  --ink-400: #8a96ae;
+  --ink-500: #6e7c97;
+  --ink-600: #4d5a74;
+  --ink-700: #2f3851;
+  --ink-800: #1c2539;
+  --ink-900: #0b1220;
+
+  /* Semantic status */
+  --status-success-foreground: var(--brand-green-700);
+  --status-success-surface: #daf2eb;
+  --status-info-foreground: var(--brand-blue-600);
+  --status-info-surface: #dce9f7;
+  --status-warning-foreground: #ffb300;
+  --status-warning-surface: #fff2c7;
+  --status-error-foreground: #ff3b30;
+  --status-error-surface: #ffe0dd;
+
+  /* Gradients */
+  --gradient-brand: linear-gradient(135deg, #1f5fff 0%, #00c6a2 100%);
+  --gradient-brand-soft: linear-gradient(180deg, rgba(31, 95, 255, 0.12) 0%, rgba(0, 198, 162, 0.08) 100%);
+
+  /* Surfaces */
+  --surface-background: #f8faff;
+  --surface-muted: #f1f4ff;
+  --surface-subtle: #e9efff;
+  --surface-elevated: #ffffff;
+  --surface-inverse: var(--ink-900);
+  --surface-transparent: rgba(255, 255, 255, 0.78);
+
+  /* Border + Divider */
+  --border-subtle: rgba(17, 26, 44, 0.08);
+  --border-strong: rgba(17, 26, 44, 0.14);
+
+  /* Shadows */
+  --shadow-sm: 0 6px 18px rgba(11, 18, 32, 0.08);
+  --shadow-md: 0 18px 38px rgba(11, 18, 32, 0.14);
+  --shadow-lg: 0 32px 64px rgba(11, 18, 32, 0.18);
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 999px;
+
+  /* Spacing scale (multiples of 4) */
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 40px;
+  --space-3xl: 48px;
+  --space-4xl: 56px;
+  --space-5xl: 72px;
+  --space-6xl: 96px;
+
+  /* Typography scale */
+  --type-display-xl: 56px;
+  --type-display-lg: 40px;
+  --type-display-md: 32px;
+  --type-display-sm: 24px;
+  --type-body-lg: 18px;
+  --type-body-md: 16px;
+  --type-body-sm: 14px;
+  --type-line-tight: 1.1;
+  --type-line-snug: 1.2;
+  --type-line-normal: 1.4;
+  --type-line-loose: 1.5;
+
+  /* Motion */
+  --motion-duration-fast: 150ms;
+  --motion-duration-base: 200ms;
+  --motion-duration-slow: 250ms;
+  --motion-ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Focus + outline */
+  --focus-ring: rgba(22, 118, 199, 0.45);
+  --focus-ring-offset: 2px;
+
+  /* Translucent surfaces */
+  --glass-background: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(157, 171, 197, 0.25);
+
+  /* Body + text */
+  --text-primary: #1c1c1e;
+  --text-secondary: #6b7280;
+  --text-muted: rgba(31, 48, 86, 0.45);
+  --text-inverse: var(--ink-50);
+}
+
+.dark {
+  --surface-background: var(--ink-900);
+  --surface-muted: #0f192b;
+  --surface-subtle: #142237;
+  --surface-elevated: #1b2a42;
+  --surface-inverse: var(--ink-50);
+  --surface-transparent: rgba(11, 18, 32, 0.72);
+
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --shadow-sm: 0 8px 24px rgba(7, 12, 24, 0.42);
+  --shadow-md: 0 22px 48px rgba(7, 12, 24, 0.5);
+  --shadow-lg: 0 36px 70px rgba(7, 12, 24, 0.6);
+
+  --focus-ring: rgba(74, 197, 167, 0.6);
+
+  --text-primary: rgba(255, 255, 255, 0.96);
+  --text-secondary: rgba(233, 239, 255, 0.72);
+  --text-muted: rgba(201, 208, 224, 0.6);
+  --text-inverse: var(--ink-900);
+
+  --glass-background: rgba(20, 34, 55, 0.8);
+  --glass-border: rgba(84, 110, 152, 0.35);
+
+  --status-success-surface: rgba(61, 185, 153, 0.18);
+  --status-success-foreground: rgba(92, 232, 190, 0.9);
+  --status-info-surface: rgba(19, 106, 179, 0.24);
+  --status-info-foreground: rgba(180, 207, 255, 0.92);
+  --status-warning-surface: rgba(183, 107, 0, 0.2);
+  --status-warning-foreground: rgba(255, 221, 162, 0.92);
+  --status-error-surface: rgba(201, 66, 66, 0.22);
+  --status-error-foreground: rgba(255, 189, 189, 0.92);
+}

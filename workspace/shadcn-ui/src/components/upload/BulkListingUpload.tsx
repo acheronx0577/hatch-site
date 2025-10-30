@@ -19,7 +19,8 @@ import {
   Trash2
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
-import { 
+import type { ExtractedLabelValue } from '@hatch/shared'
+import {
   MLS_FIELD_DEFINITIONS,
   mapCSVHeaders,
   validateMLSData,
@@ -27,6 +28,7 @@ import {
 } from '@/utils/fuzzyFieldMatcher'
 import { MIN_PROPERTY_PHOTOS, MAX_PROPERTY_PHOTOS } from '@/constants/photoRequirements'
 import { toast } from '@/components/ui/use-toast'
+import { uploadDraftPdf, type DraftPdfUploadResponse } from '@/lib/api/hatch'
 
 // Local FieldMapping type (module does not export it)
 type FieldMapping = {
@@ -51,6 +53,13 @@ export interface DraftListing {
   fieldMapping: FieldMapping[]
   mlsCompliant?: boolean
   completionPercentage: number
+  mappedData?: Record<string, unknown>
+  originalData?: Record<string, unknown>
+  canonicalDraft?: Record<string, unknown>
+  sourceType?: 'csv' | 'excel' | 'pdf'
+  matches?: DraftPdfUploadResponse['matches']
+  extracted?: ExtractedLabelValue[]
+  additionalFields?: Record<string, { label: string; value: string; section?: string }>
 }
 
 export interface ValidationError {
@@ -59,6 +68,15 @@ export interface ValidationError {
   type: 'required' | 'optional' | 'format' | 'photos'
   message: string
 }
+
+const MAX_PDF_SIZE_MB = 25
+const PDF_VENDOR_FALLBACK = 'Unknown Vendor'
+const PDF_DOCUMENT_VERSION = 'unspecified'
+
+const isPdfFile = (file: File) =>
+  file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+
+type PdfCanonicalDraft = DraftPdfUploadResponse['draft']
 
 // Safe lower-case helper to avoid crashes on undefined/null/non-strings
 const safeLower = (v: any) =>
@@ -262,7 +280,7 @@ const toStandardizedRows = (rows: any[], fieldMappings: FieldMapping[]) => {
   })
 
   // standard → app key (aligns with what BrokerContext expects)
-  const STANDARD_TO_APP: Record<string, string> = {
+const STANDARD_TO_APP: Record<string, string> = {
     MLSNumber: 'mlsNumber',
     Status: 'status',
     ListPrice: 'listPrice',
@@ -502,6 +520,99 @@ const toStandardizedRows = (rows: any[], fieldMappings: FieldMapping[]) => {
   })
 }
 
+const normaliseAdditionalFieldKey = (label: string): string =>
+  label
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+
+const buildAdditionalFieldMap = (
+  extracted?: ExtractedLabelValue[]
+): Record<string, { label: string; value: string; section?: string }> | undefined => {
+  if (!Array.isArray(extracted) || extracted.length === 0) {
+    return undefined
+  }
+
+  const result: Record<string, { label: string; value: string; section?: string }> = {}
+
+  extracted.forEach((item, index) => {
+    const label = (item.label ?? `Field ${index + 1}`).toString()
+    const rawValue =
+      typeof item.value === 'string'
+        ? item.value.trim()
+        : item.value !== undefined && item.value !== null
+          ? String(item.value).trim()
+          : ''
+
+    if (!rawValue) {
+      return
+    }
+
+    const baseKey = normaliseAdditionalFieldKey(label) || `field_${index + 1}`
+    let key = baseKey
+    let suffix = 1
+    while (result[key] !== undefined) {
+      key = `${baseKey}_${suffix}`
+      suffix += 1
+    }
+
+    result[key] = {
+      label,
+      value: rawValue,
+      section: item.section ?? undefined
+    }
+  })
+
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
+const mergeAdditionalFieldMap = (
+  base?: Record<string, { label: string; value: string; section?: string }>,
+  incoming?: Record<string, { label: string; value: string; section?: string }>
+): Record<string, { label: string; value: string; section?: string }> | undefined => {
+  if (!base && !incoming) {
+    return undefined
+  }
+
+  const merged = new Map<string, { label: string; value: string; section?: string }>()
+
+  const consume = (fields?: Record<string, { label: string; value: string; section?: string }>) => {
+    if (!fields) return
+    Object.values(fields).forEach((field) => {
+      if (!field) return
+      const key = `${(field.label ?? '').toLowerCase()}:${field.value}`
+      if (!merged.has(key)) {
+        merged.set(key, field)
+      }
+    })
+  }
+
+  consume(base)
+  consume(incoming)
+
+  if (merged.size === 0) {
+    return undefined
+  }
+
+  const result: Record<string, { label: string; value: string; section?: string }> = {}
+  let index = 0
+
+  merged.forEach((field) => {
+    const baseKey = normaliseAdditionalFieldKey(field.label ?? `field_${index + 1}`) || `field_${index + 1}`
+    let key = baseKey
+    let suffix = 1
+    while (result[key]) {
+      key = `${baseKey}_${suffix}`
+      suffix += 1
+    }
+    result[key] = field
+    index += 1
+  })
+
+  return result
+}
+
 // Get required and optional fields from the fuzzy field matcher
 const getRequiredFields = () => (MLS_FIELD_DEFINITIONS || [])
   .filter((f: any) => !!f?.required)
@@ -616,6 +727,39 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [mappingReport, setMappingReport] = useState<{ mapped: number; unmapped: string[] }>({ mapped: 0, unmapped: [] })
 
+  const previewFile = useCallback(async (file: File): Promise<any[] | null> => {
+    if (isPdfFile(file)) {
+      return [
+        {
+          File: file.name,
+          Status: 'PDF detected – detailed preview available after processing'
+        }
+      ]
+    }
+
+    try {
+      const data = await readFileData(file)
+      try {
+        const headers = Object.keys((data?.[0] ?? {}))
+        const heuristicMappings = buildHeuristicMappings(headers as string[])
+        const previewStd = toStandardizedRows(data.slice(0, 5), heuristicMappings)
+        if (Array.isArray(previewStd) && previewStd.length) {
+          return previewStd
+        }
+      } catch (_) {
+        // ignore and fall back to original preview below
+      }
+      if (data.length > MAX_RECORDS_PER_FILE) {
+        setUploadError(`Maximum ${MAX_RECORDS_PER_FILE} listings allowed per file (${file.name})`)
+        return null
+      }
+      return data.slice(0, 5)
+    } catch (error) {
+      setUploadError('Error reading file. Please check the file format.')
+      return null
+    }
+  }, [setUploadError])
+
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? [])
     if (files.length === 0) return
@@ -629,19 +773,26 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
     const accepted: File[] = []
 
     files.forEach((file) => {
-      if (!validTypes.includes(file.type) && !file.name.endsWith('.csv')) {
+      const pdf = isPdfFile(file)
+      const spreadsheet =
+        validTypes.includes(file.type) || file.name.toLowerCase().endsWith('.csv')
+
+      if (!pdf && !spreadsheet) {
         console.warn(`Skipping unsupported file: ${file.name}`)
         return
       }
-      if (file.size > 10 * 1024 * 1024) {
-        console.warn(`Skipping oversized file (>10MB): ${file.name}`)
+
+      const sizeLimitMb = pdf ? MAX_PDF_SIZE_MB : 10
+      if (file.size > sizeLimitMb * 1024 * 1024) {
+        console.warn(`Skipping oversized file (>${sizeLimitMb}MB): ${file.name}`)
         return
       }
+
       accepted.push(file)
     })
 
     if (accepted.length === 0) {
-      setUploadError('Please select valid CSV or Excel files (.csv, .xls, .xlsx) under 10MB each.')
+      setUploadError('Please select valid CSV/Excel files (.csv, .xls, .xlsx) under 10MB or PDF files under 25MB.')
       return
     }
 
@@ -692,36 +843,16 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
         variant: 'warning',
       })
     }
-  }, [selectedFiles])
-
-  const previewFile = async (file: File): Promise<any[] | null> => {
-    try {
-      const data = await readFileData(file)
-      try {
-        const headers = Object.keys((data?.[0] ?? {}))
-        const heuristicMappings = buildHeuristicMappings(headers as string[])
-        const previewStd = toStandardizedRows(data.slice(0, 5), heuristicMappings)
-        if (Array.isArray(previewStd) && previewStd.length) {
-          return previewStd
-        }
-      } catch (_) {
-        // ignore and fall back to original preview below
-      }
-      if (data.length > MAX_RECORDS_PER_FILE) {
-        setUploadError(`Maximum ${MAX_RECORDS_PER_FILE} listings allowed per file (${file.name})`)
-        return null
-      }
-      return data.slice(0, 5)
-    } catch (error) {
-      setUploadError('Error reading file. Please check the file format.')
-      return null
-    }
-  }
+  }, [previewFile, selectedFiles])
 
   const readFileData = (file: File): Promise<any[]> => {
     return new Promise((resolve, reject) => {
+      if (isPdfFile(file)) {
+        resolve([])
+        return
+      }
       const reader = new FileReader()
-      
+
       reader.onload = (e) => {
         try {
           const data = e.target?.result
@@ -985,6 +1116,462 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
     return { validationErrors, fieldMappings, unmappedHeaders }
   }
 
+  const buildPdfDataRow = (canonical: PdfCanonicalDraft): Record<string, unknown> => {
+    const address = canonical.basic.address ?? {}
+    const fullAddressParts: string[] = []
+    if (address.street) fullAddressParts.push(address.street)
+    const cityState = [address.city, address.state].filter(Boolean).join(', ')
+    if (cityState) fullAddressParts.push(cityState)
+    if (address.postal_code) fullAddressParts.push(address.postal_code)
+
+    const photoUrls = Array.isArray(canonical.media?.images)
+      ? canonical.media.images
+          .map((image) => (typeof image?.url === 'string' ? image.url.trim() : ''))
+          .filter((url) => url.length > 0)
+      : []
+
+    return {
+      mls_number: canonical.source.mls_number ?? '',
+      list_price: canonical.basic.list_price ?? null,
+      price_currency: canonical.basic.price_currency ?? 'USD',
+      property_type: canonical.basic.property_type ?? '',
+      address_line: fullAddressParts.join(' · '),
+      street: address.street ?? '',
+      city: address.city ?? '',
+      state: address.state ?? '',
+      postal_code: address.postal_code ?? '',
+      status: canonical.basic.listing_status ?? '',
+      beds: canonical.details.beds ?? null,
+      baths_total: canonical.details.baths_total ?? null,
+      baths_full: canonical.details.baths_full ?? null,
+      baths_half: canonical.details.baths_half ?? null,
+      year_built: canonical.details.year_built ?? null,
+      living_area_sqft: canonical.details.living_area_sqft ?? null,
+      total_area_sqft: canonical.details.total_area_sqft ?? null,
+      lot_acres: canonical.details.lot_acres ?? null,
+      lot_sqft: canonical.details.lot_sqft ?? null,
+      subdivision: canonical.details.subdivision ?? '',
+      remarks_public: canonical.remarks.public ?? '',
+      images_detected: canonical.media.detected_total ?? canonical.media.images?.length ?? 0,
+      PhotoURLs: photoUrls.join(','),
+      photos: photoUrls,
+      cover_photo_url: photoUrls[0] ?? ''
+    }
+  }
+
+  const buildPdfFieldMappings = (
+    row: Record<string, unknown>,
+    matches: DraftPdfUploadResponse['matches']
+  ): FieldMapping[] => {
+    if (!Array.isArray(matches) || matches.length === 0) {
+      return Object.keys(row).map((key) => ({
+        inputField: key,
+        mlsField: { standardName: key },
+        confidence: 1
+      }))
+    }
+
+    const mapping: FieldMapping[] = matches.map((match) => ({
+      inputField: match.raw?.label ?? match.canonical,
+      mlsField: { standardName: match.canonical },
+      confidence: Number.isFinite(match.score) ? match.score : 0.9
+    }))
+
+    const existing = new Set(mapping.map((m) => m.mlsField.standardName))
+    Object.keys(row).forEach((key) => {
+      if (!existing.has(key)) {
+        mapping.push({
+          inputField: key,
+          mlsField: { standardName: key },
+          confidence: 0.9
+        })
+      }
+    })
+
+    return mapping
+  }
+
+  const LABEL_KEY_MAP: Record<string, string[]> = {
+    'status': ['status'],
+    'status type': ['statusType'],
+    'property class': ['property_type', 'propertyType'],
+    'property type': ['property_type', 'propertyType'],
+    'building design': ['property_sub_type', 'propertySubType'],
+    'ownership': ['propertySubType', 'property_sub_type', 'ownership'],
+    'development': ['development', 'subdivision'],
+    'subdivision': ['subdivision'],
+    'geo area': ['geoArea'],
+    'county': ['county'],
+    'bedrooms': ['bedrooms'],
+    'bathrooms': ['bathrooms'],
+    'full baths': ['bathroomsFull', 'bathrooms_full'],
+    'half baths': ['bathroomsHalf', 'bathrooms_half'],
+    'living area': ['livingAreaSqFt', 'living_area_sq_ft'],
+    'total area': ['totalAreaSqFt', 'total_area_sq_ft'],
+    'lot acres': ['lotSizeAcres', 'lot_acres'],
+    'dom': ['dom'],
+    'cdom': ['cdom'],
+    'lot size': ['lotSize', 'lot_size_sq_ft'],
+    'lot size sqft': ['lotSize', 'lot_size_sq_ft'],
+    'lot size (sqft)': ['lotSize', 'lot_size_sq_ft'],
+    'lot size (acres)': ['lotSizeAcres', 'lot_acres'],
+    'lot description': ['lotDescription', 'lot_description'],
+    'lot dimensions': ['lotDimensions', 'lot_dimensions'],
+    'parcel id': ['parcelId', 'parcel_id'],
+    'furnished': ['furnished'],
+    'property id': ['propertyId'],
+    'pets': ['pets'],
+    'windows': ['windows'],
+    'flooring': ['flooring'],
+    'floor plan type': ['floorPlanType'],
+    'cooling': ['cooling'],
+    'heating': ['heating'],
+    'kitchen': ['kitchenFeatures', 'kitchen_features'],
+    'equipment': ['appliances'],
+    'interior features': ['interiorFeatures', 'interior_features'],
+    'exterior features': ['exteriorFeatures', 'exterior_features'],
+    'master bath': ['masterBathFeatures', 'master_bath_features'],
+    'additional rooms': ['additionalRooms', 'additional_rooms'],
+    'private pool': ['privatePool', 'private_pool'],
+    'private spa': ['privateSpa', 'private_spa'],
+    'view': ['propertyView', 'property_view'],
+    'amenities': ['amenities'],
+    'community type': ['communityType'],
+    'golf type': ['golfType'],
+    'parking': ['parkingFeatures', 'parking_features'],
+    '# garage spaces': ['garageSpaces', 'garage_spaces'],
+    'garage': ['garageType', 'garage_type'],
+    '# carport spaces': ['carportSpaces', 'carport_spaces'],
+    'water': ['water', 'waterSource', 'water_source'],
+    'sewer': ['sewer', 'sewerSystem', 'sewer_system'],
+    'irrigation': ['irrigation'],
+    'boat/dock info': ['boatDockInfo'],
+    'waterfront': ['waterfront'],
+    'gulf access': ['gulfAccess', 'gulf_access'],
+    'canal width': ['canalWidth', 'canal_width'],
+    'rear exposure': ['rearExposure'],
+    'zoning': ['zoning'],
+    'total tax bill': ['taxes'],
+    'tax description': ['taxDescription', 'tax_description'],
+    'tax year': ['taxYear', 'tax_year'],
+    'hoa fee': ['hoaFee', 'hoa_fee'],
+    'master hoa fee': ['masterHoaFee', 'master_hoa_fee'],
+    'condo fee': ['condoFee', 'condo_fee'],
+    'special assessment': ['specialAssessment', 'special_assessment'],
+    'spec assessment': ['specialAssessment', 'special_assessment'],
+    'other fee': ['otherFee', 'other_fee'],
+    'land lease': ['landLease', 'land_lease'],
+    'mandatory club fee': ['mandatoryClubFee', 'mandatory_club_fee'],
+    'recreation lease fee': ['recreationLeaseFee', 'recleasefee'],
+    'rec. lease fee': ['recreationLeaseFee', 'recleasefee'],
+    'total annual recurring fees': ['totalAnnualRecurringFees'],
+    'total one time fees': ['totalOneTimeFees'],
+    'terms': ['terms'],
+    'possession': ['possession'],
+    'approval': ['approval'],
+    'management': ['management'],
+    'owner name': ['ownerName', 'owner_name'],
+    'owner phone': ['ownerPhone', 'owner_phone'],
+    'owner email': ['ownerEmail', 'owner_email'],
+    'listing broker': ['listingBroker', 'listingOfficeName', 'listing_office_name'],
+    'office name': ['officeName', 'listingOfficeName', 'listing_office_name'],
+    'office phone': ['officePhone', 'listingOfficePhone', 'listing_office_phone'],
+    'office address': ['officeAddress'],
+    'office code': ['officeCode'],
+    'agent name': ['listingAgentName', 'listing_agent_name'],
+    'agent phone': ['listingAgentPhone', 'listing_agent_phone'],
+    'agent email': ['listingAgentEmail', 'listing_agent_email'],
+    'agent id': ['listingAgentMlsId'],
+    'agent fax': ['listingAgentFax'],
+    'appointment req.': ['appointmentRequired'],
+    'appointment req': ['appointmentRequired'],
+    'appointment phone': ['appointmentPhone'],
+    'listing date': ['listingDate'],
+    'contract closing date': ['contractClosingDate'],
+    'expiration date': ['expirationDate'],
+    'listing type': ['listingType'],
+    'showing instructions': ['showingInstructions', 'showing_instructions'],
+    'storm protection': ['stormProtection', 'storm_protection'],
+    'auction': ['auction'],
+    'foreclosed (reo)': ['foreclosed'],
+    'potential short sale': ['shortSale'],
+    'legal description': ['legalDescription', 'legal_description'],
+    'sec/town/rng': ['sectionTownRange'],
+    'target marketing': ['targetMarketing'],
+    'internet sites': ['internetSites'],
+    'listing on internet': ['listingOnInternet'],
+    'address on internet': ['addressOnInternet'],
+    'blogging': ['blogging'],
+    'avm': ['avm'],
+    'list price per sqft': ['listPricePerSqFt'],
+    'list price/sqft': ['listPricePerSqFt'],
+    'street number': ['streetNumber', 'street_number'],
+    'street name': ['streetName', 'street_name'],
+    'street suffix': ['streetSuffix', 'street_suffix'],
+    'city': ['city'],
+    'state': ['state', 'stateCode', 'state_code'],
+    'zip': ['zipCode', 'zip_code'],
+    'den': ['den']
+  }
+
+  const NUMERIC_KEYS = new Set([
+    'listPrice',
+    'listPricePerSqFt',
+    'dom',
+    'cdom',
+    'lotSizeAcres',
+    'lot_acres',
+    'lotSize',
+    'lot_size_sq_ft',
+    'livingAreaSqFt',
+    'living_area_sq_ft',
+    'totalAreaSqFt',
+    'total_area_sq_ft',
+    'bedrooms',
+    'bathrooms',
+    'bathroomsFull',
+    'bathrooms_full',
+    'bathroomsHalf',
+    'bathrooms_half',
+    'garageSpaces',
+    'garage_spaces',
+    'carportSpaces',
+    'carport_spaces',
+    'taxes',
+    'taxYear',
+    'tax_year',
+    'hoaFee',
+    'hoa_fee',
+    'masterHoaFee',
+    'master_hoa_fee',
+    'condoFee',
+    'condo_fee',
+    'specialAssessment',
+    'special_assessment',
+    'otherFee',
+    'other_fee',
+    'landLease',
+    'land_lease',
+    'mandatoryClubFee',
+    'mandatory_club_fee',
+    'recreationLeaseFee',
+    'recleasefee',
+    'totalAnnualRecurringFees',
+    'totalOneTimeFees'
+  ])
+
+  const BOOLEAN_KEYS = new Set([
+    'privatePool',
+    'private_pool',
+    'privateSpa',
+    'private_spa',
+    'waterfront',
+    'gulfAccess',
+    'gulf_access',
+    'auction',
+    'foreclosed',
+    'shortSale',
+    'listingOnInternet',
+    'addressOnInternet',
+    'blogging',
+    'avm',
+    'targetMarketing'
+  ])
+
+  const normalizeNumericValue = (value: string): number | undefined => {
+    const normalized = value.replace(/,/g, '')
+    const match = normalized.match(/-?\d+(?:\.\d+)?/)
+    if (!match) return undefined
+    const parsed = Number(match[0])
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+
+  const normalizeBooleanValue = (value: string): boolean | undefined => {
+    const lower = value.trim().toLowerCase()
+    if (!lower) return undefined
+    if (['y', 'yes', 'true', '1', 'included'].includes(lower)) return true
+    if (['n', 'no', 'false', '0', 'not allowed'].includes(lower)) return false
+    return undefined
+  }
+
+  const shouldOverwrite = (current: unknown, next: unknown) => {
+    if (current === undefined || current === null) return true
+    if (typeof current === 'string') {
+      const trimmed = current.trim()
+      if (trimmed.length === 0) return true
+      const lowered = trimmed.toLowerCase()
+      if (
+        lowered === 'draft' &&
+        typeof next === 'string' &&
+        next.trim().length > 0 &&
+        next.trim().toLowerCase() !== 'draft'
+      ) {
+        return true
+      }
+      if (
+        ['no', 'n/a', 'unknown', 'none'].includes(lowered) &&
+        typeof next === 'string' &&
+        next.trim().length > 0 &&
+        !['no', 'n/a', 'unknown', 'none'].includes(next.trim().toLowerCase())
+      ) {
+        return true
+      }
+      if (
+        trimmed === '0' &&
+        typeof next === 'number' &&
+        next !== 0
+      ) {
+        return true
+      }
+    }
+    if (
+      typeof current === 'number' &&
+      current === 0 &&
+      typeof next === 'number' &&
+      next !== 0
+    ) {
+      return true
+    }
+    return false
+  }
+
+  const assignValueToRow = (
+    row: Record<string, unknown>,
+    keys: string[],
+    rawValue: string | number
+  ) => {
+    if (!keys || keys.length === 0) return
+    const base =
+      typeof rawValue === 'string'
+        ? rawValue.replace(/\s+/g, ' ').replace(/:+$/, '').trim()
+        : rawValue !== undefined
+          ? String(rawValue).trim()
+          : ''
+    if (!base) return
+
+    keys.forEach((key) => {
+      if (!key) return
+      let normalized: unknown = base
+      if (NUMERIC_KEYS.has(key)) {
+        const numeric = normalizeNumericValue(base)
+        if (numeric === undefined) return
+        normalized = numeric
+      } else if (BOOLEAN_KEYS.has(key)) {
+        const bool = normalizeBooleanValue(base)
+        if (bool === undefined) return
+        normalized = bool
+      }
+
+      const current = (row as Record<string, unknown>)[key]
+      if (shouldOverwrite(current, normalized)) {
+        ;(row as Record<string, unknown>)[key] = normalized
+      }
+    })
+  }
+
+  const applyExtractedValuesToRow = (
+    row: Record<string, unknown>,
+    extracted?: ExtractedLabelValue[]
+  ) => {
+    if (!Array.isArray(extracted)) return
+
+    extracted.forEach((item) => {
+      const label = (item.label ?? '').trim()
+      if (!label) return
+      const lowerLabel = label.toLowerCase()
+      const baseValue =
+        typeof item.value === 'string'
+          ? item.value
+          : item.value !== undefined && item.value !== null
+            ? String(item.value)
+            : ''
+      const rawValue = baseValue.replace(/:+$/, '').trim()
+      if (!rawValue) return
+
+      const keys = LABEL_KEY_MAP[lowerLabel]
+      if (keys && keys.length > 0) {
+        assignValueToRow(row, keys, rawValue)
+      }
+
+      if (lowerLabel === 'list price per sqft') {
+        assignValueToRow(row, ['listPricePerSqFt'], rawValue)
+      }
+    })
+  }
+
+  const createPdfDraftListing = (
+    file: File,
+    response: DraftPdfUploadResponse,
+    order: number
+  ): DraftListing => {
+    const canonical = response.draft
+    const row = buildPdfDataRow(canonical)
+    applyExtractedValuesToRow(row, response.extracted)
+    if (typeof window !== 'undefined') {
+      ;(window as unknown as Record<string, unknown>).__lastCanonicalDraft = canonical
+      ;(window as unknown as Record<string, unknown>).__lastPdfRow = row
+      ;(window as unknown as Record<string, unknown>).__lastExtractedFields = response.extracted ?? []
+    }
+
+    const additionalFields = buildAdditionalFieldMap(response.extracted)
+    const missing = canonical.diagnostics?.missing ?? []
+    const warnings = canonical.diagnostics?.warnings ?? []
+
+    const validationErrors: ValidationError[] = []
+    missing.forEach((field) => {
+      validationErrors.push({
+        row: 1,
+        field,
+        type: 'required',
+        message: `Missing required field: ${field}`
+      })
+    })
+    warnings.forEach((message) => {
+      validationErrors.push({
+        row: 1,
+        field: 'general',
+        type: 'optional',
+        message
+      })
+    })
+
+    const photosDetected = canonical.media?.detected_total ?? canonical.media?.images?.length ?? 0
+    const completionPercentage = missing.length === 0 ? 100 : Math.max(0, 100 - missing.length * 10)
+
+    return {
+      id: `draft_pdf_${Date.now()}_${order}`,
+      fileName: file.name,
+      uploadDate: new Date().toISOString(),
+      status: missing.length === 0 ? 'ready' : 'error',
+      totalRecords: 1,
+      validRecords: missing.length === 0 ? 1 : 0,
+      errorRecords: missing.length === 0 ? 0 : 1,
+      requiredFieldsComplete: missing.length === 0 ? 1 : 0,
+      optionalFieldsComplete: 1,
+      photosCount: photosDetected,
+      data: [row],
+      validationErrors,
+      fieldMapping: buildPdfFieldMappings(row, response.matches),
+      mlsCompliant: missing.length === 0,
+      completionPercentage,
+      mappedData: row,
+      originalData: canonical,
+      canonicalDraft: canonical,
+      sourceType: 'pdf',
+      matches: response.matches,
+      extracted: response.extracted ?? [],
+      additionalFields
+    }
+  }
+
+  const processPdfFile = async (file: File, order: number): Promise<DraftListing> => {
+    const response = await uploadDraftPdf(file, {
+      vendor: PDF_VENDOR_FALLBACK,
+      documentVersion: PDF_DOCUMENT_VERSION
+    })
+    return createPdfDraftListing(file, response, order)
+  }
+
   const processUpload = async () => {
     if (selectedFiles.length === 0) return
 
@@ -1000,6 +1587,18 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
         const file = selectedFiles[index]
 
         setUploadProgress(Math.round((index / selectedFiles.length) * 80))
+
+        if (isPdfFile(file)) {
+          const pdfDraft = await processPdfFile(file, index)
+          pdfDraft.fieldMapping.forEach((mapping) => {
+            if (mapping?.mlsField?.standardName) {
+              aggregatedMappings.add(mapping.mlsField.standardName)
+            }
+          })
+          aggregateListings.push(pdfDraft)
+          setUploadProgress(Math.round(((index + 1) / selectedFiles.length) * 80))
+          continue
+        }
 
         const data = await readFileData(file)
 
@@ -1062,6 +1661,7 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
           completionPercentage: processedData.length > 0
             ? Math.round((requiredFieldsComplete / processedData.length) * 100)
             : 0,
+          sourceType: file.name.toLowerCase().endsWith('.csv') ? 'csv' : 'excel'
         }
 
         aggregateListings.push(draftListing)
@@ -1145,7 +1745,7 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
               <Input
                 id="file-upload"
                 type="file"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv,.xlsx,.xls,.pdf"
                 multiple
                 onChange={handleFileSelect}
                 className="hidden"
@@ -1156,7 +1756,7 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
                 </Button>
               </Label>
               <p className="text-sm text-gray-500 mt-2">
-                Supported formats: CSV, Excel (.xlsx, .xls) • Max size: 10MB each • Max {MAX_FILES_PER_BATCH} files per batch
+                Supported formats: CSV, Excel (.xlsx, .xls) up to 10MB and PDF up to {MAX_PDF_SIZE_MB}MB • Max {MAX_FILES_PER_BATCH} files per batch
               </p>
             </div>
           </div>

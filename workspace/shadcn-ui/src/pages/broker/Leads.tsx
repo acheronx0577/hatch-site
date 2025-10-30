@@ -74,7 +74,7 @@ const LeadsPage = () => {
     try {
       setIsLoading(true)
       const response = await listContacts(TENANT_ID)
-      setLeads(response)
+      setLeads(response.items)
     } catch (error) {
       toast({
         title: 'Unable to load leads',

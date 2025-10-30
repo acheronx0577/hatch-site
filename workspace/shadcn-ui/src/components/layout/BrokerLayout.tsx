@@ -28,7 +28,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
         <header className="bg-white shadow-sm border-b px-6 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center">
-              <HatchLogo className="h-7" />
+              <HatchLogo className="h-12 md:h-16" />
               <span className="ml-3 text-xl font-semibold text-gray-900">Broker Portal</span>
             </div>
             

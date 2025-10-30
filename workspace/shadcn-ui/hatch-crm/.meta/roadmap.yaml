@@ -1,0 +1,92 @@
+milestones:
+  - key: M1-platform
+    title: Platform Foundations
+    issues:
+      - title: "Tenancy baseline: orgs, memberships, session settings"
+        labels: ["area:platform","type:schema"]
+        acceptance:
+          - "All domain tables have org_id; migrations backfilled"
+          - "Session sets app.current_org_id/user_id"
+      - title: "RBAC + FLS + Sharing core"
+        labels: ["area:platform","type:schema","risk:security"]
+        acceptance:
+          - "can() matrix implemented + unit tests"
+          - "FLS strips unreadable fields; writes blocked appropriately"
+          - "Manual shares + role hierarchy read-up pass integration tests"
+      - title: "Audit logging decorator + events table"
+        labels: ["area:platform","type:infra"]
+        acceptance:
+          - "Create/Update/Delete actions produce audit rows with diffs"
+          - "Audit query filtered by org and RBAC"
+      - title: "API standards + OpenAPI + typed SDK"
+        labels: ["area:platform","type:api"]
+        acceptance:
+          - "OpenAPI 3.1 at /api/docs; CI drift check passes"
+          - "JS/TS SDK generated; example client compiles"
+  - key: M2-core-crm
+    title: Core Sales & Service Objects
+    issues:
+      - title: "Accounts/Contacts/Opportunities GA"
+        labels: ["area:sales","type:schema","type:api"]
+        acceptance:
+          - "CRUD APIs and UI list/record pages live"
+          - "Sharing + audit enforced on reads/writes"
+      - title: "Cases & Activities rollout"
+        labels: ["area:service","type:ui","type:api"]
+        acceptance:
+          - "Case lifecycle automation implemented"
+          - "Activity logging, reminders, and FLS pass tests"
+      - title: "Files storage & virus scanning"
+        labels: ["area:platform","type:infra","risk:security"]
+        acceptance:
+          - "MinIO/S3 integration with signed URLs"
+          - "Audit entries recorded for upload/download"
+  - key: M3-automation-reporting
+    title: Automation & Reporting
+    issues:
+      - title: "Workflow engine MVP"
+        labels: ["area:automation","type:infra"]
+        acceptance:
+          - "JSON DSL parser + executor with retries"
+          - "Unit tests cover validation, idempotency"
+      - title: "Report builder + dashboards"
+        labels: ["area:analytics","type:ui","type:api"]
+        acceptance:
+          - "Ad-hoc reports with filters/grouping ship"
+          - "Dashboard widgets saved per user/org"
+  - key: M4-real-estate
+    title: Real Estate Vertical Pack
+    issues:
+      - title: "Property & Listing data model"
+        labels: ["area:vertical-real-estate","type:schema"]
+        acceptance:
+          - "re_properties/re_listings tables with migrations"
+          - "Linkage to Opportunities verified via tests"
+      - title: "Showings, offers, transactions flows"
+        labels: ["area:vertical-real-estate","type:ui","type:api"]
+        acceptance:
+          - "Tour scheduling + buyer rep checks"
+          - "Offer approvals update status + automation"
+      - title: "Commission forecasting"
+        labels: ["area:vertical-real-estate","type:analytics"]
+        acceptance:
+          - "Commission rollups visible in dashboards"
+          - "Payout schedule automation tested"
+  - key: M5-integrations-admin
+    title: Integrations & Admin Experience
+    issues:
+      - title: "Email & calendar sync (lite)"
+        labels: ["area:integrations","type:api"]
+        acceptance:
+          - "OAuth handshake stored securely"
+          - "Events/tasks sync bi-directionally"
+      - title: "Slack notifications + webhooks"
+        labels: ["area:integrations","type:infra"]
+        acceptance:
+          - "Workflow actions can post to Slack"
+          - "Outbound webhook retries with logging"
+      - title: "Admin console & object manager"
+        labels: ["area:platform","type:ui"]
+        acceptance:
+          - "Custom objects/fields CRUD"
+          - "Permission sets UI respects RBAC"

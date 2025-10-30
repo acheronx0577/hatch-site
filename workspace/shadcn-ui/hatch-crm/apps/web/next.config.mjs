@@ -61,6 +61,7 @@ const apiBase = resolveApiBase();
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  transpilePackages: ['@dnd-kit/core', '@dnd-kit/sortable', '@dnd-kit/modifiers', '@dnd-kit/utilities'],
   async rewrites() {
     if (!apiBase) {
       return [];
@@ -83,6 +84,14 @@ const nextConfig = {
         destination: `${destinationUrl}/:path*`
       }
     ];
+  },
+  webpack(config, { isServer }) {
+    if (isServer) {
+      // Align server chunk filenames with the webpack runtime loader.
+      config.output = config.output ?? {};
+      config.output.chunkFilename = '[id].js';
+    }
+    return config;
   }
 };
 

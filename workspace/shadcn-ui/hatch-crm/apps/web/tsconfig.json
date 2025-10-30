@@ -24,11 +24,17 @@
       "@/components/*": [
         "./components/*"
       ],
+      "@/hooks/*": [
+        "./hooks/*"
+      ],
       "@/lib/*": [
         "./lib/*"
       ],
       "@hatch/shared": [
         "../../packages/shared/src"
+      ],
+      "@hatch/shared/*": [
+        "../../packages/shared/src/*"
       ],
       "@hatch/config": [
         "../../packages/config/src"

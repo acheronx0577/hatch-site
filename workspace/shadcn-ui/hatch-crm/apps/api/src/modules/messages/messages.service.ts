@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ConsentScope, Message, MessageChannel } from '@hatch/db';
+import { ConsentScope, Message, MessageChannel, Prisma } from '@hatch/db';
 
 import { ComplianceService } from '../compliance/compliance.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -9,6 +9,14 @@ import { RoutingService } from '../routing/routing.service';
 import { InboundMessageDto } from './dto/inbound-message.dto';
 import { SendEmailDto } from './dto/send-email.dto';
 import { SendSmsDto } from './dto/send-sms.dto';
+import {
+  MessageListResponseDto,
+  MessageResponseDto
+} from './dto/message-response.dto';
+import {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE
+} from '../common/dto/cursor-pagination-query.dto';
 
 @Injectable()
 export class MessagesService {
@@ -272,5 +280,88 @@ export class MessagesService {
         optOuts: delta.optOuts ?? 0
       }
     });
+  }
+
+  async listMessages(
+    tenantId: string | undefined,
+    query: {
+      limit?: number;
+      cursor?: string;
+      channel?: MessageChannel;
+      direction?: 'INBOUND' | 'OUTBOUND';
+      q?: string;
+    }
+  ): Promise<MessageListResponseDto> {
+    const take = Math.min(query.limit ?? DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+
+    const where: Prisma.MessageWhereInput = {
+      ...(tenantId ? { tenantId } : {}),
+      ...(query.channel ? { channel: query.channel } : {}),
+      ...(query.direction ? { direction: query.direction } : {})
+    };
+
+    if (query.q) {
+      const search = query.q.trim();
+      if (search.length > 0) {
+        where.OR = [
+          { subject: { contains: search, mode: 'insensitive' } },
+          { body: { contains: search, mode: 'insensitive' } },
+          { toAddress: { contains: search, mode: 'insensitive' } },
+          { fromAddress: { contains: search, mode: 'insensitive' } }
+        ];
+      }
+    }
+
+    const messages = await this.prisma.message.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
+      ...(query.cursor
+        ? {
+            skip: 1,
+            cursor: { id: query.cursor }
+          }
+        : {}),
+      include: {
+        person: { select: { firstName: true, lastName: true } },
+        user: { select: { firstName: true, lastName: true } }
+      }
+    });
+
+    let nextCursor: string | null = null;
+    if (messages.length > take) {
+      const next = messages.pop();
+      nextCursor = next?.id ?? null;
+    }
+
+    return {
+      items: messages.map((message) => this.toMessageDto(message)),
+      nextCursor
+    };
+  }
+
+  private toMessageDto(
+    message: Prisma.MessageGetPayload<{
+      include: {
+        person: { select: { firstName: true; lastName: true } };
+        user: { select: { firstName: true; lastName: true } };
+      };
+    }>
+  ): MessageResponseDto {
+    return {
+      id: message.id,
+      tenantId: message.tenantId,
+      personId: message.personId,
+      userId: message.userId,
+      channel: message.channel,
+      direction: message.direction,
+      subject: message.subject,
+      body: message.body,
+      toAddress: message.toAddress,
+      fromAddress: message.fromAddress,
+      status: message.status,
+      createdAt: message.createdAt.toISOString(),
+      updatedAt: message.updatedAt?.toISOString() ?? null
+    };
   }
 }

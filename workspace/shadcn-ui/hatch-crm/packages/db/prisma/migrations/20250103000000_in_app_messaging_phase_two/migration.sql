@@ -6,22 +6,37 @@ ALTER TYPE "ActivityType" ADD VALUE IF NOT EXISTS 'MESSAGE_READ';
 -- Conversation domain enums
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ConversationType') THEN
-    CREATE TYPE "ConversationType" AS ENUM ('EXTERNAL', 'INTERNAL');
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'ConversationType'
+      AND typnamespace = 'public'::regnamespace
+  ) THEN
+    CREATE TYPE "public"."ConversationType" AS ENUM ('EXTERNAL', 'INTERNAL');
   END IF;
 END$$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ConversationParticipantRole') THEN
-    CREATE TYPE "ConversationParticipantRole" AS ENUM ('OWNER', 'MEMBER', 'VIEWER');
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'ConversationParticipantRole'
+      AND typnamespace = 'public'::regnamespace
+  ) THEN
+    CREATE TYPE "public"."ConversationParticipantRole" AS ENUM ('OWNER', 'MEMBER', 'VIEWER');
   END IF;
 END$$;
 
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'MessageReceiptStatus') THEN
-    CREATE TYPE "MessageReceiptStatus" AS ENUM ('DELIVERED', 'READ');
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'MessageReceiptStatus'
+      AND typnamespace = 'public'::regnamespace
+  ) THEN
+    CREATE TYPE "public"."MessageReceiptStatus" AS ENUM ('DELIVERED', 'READ');
   END IF;
 END$$;
 

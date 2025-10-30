@@ -90,6 +90,54 @@ const PROPERTY_FIELD_MAP: Record<string, string> = {
   waterSource: 'water_source',
   sewerSystem: 'sewer_system',
   taxes: 'taxes',
+  listPricePerSqFt: 'list_price_per_sqft',
+  statusType: 'status_type',
+  geoArea: 'geo_area',
+  development: 'development',
+  propertyId: 'property_id',
+  dom: 'dom',
+  cdom: 'cdom',
+  communityType: 'community_type',
+  golfType: 'golf_type',
+  gulfAccess: 'gulf_access',
+  canalWidth: 'canal_width',
+  rearExposure: 'rear_exposure',
+  lotDescription: 'lot_description',
+  lotDimensions: 'lot_dimensions',
+  water: 'water',
+  sewer: 'sewer',
+  irrigation: 'irrigation',
+  boatDockInfo: 'boat_dock_info',
+  taxDescription: 'tax_description',
+  terms: 'terms',
+  possession: 'possession',
+  approval: 'approval',
+  management: 'management',
+  masterHoaFee: 'master_hoa_fee',
+  condoFee: 'condo_fee',
+  specialAssessment: 'special_assessment',
+  otherFee: 'other_fee',
+  landLease: 'land_lease',
+  mandatoryClubFee: 'mandatory_club_fee',
+  recreationLeaseFee: 'recreation_lease_fee',
+  totalAnnualRecurringFees: 'total_annual_recurring_fees',
+  totalOneTimeFees: 'total_one_time_fees',
+  officeCode: 'office_code',
+  officeName: 'office_name',
+  officePhone: 'office_phone',
+  officeAddress: 'office_address',
+  agentId: 'agent_id',
+  appointmentRequired: 'appointment_required',
+  appointmentPhone: 'appointment_phone',
+  targetMarketing: 'target_marketing',
+  internetSites: 'internet_sites',
+  listingOnInternet: 'listing_on_internet',
+  addressOnInternet: 'address_on_internet',
+  blogging: 'blogging',
+  avm: 'avm',
+  listingBroker: 'listing_broker',
+  legalDescription: 'legal_description',
+  sectionTownRange: 'section_town_range',
   subdivision: 'subdivision',
   slug: 'slug',
   coverPhotoUrl: 'cover_photo_url',
@@ -97,6 +145,9 @@ const PROPERTY_FIELD_MAP: Record<string, string> = {
   ownerName: 'owner_name',
   ownerEmail: 'owner_email',
   ownerPhone: 'owner_phone',
+  additionalFields: 'additional_fields',
+  sourceExtractedFields: 'source_extracted',
+  sourceMatches: 'source_matches',
   listingAgentName: 'listing_agent_name',
   listingAgentLicense: 'listing_agent_license',
   listingAgentPhone: 'listing_agent_phone',
@@ -105,6 +156,8 @@ const PROPERTY_FIELD_MAP: Record<string, string> = {
   listingOfficePhone: 'listing_office_phone',
   listingOfficeEmail: 'listing_office_email',
   listingOfficeLicense: 'listing_office_license',
+  listingAgentMlsId: 'listing_agent_mls_id',
+  listingAgentFax: 'listing_agent_fax',
   status: 'status',
   isTest: 'is_test',
   state: 'state',
@@ -133,6 +186,38 @@ const sanitizePhotos = (value: unknown): string[] | undefined => {
 const detectTestFlag = (source?: string | null, fileName?: string | null) => {
   const haystack = `${source ?? ''} ${fileName ?? ''}`.toLowerCase()
   return /(fake|sample|test)/.test(haystack)
+}
+
+const normalizeStatus = (value: unknown): 'draft' | 'active' | 'pending' | 'sold' | 'withdrawn' | 'expired' => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  switch (normalized) {
+    case 'active':
+      return 'active'
+    case 'pending':
+      return 'pending'
+    case 'sold':
+      return 'sold'
+    case 'withdrawn':
+      return 'withdrawn'
+    case 'expired':
+      return 'expired'
+    default:
+      return 'draft'
+  }
+}
+
+const deriveWorkflowState = (
+  status: 'draft' | 'active' | 'pending' | 'sold' | 'withdrawn' | 'expired'
+): 'PROPERTY_PENDING' | 'LIVE' | 'SOLD' => {
+  switch (status) {
+    case 'active':
+    case 'pending':
+      return 'LIVE'
+    case 'sold':
+      return 'SOLD'
+    default:
+      return 'PROPERTY_PENDING'
+  }
 }
 
 const isUuid = (value?: string | null): value is string =>
@@ -386,7 +471,16 @@ Deno.serve(async (req) => {
     if (segments.length === 1 && segments[0] === 'promote' && req.method === 'POST') {
       const body = await parseJsonBody(req)
         const draftId = typeof body.draftId === 'string' ? body.draftId : undefined
-        const orgId = ensureOrgId(body.orgId, orgIds)
+        const orgCandidate =
+          typeof body.orgId === 'string' && body.orgId.trim().length > 0
+            ? body.orgId.trim()
+            : null
+        const firmCandidate =
+          typeof body.firmId === 'string' && body.firmId.trim().length > 0
+            ? body.firmId.trim()
+            : null
+        const orgId = ensureOrgId(orgCandidate ?? firmCandidate, orgIds)
+        const firmId = firmCandidate ?? orgId
         const agentId = typeof body.agentId === 'string' && isUuid(body.agentId)
           ? body.agentId
           : (isUuid(user.id) ? user.id : null)
@@ -403,17 +497,117 @@ Deno.serve(async (req) => {
         }
 
         mapped.org_id = orgId
+        mapped.firm_id = firmId
         mapped.agent_id = agentId
         mapped.draft_id = draftId ?? null
         mapped.source = source
         mapped.file_name = fileName
-        mapped.state = 'PROPERTY_PENDING'
-        mapped.status = (mapped.status as string) ?? 'draft'
+        const rawStatus = typeof propertyInput.status === 'string' ? propertyInput.status : mapped.status
+        const normalizedStatus = normalizeStatus(rawStatus)
+        mapped.status = normalizedStatus
+        mapped.state = deriveWorkflowState(normalizedStatus)
         mapped.is_test = Boolean(
           propertyInput.isTest || detectTestFlag(source, fileName)
         )
         mapped.validation_summary =
           body.validationSummary ?? buildValidationSummary(mapped)
+
+        const numericFields = [
+          'list_price_per_sqft',
+          'dom',
+          'cdom',
+          'lot_size_sq_ft',
+          'lot_size_acres',
+          'taxes',
+          'master_hoa_fee',
+          'condo_fee',
+          'special_assessment',
+          'other_fee',
+          'land_lease',
+          'mandatory_club_fee',
+          'recreation_lease_fee',
+          'total_annual_recurring_fees',
+          'total_one_time_fees'
+        ] as const
+
+        for (const field of numericFields) {
+          const value = mapped[field]
+          if (value === undefined || value === null || value === '') {
+            mapped[field] = value === '' ? null : value
+            continue
+          }
+          const num = typeof value === 'number' ? value : Number(value)
+          mapped[field] = Number.isFinite(num) ? num : null
+        }
+
+        const stringFields = [
+          'status_type',
+          'geo_area',
+          'development',
+          'property_id',
+          'community_type',
+          'golf_type',
+          'gulf_access',
+          'canal_width',
+          'rear_exposure',
+          'lot_description',
+          'lot_dimensions',
+          'water',
+          'sewer',
+          'irrigation',
+          'boat_dock_info',
+          'tax_description',
+          'terms',
+          'possession',
+          'approval',
+          'management',
+          'office_code',
+          'office_name',
+          'office_phone',
+          'office_address',
+          'listing_agent_mls_id',
+          'listing_agent_fax',
+          'appointment_required',
+          'appointment_phone',
+          'target_marketing',
+          'internet_sites',
+          'listing_on_internet',
+          'address_on_internet',
+          'blogging',
+          'avm',
+          'listing_broker',
+          'legal_description',
+          'section_town_range'
+        ] as const
+
+        for (const field of stringFields) {
+          const value = mapped[field]
+          if (typeof value === 'string') {
+            const trimmed = value.trim()
+            mapped[field] = trimmed.length > 0 ? trimmed : null
+          }
+        }
+
+        if (mapped.additional_fields && typeof mapped.additional_fields !== 'object') {
+          mapped.additional_fields = null
+        }
+
+        if (mapped.source_extracted && typeof mapped.source_extracted !== 'object') {
+          mapped.source_extracted = null
+        }
+
+        if (mapped.source_matches && typeof mapped.source_matches !== 'object') {
+          mapped.source_matches = null
+        }
+        if (mapped.state === 'LIVE' && !mapped.published_at) {
+          const publishedAt =
+            typeof propertyInput.publishedAt === 'string' ? propertyInput.publishedAt : null
+          mapped.published_at = publishedAt ?? new Date().toISOString()
+        }
+        if (mapped.state === 'SOLD' && !mapped.closed_at) {
+          const closedAt = typeof propertyInput.closedAt === 'string' ? propertyInput.closedAt : null
+          mapped.closed_at = closedAt ?? new Date().toISOString()
+        }
 
         let targetId: string | undefined
         if (draftId) {

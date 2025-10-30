@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
@@ -13,14 +13,12 @@ import { HatchLogo } from '@/components/HatchLogo'
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isAtTop, setIsAtTop] = useState(true)
   const { user, signOut, isBroker, session } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
 
-  const identity = useMemo(
-    () => resolveUserIdentity(session?.profile, user?.email ?? null),
-    [session?.profile, user?.email]
-  )
+  const identity = useMemo(() => resolveUserIdentity(session?.profile, user?.email ?? null), [session?.profile, user?.email])
   const fallbackLabel = user?.email ? user.email.split('@')[0] : 'Account'
   const navGreeting = identity.displayName === 'Your Account'
     ? fallbackLabel
@@ -29,18 +27,26 @@ export function Navbar() {
     ? fallbackLabel
     : identity.displayName
   const isAuthenticated = Boolean(user)
-  const navigation = useMemo(() => {
-    const items = [
-      { name: 'Home', href: '/' },
-      { name: 'Properties', href: '/properties' },
-    ]
+  const navigation = useMemo(
+    () => [
+      { name: 'Buy', href: '/?persona=buyer#hero' },
+      { name: 'Sell', href: '/?persona=seller#hero' },
+      { name: 'Market', href: '/#market-snapshot' },
+      { name: 'Find an Agent', href: '/#agent-match' },
+      { name: 'For Pros', href: '/#for-pros' },
+    ],
+    []
+  )
 
-    if (isBroker) {
-      items.push({ name: 'Broker Dashboard', href: '/broker/dashboard' })
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsAtTop(window.scrollY < 24)
     }
 
-    return items
-  }, [isBroker])
+    handleScroll()
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const handleSignOut = useCallback(async () => {
     await signOut()
@@ -49,42 +55,36 @@ export function Navbar() {
   }, [navigate, signOut])
 
   const isActive = (path: string) => {
-    return location.pathname === path
+    const [targetPath, targetHashPart] = path.split('#')
+    const [basePath, queryString] = targetPath.split('?')
+    const personaParam = new URLSearchParams(queryString ?? '').get('persona')
+
+    const samePath = location.pathname === (basePath || path)
+    const sameHash = targetHashPart ? location.hash === `#${targetHashPart}` : location.hash === ''
+    const samePersona = personaParam ? new URLSearchParams(location.search).get('persona') === personaParam : true
+
+    return samePath && sameHash && samePersona
   }
 
-  const isPropertiesPage = location.pathname === '/properties'
+  const desktopNavClasses = 'hidden md:flex items-center space-x-6'
+  const logoWrapperClasses = 'flex items-center'
+  const desktopUserClasses = 'hidden md:flex items-center space-x-4'
 
-  const desktopNavClasses = useMemo(
-    () =>
-      cn(
-        'hidden md:flex items-center space-x-8',
-        isPropertiesPage && 'md:flex-1 md:justify-start md:pr-16'
-      ),
-    [isPropertiesPage]
-  )
-
-  const logoWrapperClasses = useMemo(
-    () => cn('flex items-center', isPropertiesPage && 'md:absolute md:left-1/2 md:-translate-x-1/2'),
-    [isPropertiesPage]
-  )
-
-  const desktopUserClasses = useMemo(
-    () =>
-      cn(
-        'hidden md:flex items-center space-x-4',
-        isPropertiesPage && 'md:flex-1 md:justify-end md:pl-16'
-      ),
-    [isPropertiesPage]
+  const navWrapperClasses = cn(
+    'sticky top-0 z-50 transition-colors duration-300',
+    isAtTop
+      ? 'border-b border-transparent bg-gradient-to-b from-ink-50 via-ink-50 to-brand-green-100/60'
+      : 'border-b border-[var(--glass-border)] bg-[var(--glass-background)]/90 backdrop-blur-xl'
   )
 
   return (
-    <nav className="bg-white shadow-lg sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="relative flex items-center justify-between h-16">
+    <nav className={navWrapperClasses}>
+      <div className="mx-auto flex max-w-6xl px-4 sm:px-6 lg:px-8">
+        <div className="relative flex h-16 w-full items-center justify-between">
           {/* Logo */}
           <div className={logoWrapperClasses}>
             <Link to="/" className="flex-shrink-0 flex items-center">
-              <HatchLogo className="h-8" />
+              <HatchLogo className="h-12 md:h-16" />
             </Link>
           </div>
 
@@ -94,10 +94,10 @@ export function Navbar() {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                className={`rounded-full px-3 py-2 text-sm font-medium transition-all ${
                   isActive(item.href)
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                    ? 'bg-brand-blue-600/12 text-brand-blue-600'
+                    : 'text-ink-500 hover:bg-ink-75 hover:text-ink-900'
                 }`}
               >
                 {item.name}
@@ -110,25 +110,25 @@ export function Navbar() {
             {isAuthenticated ? (
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-2">
-                  <div className="h-8 w-8 rounded-full bg-blue-100 text-blue-600 font-semibold flex items-center justify-center">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-blue-600/15 text-brand-blue-600 font-semibold">
                     {identity.initials}
                   </div>
                   <div className="text-left leading-tight">
-                    <div className="text-sm font-medium text-gray-900">{navGreeting}</div>
+                    <div className="text-sm font-medium text-ink-800">{navGreeting}</div>
                     {user?.email && (
-                      <div className="text-xs text-gray-500">{user.email}</div>
+                      <div className="text-xs text-ink-500">{user.email}</div>
                     )}
                   </div>
                 </div>
                 {isBroker && (
                   <Link to="/broker/dashboard">
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" className="shadow-none">
                       <BarChart3 className="w-4 h-4 mr-2" />
                       Dashboard
                     </Button>
                   </Link>
                 )}
-                <Button variant="outline" size="sm" onClick={handleSignOut}>
+                <Button variant="ghost" size="sm" className="text-ink-600 hover:text-ink-900" onClick={handleSignOut}>
                   <LogOut className="w-4 h-4 mr-2" />
                   Sign Out
                 </Button>
@@ -136,8 +136,9 @@ export function Navbar() {
             ) : (
               <div className="flex items-center space-x-3">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
+                  className="text-ink-600 hover:text-ink-900"
                   onClick={() => navigate('/login')}
                 >
                   Sign In
@@ -153,7 +154,7 @@ export function Navbar() {
           <div className="md:hidden flex items-center ml-auto">
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+              className="inline-flex items-center justify-center rounded-full p-2 text-ink-400 transition-colors hover:bg-ink-75 hover:text-ink-800"
             >
               {isOpen ? (
                 <X className="block h-6 w-6" />
@@ -168,15 +169,15 @@ export function Navbar() {
       {/* Mobile Navigation */}
       {isOpen && (
         <div className="md:hidden">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t">
+          <div className="space-y-2 border-t border-[var(--border-subtle)] bg-[var(--surface-background)] px-4 pt-4 pb-6 shadow-lg">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`block px-3 py-2 rounded-md text-base font-medium ${
+                className={`block rounded-full px-3 py-2 text-base font-medium transition-all ${
                   isActive(item.href)
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                    ? 'bg-brand-blue-600/12 text-brand-blue-600'
+                    : 'text-ink-600 hover:bg-ink-75 hover:text-ink-800'
                 }`}
                 onClick={() => setIsOpen(false)}
               >
@@ -185,9 +186,9 @@ export function Navbar() {
             ))}
             
             {isAuthenticated ? (
-              <div className="border-t pt-4 mt-4">
-                <div className="px-3 py-2 text-sm text-gray-700 flex items-center space-x-3">
-                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-600 font-semibold">
+              <div className="mt-4 border-t border-[var(--border-subtle)] pt-4">
+                <div className="flex items-center space-x-3 rounded-[var(--radius-md)] bg-ink-75 px-4 py-2 text-sm text-ink-600">
+                  <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-brand-blue-600/15 text-brand-blue-600 font-semibold">
                     {identity.initials}
                   </span>
                   <span>{mobileAccountLabel}</span>
@@ -195,26 +196,26 @@ export function Navbar() {
                 {isBroker && (
                   <Link
                     to="/broker/dashboard"
-                    className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
+                    className="mt-3 block rounded-full px-3 py-2 text-base font-medium text-ink-600 transition-colors hover:bg-ink-75 hover:text-ink-800"
                     onClick={() => setIsOpen(false)}
                   >
-                    <BarChart3 className="w-4 h-4 inline mr-2" />
+                    <BarChart3 className="mr-2 inline h-4 w-4" />
                     Broker Dashboard
                   </Link>
                 )}
                 <button
                   onClick={handleSignOut}
-                  className="block w-full text-left px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-gray-50"
+                  className="mt-2 block w-full rounded-full px-3 py-2 text-left text-base font-medium text-ink-600 transition-colors hover:bg-ink-75 hover:text-ink-800"
                 >
-                  <LogOut className="w-4 h-4 inline mr-2" />
+                  <LogOut className="mr-2 inline h-4 w-4" />
                   Sign Out
                 </button>
               </div>
             ) : (
-              <div className="border-t pt-4 mt-4 space-y-2">
+              <div className="mt-4 space-y-3 border-t border-[var(--border-subtle)] pt-4">
                 <Button
-                  variant="outline"
-                  className="w-full"
+                  variant="ghost"
+                  className="w-full text-ink-600 hover:text-ink-900"
                   onClick={() => {
                     navigate('/login')
                     setIsOpen(false)

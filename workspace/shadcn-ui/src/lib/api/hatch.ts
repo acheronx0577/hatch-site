@@ -1,5 +1,26 @@
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
-const API_BASE_URL = rawBaseUrl.endsWith('/') ? rawBaseUrl : `${rawBaseUrl}/`;
+import type { ExtractedLabelValue } from '@hatch/shared';
+
+const ensureTrailingSlash = (value: string) => (value.endsWith('/') ? value : `${value}/`);
+
+const resolveApiBaseUrl = (value?: string) => {
+  const fallback = 'http://localhost:4000/api';
+  const candidate = value?.trim() || fallback;
+
+  try {
+    const url = new URL(candidate);
+    if (!url.pathname || url.pathname === '/') {
+      url.pathname = '/api';
+    } else if (!url.pathname.startsWith('/api')) {
+      url.pathname = `/api${url.pathname}`;
+    }
+    return ensureTrailingSlash(url.toString());
+  } catch {
+    // If the value isn't a valid URL, fall back to the default.
+    return ensureTrailingSlash(fallback);
+  }
+};
+
+const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 interface FetchOptions extends RequestInit {
   token?: string;
@@ -9,6 +30,8 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   const sanitizedPath = path.replace(/^\//, '');
   const url = new URL(sanitizedPath, API_BASE_URL);
   const headers = new Headers(options.headers);
+  const isFormData =
+    typeof FormData !== 'undefined' && options.body instanceof FormData;
 
   if (!headers.has('x-user-role')) {
     headers.set('x-user-role', 'BROKER');
@@ -19,8 +42,11 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   if (!headers.has('x-tenant-id')) {
     headers.set('x-tenant-id', import.meta.env.VITE_TENANT_ID || 'tenant-hatch');
   }
+  if (!headers.has('x-org-id')) {
+    headers.set('x-org-id', import.meta.env.VITE_ORG_ID || 'org-hatch');
+  }
 
-  if (!headers.has('Content-Type') && options.body) {
+  if (!headers.has('Content-Type') && options.body && !isFormData) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -197,6 +223,146 @@ export type BrokerDashboardSummary = {
   clearCooperation: ClearCooperationRow[];
 };
 
+export type PipelineStage = {
+  id: string;
+  tenantId: string;
+  pipelineId: string;
+  name: string;
+  order: number;
+  slaMinutes: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Pipeline = {
+  id: string;
+  tenantId: string;
+  name: string;
+  type: string;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  stages: PipelineStage[];
+};
+
+export type LeadOwnerSummary = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+export type LeadStageSummary = {
+  id: string;
+  name: string;
+  order: number;
+  pipelineId: string;
+  pipelineName: string;
+  pipelineType: string;
+  slaMinutes: number | null;
+};
+
+export type LeadActivityRollup = {
+  last7dListingViews: number;
+  last7dSessions: number;
+  lastReplyAt?: string | null;
+  lastEmailOpenAt?: string | null;
+  lastTouchpointAt?: string | null;
+};
+
+export type MessageChannelType = 'EMAIL' | 'SMS' | 'VOICE' | 'IN_APP';
+
+export type LeadTouchpointType = 'MESSAGE' | 'CALL' | 'MEETING' | 'TASK' | 'NOTE' | 'OTHER';
+
+export type LeadSummary = {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  email: string | null;
+  phone: string | null;
+  score: number;
+  scoreTier: string;
+  pipelineId?: string | null;
+  pipelineName?: string | null;
+  pipelineType?: string | null;
+  stageId?: string | null;
+  stage?: LeadStageSummary;
+  owner?: LeadOwnerSummary;
+  lastActivityAt?: string | null;
+  stageEnteredAt?: string | null;
+  preapproved?: boolean;
+  budgetMin?: number | null;
+  budgetMax?: number | null;
+  timeframeDays?: number | null;
+  activityRollup?: LeadActivityRollup;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LeadNote = {
+  id: string;
+  body: string;
+  createdAt: string;
+  author: LeadOwnerSummary;
+};
+
+export type LeadTask = {
+  id: string;
+  title: string;
+  status: string;
+  dueAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignee?: LeadOwnerSummary;
+};
+
+export type LeadConsent = {
+  id: string;
+  channel: string;
+  scope: string;
+  status: string;
+  capturedAt: string | null;
+};
+
+export type LeadEvent = {
+  id: string;
+  name: string;
+  timestamp: string;
+  properties?: Record<string, unknown>;
+};
+
+export type LeadTouchpoint = {
+  id: string;
+  type: LeadTouchpointType;
+  channel?: MessageChannelType | null;
+  occurredAt: string;
+  summary?: string | null;
+  body?: string | null;
+  metadata?: unknown;
+  recordedBy?: LeadOwnerSummary;
+};
+
+export type LeadDetail = LeadSummary & {
+  notes: LeadNote[];
+  tasks: LeadTask[];
+  consents: LeadConsent[];
+  events: LeadEvent[];
+  fit?: {
+    preapproved?: boolean;
+    budgetMin?: number | null;
+    budgetMax?: number | null;
+    timeframeDays?: number | null;
+    geo?: string | null;
+    inventoryMatch?: number | null;
+  } | null;
+  touchpoints: LeadTouchpoint[];
+};
+
+export type LeadListResponse = {
+  items: LeadSummary[];
+  nextCursor?: string | null;
+};
+
 export type ComplianceStatusResponse = {
   range: { start: string; end: string; days: number };
   filters: { agentIds: string[]; teamIds: string[]; mlsIds: string[] };
@@ -371,9 +537,7 @@ export type UpdateTeamMemberRequest = Partial<Omit<CreateTeamMemberRequest, 'ten
 
 export type ContactListResponse = {
   items: ContactListItem[];
-  total: number;
-  page: number;
-  pageSize: number;
+  nextCursor: string | null;
   savedView?: {
     id: string;
     name: string;
@@ -531,6 +695,99 @@ export async function restoreContact(contactId: string, tenantId: string) {
     method: 'POST'
   });
 }
+
+export const getPipelines = () => apiFetch<Pipeline[]>('/v1/pipelines');
+
+export interface ListLeadsParams {
+  ownerId?: string;
+  pipelineId?: string;
+  stageId?: string[];
+  scoreTier?: string[];
+  lastActivityDays?: number;
+  preapproved?: boolean;
+  limit?: number;
+}
+
+export async function getLeads(params: ListLeadsParams = {}) {
+  const search = new URLSearchParams();
+  if (params.ownerId) search.set('ownerId', params.ownerId);
+  if (params.pipelineId) search.set('pipelineId', params.pipelineId);
+  if (params.stageId?.length) search.set('stageId', params.stageId.join(','));
+  if (params.scoreTier?.length) search.set('scoreTier', params.scoreTier.join(','));
+  if (params.lastActivityDays) search.set('lastActivityDays', String(params.lastActivityDays));
+  if (params.preapproved !== undefined) search.set('preapproved', String(params.preapproved));
+  if (params.limit) search.set('limit', String(params.limit));
+
+  const query = search.toString();
+  const path = query ? `/v1/leads?${query}` : '/v1/leads';
+  return apiFetch<LeadListResponse>(path);
+}
+
+export const getLead = (leadId: string) => apiFetch<LeadDetail>(`/v1/leads/${leadId}`);
+
+export interface UpdateLeadPayload {
+  ownerId?: string;
+  pipelineId?: string;
+  stageId?: string;
+  consentEmail?: boolean;
+  consentSMS?: boolean;
+  doNotContact?: boolean;
+}
+
+export const updateLead = (leadId: string, payload: UpdateLeadPayload) =>
+  apiFetch<LeadDetail>(`/v1/leads/${leadId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+
+export interface CreateLeadTouchpointPayload {
+  type: LeadTouchpointType;
+  channel?: MessageChannelType;
+  summary?: string;
+  body?: string;
+  metadata?: Record<string, unknown>;
+  occurredAt?: string;
+}
+
+export interface RecordLeadTouchpointResponse {
+  touchpoint: LeadTouchpoint;
+  lead: LeadSummary;
+}
+
+export const createLeadTouchpoint = (leadId: string, payload: CreateLeadTouchpointPayload) =>
+  apiFetch<RecordLeadTouchpointResponse>(`/v1/leads/${leadId}/touchpoints`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+
+export const createLeadNote = (leadId: string, body: string) =>
+  apiFetch<LeadNote>(`/v1/leads/${leadId}/notes`, {
+    method: 'POST',
+    body: JSON.stringify({ body })
+  });
+
+export interface CreateLeadTaskPayload {
+  title: string;
+  assigneeId?: string;
+  dueAt?: string;
+  status?: string;
+}
+
+export const createLeadTask = (leadId: string, payload: CreateLeadTaskPayload) =>
+  apiFetch<LeadTask>(`/v1/leads/${leadId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+
+export const updateLeadTask = (
+  leadId: string,
+  taskId: string,
+  payload: Partial<CreateLeadTaskPayload>
+) =>
+  apiFetch<LeadTask>(`/v1/leads/${leadId}/tasks/${taskId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
 
 export async function getBrokerDashboard(tenantId: string) {
   return apiFetch<BrokerDashboardSummary>(`/dashboards/broker?tenantId=${encodeURIComponent(tenantId)}`);
@@ -1158,6 +1415,105 @@ export async function fetchCapProgress(params: { userId?: string; teamId?: strin
   if (params.periodEnd) search.set('periodEnd', params.periodEnd);
   const query = search.toString();
   return apiFetch<CapProgressItem[]>(`/commission-plans/cap-progress${query ? `?${query}` : ''}`);
+}
+
+type CanonicalDraftAddress = {
+  street?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+};
+
+type CanonicalDraftDetails = {
+  beds?: number | null;
+  baths_total?: number | null;
+  baths_full?: number | null;
+  baths_half?: number | null;
+  year_built?: number | null;
+  living_area_sqft?: number | null;
+  total_area_sqft?: number | null;
+  lot_acres?: number | null;
+  lot_sqft?: number | null;
+  garage_spaces?: number | null;
+  pool?: boolean | null;
+  waterfront?: boolean | null;
+  subdivision?: string | null;
+};
+
+type CanonicalDraft = {
+  source: {
+    ingest_type: string;
+    vendor?: string;
+    document_version?: string;
+    mls_number?: string | null;
+  };
+  basic: {
+    status: string;
+    listing_status?: string | null;
+    property_type?: string | null;
+    list_price?: number | null;
+    price_currency?: string | null;
+    address?: CanonicalDraftAddress | null;
+  };
+  details: CanonicalDraftDetails;
+  taxes_fees?: {
+    tax_year?: number | null;
+    total_tax_bill?: number | null;
+    hoa_fee?: number | null;
+    master_hoa_fee?: number | null;
+    zoning?: string | null;
+  };
+  remarks: {
+    public?: string | null;
+  };
+  media: {
+    images: Array<{ url: string; score?: number }>;
+    cover_image_index: number;
+    detected_total?: number | null;
+  };
+  diagnostics?: {
+    missing?: string[];
+    warnings?: string[];
+    issues?: string[];
+  };
+};
+
+export interface DraftPdfUploadResponse {
+  tenantId: string | null;
+  filename: string;
+  mimeType: string;
+  draft: CanonicalDraft;
+  matches: Array<{
+    canonical: string;
+    score: number;
+    raw?: { label?: string };
+  }>;
+  extracted: ExtractedLabelValue[];
+}
+
+export interface DraftPdfUploadOptions {
+  vendor?: string;
+  documentVersion?: string;
+}
+
+export async function uploadDraftPdf(
+  file: File,
+  options: DraftPdfUploadOptions = {}
+): Promise<DraftPdfUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (options.vendor) {
+    formData.append('vendor', options.vendor);
+  }
+  if (options.documentVersion) {
+    formData.append('documentVersion', options.documentVersion);
+  }
+
+  return apiFetch<DraftPdfUploadResponse>('/drafts/upload', {
+    method: 'POST',
+    body: formData
+  });
 }
 
 export { apiFetch };

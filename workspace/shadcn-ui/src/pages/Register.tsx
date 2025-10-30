@@ -155,7 +155,7 @@ export default function Register() {
             className="flex items-center text-blue-600 hover:text-blue-700"
           >
             <HomeIcon className="h-5 w-5 mr-2" />
-            <HatchLogo className="h-7" />
+            <HatchLogo className="h-12 md:h-16" />
           </Button>
         </div>
         <h2 className="text-center text-3xl font-bold text-gray-900">

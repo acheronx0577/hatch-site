@@ -1,0 +1,29 @@
+:root {
+  --hatch-primary: #1f5fff;
+  --hatch-primary-accent: #0078ff;
+  --hatch-surface: #f8faff;
+  --hatch-card: #ffffff;
+  --hatch-text: #1c1c1e;
+  --hatch-text-muted: #6b7280;
+  --hatch-border: #e5e7eb;
+  --hatch-success: #00c853;
+  --hatch-warning: #ffb300;
+  --hatch-danger: #ff3b30;
+  --hatch-neutral: #e5e7eb;
+  --hatch-radius-lg: 1rem;
+  --hatch-glass: linear-gradient(135deg, rgba(31, 95, 255, 0.92) 0%, rgba(0, 120, 255, 0.85) 100%);
+  --hatch-glass-border: rgba(255, 255, 255, 0.35);
+  --hatch-glass-backdrop: blur(18px);
+  --hatch-gradient: linear-gradient(135deg, #1f5fff 0%, #00c6a2 100%);
+}
+
+[data-theme='dark'] {
+  --hatch-surface: #101226;
+  --hatch-card: #171a33;
+  --hatch-text: #f4f6ff;
+  --hatch-text-muted: #c0c4d6;
+  --hatch-border: rgba(255, 255, 255, 0.08);
+  --hatch-neutral: rgba(255, 255, 255, 0.12);
+  --hatch-glass: linear-gradient(135deg, rgba(31, 95, 255, 0.68) 0%, rgba(0, 120, 255, 0.52) 100%);
+  --hatch-glass-border: rgba(255, 255, 255, 0.12);
+}

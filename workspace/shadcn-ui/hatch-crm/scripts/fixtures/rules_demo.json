@@ -1,0 +1,25 @@
+{
+  "validation": [
+    {
+      "object": "cases",
+      "name": "Resolved/Closed requires description",
+      "dsl": {
+        "if": "status in ['Resolved','Closed']",
+        "then_required": ["description"]
+      }
+    }
+  ],
+  "assignment": [
+    {
+      "object": "opportunities",
+      "name": "High-value to Enterprise team",
+      "dsl": {
+        "when": "amount >= 50000",
+        "assign": {
+          "type": "static_owner",
+          "ownerId": "USER_ID_PLACEHOLDER"
+        }
+      }
+    }
+  ]
+}

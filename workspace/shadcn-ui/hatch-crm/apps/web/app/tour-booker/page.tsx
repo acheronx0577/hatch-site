@@ -6,10 +6,12 @@ export const dynamic = 'force-dynamic';
 const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID ?? process.env.VITE_TENANT_ID ?? 'tenant-hatch';
 
 export default async function TourBookerPage() {
-  const [contacts, listings] = await Promise.all([
+  const [{ items: contacts }, listingsResponse] = await Promise.all([
     listContacts(TENANT_ID),
     listListings(TENANT_ID)
   ]);
+
+  const listings = listingsResponse.items;
 
   return (
     <div className="max-w-xl space-y-4">

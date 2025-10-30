@@ -1,442 +1,721 @@
-import React, { useMemo } from 'react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import React, { useEffect, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { useNavigate } from 'react-router-dom'
 import { Navbar } from '@/components/layout/Navbar'
-import { useAuth } from '@/contexts/AuthContext'
-import { resolveUserIdentity } from '@/lib/utils'
-import { 
-  Search, 
-  Building2,
-  Users,
-  TrendingUp,
-  Shield,
-  Zap,
-  Star,
-  ArrowRight,
-  CheckCircle,
-  DollarSign,
-  BarChart3,
-  Upload,
-  UserPlus,
-  Home as HomeIcon
-} from 'lucide-react'
+import { Search, MapPin, TrendingUp, Clock, Flame, CheckCircle, Shield, Star, Users, Home as HomeIcon } from 'lucide-react'
+import { cn } from '@/lib/utils'
+
+type Persona = 'buyer' | 'seller' | 'pro'
+
+const priceOptions = [
+  { label: 'Any', value: 'any' },
+  { label: '$250K+', value: '250000' },
+  { label: '$500K+', value: '500000' },
+  { label: '$1M+', value: '1000000' },
+]
+
+const propertyTypeOptions = [
+  { label: 'House', value: 'house' },
+  { label: 'Condo', value: 'condo' },
+  { label: 'Townhome', value: 'townhome' },
+  { label: 'Land', value: 'land' },
+]
+
+const howItWorksSteps = [
+  {
+    title: 'Search & save',
+    description: 'Create a free account, save the homes you love, and filter by what matters most.',
+  },
+  {
+    title: 'Match with a local expert',
+    description: 'We connect you with a verified agent who specializes in your neighborhood.',
+  },
+  {
+    title: 'Tour & close with confidence',
+    description: 'Instant alerts, secure documents, and bank-level encryption every step of the way.',
+  },
+]
+
+const consumerFeatures = [
+  {
+    icon: Search,
+    title: 'Smart Search',
+    description: 'School zones, commute times, and AI-recommended homes tailored to your wishlist.',
+  },
+  {
+    icon: Flame,
+    title: 'Instant Alerts',
+    description: 'Be first to know when the right home hits the market or drops in price.',
+  },
+  {
+    icon: Users,
+    title: 'Verified Agents',
+    description: 'Hand-matched experts with Florida market experience and proven track records.',
+  },
+  {
+    icon: TrendingUp,
+    title: 'Market Insights',
+    description: 'Real-time pricing, neighborhood trends, and MLS data you can trust.',
+  },
+  {
+    icon: Shield,
+    title: 'Secure Offers',
+    description: 'E-sign, audit trails, and compliance baked in so every offer is protected.',
+  },
+  {
+    icon: HomeIcon,
+    title: 'One Team',
+    description: 'Lenders and title partners aligned from day one for a smooth close.',
+  },
+]
+
+const testimonials = [
+  {
+    name: 'Sarah Johnson',
+    city: 'Miami',
+    closedDate: 'Closed July ’25',
+    quote: 'Our agent understood every must-have. We found the right condo and closed below asking.',
+    initials: 'SJ',
+    rating: 5,
+  },
+  {
+    name: 'Luis Martinez',
+    city: 'Tampa',
+    closedDate: 'Closed April ’25',
+    quote: 'Listing alerts hit my phone before anyone else. We toured within hours and went under contract fast.',
+    initials: 'LM',
+    rating: 5,
+  },
+  {
+    name: 'Emily Chen',
+    city: 'Orlando',
+    closedDate: 'Closed May ’25',
+    quote: 'Transparent pricing data and a verified agent made selling our townhouse incredibly easy.',
+    initials: 'EC',
+    rating: 5,
+  },
+]
+
+const professionalProofPoints = [
+  'Pipeline automation, smart routing, and compliance in one command center.',
+  'Lead conversion up 38% across teams that deploy Hatch playbooks.',
+  'Bulk MLS import, audit-ready documents, and secure messaging keep every deal moving.',
+]
 
 export default function Home() {
   const navigate = useNavigate()
-  const { user, isBroker, session } = useAuth()
-  const identity = useMemo(
-    () => resolveUserIdentity(session?.profile, user?.email ?? null),
-    [session?.profile, user?.email]
-  )
-  const isAuthenticated = Boolean(user)
-  const dashboardPath = isBroker ? '/broker/dashboard' : '/customer/dashboard'
-  const dashboardLabel = isBroker ? 'Broker Dashboard' : 'My Dashboard'
-  const showPersonalGreeting = isAuthenticated && identity.displayName !== 'Your Account'
-  const heroGreeting = isAuthenticated
-    ? showPersonalGreeting
-      ? `Welcome back, ${identity.displayName}!`
-      : 'Welcome back!'
-    : null
+  const location = useLocation()
+  const [persona, setPersona] = useState<Persona>('buyer')
+  const [searchLocation, setSearchLocation] = useState('')
+  const [activePrice, setActivePrice] = useState(priceOptions[0].value)
+  const [activePropertyTypes, setActivePropertyTypes] = useState<string[]>([])
 
-  const handleAccountNavigation = () => {
-    if (isAuthenticated) {
-      navigate(dashboardPath)
-      return
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const personaParam = params.get('persona')
+    if (personaParam === 'buyer' || personaParam === 'seller' || personaParam === 'pro') {
+      setPersona(personaParam)
     }
-    navigate('/register')
+  }, [location.search])
+
+  useEffect(() => {
+    if (location.hash) {
+      const element = document.getElementById(location.hash.replace('#', ''))
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+  }, [location.hash, location.pathname])
+
+  const personaContent: Record<Persona, { subhead: string; primaryLabel: string; secondaryLabel: string }> = {
+    buyer: {
+      subhead: 'Search 25K+ listings, get instant alerts, and work with a verified local expert.',
+      primaryLabel: 'Search homes',
+      secondaryLabel: 'Get matched with an agent',
+    },
+    seller: {
+      subhead: 'See what buyers love, price your home with confidence, and list with a top Florida agent.',
+      primaryLabel: 'Request a pricing review',
+      secondaryLabel: 'Talk to a listing expert',
+    },
+    pro: {
+      subhead: 'Run your brokerage on Hatch with modern tools, automation, and real-time insights.',
+      primaryLabel: 'Open Broker Dashboard',
+      secondaryLabel: 'Book a demo',
+    },
   }
 
-  const handleBrokerNavigation = () => {
-    if (isBroker) {
-      navigate('/broker/dashboard')
-      return
-    }
-    navigate('/broker/pricing')
+  const heroContent = personaContent[persona]
+
+  const handlePersonaChange = (nextPersona: Persona) => {
+    setPersona(nextPersona)
+    const params = new URLSearchParams(location.search)
+    params.set('persona', nextPersona)
+    const searchString = params.toString()
+    const target = `${location.pathname}${searchString ? `?${searchString}` : ''}${location.hash || ''}`
+    navigate(target, { replace: true })
   }
 
-  const handleBrokerLoginLink = () => {
-    if (isBroker) {
-      navigate('/broker/dashboard')
+  const handlePrimaryCta = () => {
+    if (persona === 'buyer') {
+      navigate('/properties')
       return
     }
-    if (isAuthenticated) {
-      navigate('/broker/pricing')
+    if (persona === 'seller') {
+      navigate('/broker/pricing', { state: { intent: 'seller' } })
       return
     }
-    navigate('/login')
+    navigate('/broker/dashboard')
   }
 
-  const features = [
-    {
-      icon: Search,
-      title: "Smart Property Search",
-      description: "Advanced search filters to find your perfect property with AI-powered recommendations."
-    },
-    {
-      icon: Building2,
-      title: "Professional Listings",
-      description: "High-quality property listings with detailed information and professional photography."
-    },
-    {
-      icon: Users,
-      title: "Expert Agents",
-      description: "Connect with top-rated real estate professionals in your area."
-    },
-    {
-      icon: TrendingUp,
-      title: "Market Analytics",
-      description: "Real-time market data and trends to make informed decisions."
-    },
-    {
-      icon: Shield,
-      title: "Secure Transactions",
-      description: "Bank-level security for all your real estate transactions and data."
-    },
-    {
-      icon: Zap,
-      title: "Instant Notifications",
-      description: "Get notified immediately when properties matching your criteria become available."
+  const handleSecondaryCta = () => {
+    if (persona === 'buyer') {
+      navigate('/match?intent=buyer')
+      return
     }
-  ]
+    if (persona === 'seller') {
+      navigate('/match?intent=seller')
+      return
+    }
+    navigate('/broker/demo')
+  }
 
-  const brokerFeatures = [
-    {
-      icon: Upload,
-      title: "Bulk Upload System",
-      description: "Upload hundreds of listings at once with our CSV/Excel import system"
-    },
-    {
-      icon: BarChart3,
-      title: "Advanced Analytics",
-      description: "Track leads, conversions, and market performance with detailed reports"
-    },
-    {
-      icon: Users,
-      title: "Lead Management",
-      description: "Comprehensive CRM system to manage and nurture your leads"
-    },
-    {
-      icon: Building2,
-      title: "Team Collaboration",
-      description: "Manage your team, assign leads, and track performance"
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const params = new URLSearchParams()
+    if (searchLocation.trim()) {
+      params.set('q', searchLocation.trim())
     }
-  ]
+    if (activePrice !== 'any') {
+      params.set('price', activePrice)
+    }
+    if (activePropertyTypes.length) {
+      params.set('types', activePropertyTypes.join(','))
+    }
+    const queryString = params.toString()
+    navigate(`/properties${queryString ? `?${queryString}` : ''}`)
+  }
 
-  const testimonials = [
-    {
-      name: "Sarah Johnson",
-      role: "Home Buyer",
-      content: "Hatch made finding my dream home so easy. The search filters are incredibly detailed and the agent recommendations were spot on!",
-      rating: 5
-    },
-    {
-      name: "Mike Rodriguez",
-      role: "Real Estate Broker",
-      content: "The broker dashboard has transformed my business. The bulk upload feature saves me hours every week, and the analytics help me make better decisions.",
-      rating: 5
-    },
-    {
-      name: "Emily Chen",
-      role: "Property Investor",
-      content: "The market analytics and instant notifications have given me a competitive edge. I've closed 3 deals this month thanks to Hatch.",
-      rating: 5
-    }
-  ]
+  const togglePropertyType = (value: string) => {
+    setActivePropertyTypes((prev) =>
+      prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
+    )
+  }
+
+  const testimonialsTitle = 'Loved by Florida home buyers'
+
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-surface-background">
       <Navbar />
 
-      {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-50 to-indigo-100 py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-4xl mx-auto">
-            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
-              Discover Your Perfect Property with 
-              <span className="text-blue-600"> Hatch</span>
-            </h1>
-            {heroGreeting && (
-              <p className="text-lg text-blue-700 font-semibold mb-3">
-                {heroGreeting}
-              </p>
-            )}
-            <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-              The most advanced real estate platform connecting buyers, sellers, and professionals. 
-              Find your dream home or grow your real estate business with powerful tools and insights.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button 
-                size="lg" 
-                onClick={() => navigate('/properties')}
-                className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-3"
+      <main>
+        {/* Hero */}
+        <section
+          id="hero"
+          className="relative overflow-hidden bg-gradient-to-b from-ink-50 via-ink-50 to-brand-green-100/40"
+        >
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -left-32 top-[-12rem] h-[28rem] w-[28rem] rounded-full bg-brand-gradient blur-3xl opacity-25" />
+            <div className="absolute bottom-[-14rem] right-[-8rem] h-[32rem] w-[32rem] rounded-full bg-brand-gradient-soft blur-3xl opacity-60" />
+          </div>
+
+          <div className="container relative mx-auto max-w-6xl px-4 py-6xl">
+            <div className="grid gap-12 lg:grid-cols-12 lg:items-start">
+              <div className="space-y-8 lg:col-span-7">
+                <div className="flex flex-wrap items-center gap-3 text-sm" id="agent-match">
+                  <button
+                    type="button"
+                    className={cn(
+                      'rounded-full px-4 py-2 font-semibold transition-colors',
+                      persona === 'buyer'
+                        ? 'bg-brand-blue-600 text-white'
+                        : 'bg-white/60 text-ink-500 hover:bg-white/80'
+                    )}
+                    onClick={() => handlePersonaChange('buyer')}
+                    aria-pressed={persona === 'buyer'}
+                  >
+                    I’m buying
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      'rounded-full px-4 py-2 font-semibold transition-colors',
+                      persona === 'seller'
+                        ? 'bg-brand-blue-600 text-white'
+                        : 'bg-white/60 text-ink-500 hover:bg-white/80'
+                    )}
+                    onClick={() => handlePersonaChange('seller')}
+                    aria-pressed={persona === 'seller'}
+                  >
+                    I’m selling
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      'rounded-full px-4 py-2 font-semibold transition-colors',
+                      persona === 'pro'
+                        ? 'bg-brand-blue-600 text-white'
+                        : 'bg-white/60 text-ink-500 hover:bg-white/80'
+                    )}
+                    onClick={() => handlePersonaChange('pro')}
+                    aria-pressed={persona === 'pro'}
+                  >
+                    I’m a pro
+                  </button>
+                  <Button
+                    variant="link"
+                    className="ml-auto text-sm font-semibold text-brand-blue-600 hover:text-brand-blue-700"
+                    onClick={() => navigate('/#for-pros')}
+                  >
+                    For professionals →
+                  </Button>
+                </div>
+
+                <div className="space-y-6">
+                  <h1 className="max-w-2xl text-ink-900">
+                    Discover your next opportunity with{' '}
+                    <span className="bg-gradient-to-r from-brand-blue-600 via-brand-blue-500 to-brand-green-500 bg-clip-text text-transparent">
+                      Hatch
+                    </span>
+                    .
+                  </h1>
+                  <p className="max-w-xl text-lg text-ink-500">{heroContent.subhead}</p>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <Button size="lg" onClick={handlePrimaryCta}>
+                    <Search className="h-5 w-5" />
+                    {heroContent.primaryLabel}
+                  </Button>
+                  <Button size="lg" variant="outline" className="shadow-none" onClick={handleSecondaryCta}>
+                    {heroContent.secondaryLabel}
+                  </Button>
+                </div>
+              </div>
+
+              <aside
+                id="market-snapshot"
+                className="relative flex flex-col rounded-[28px] border border-[var(--glass-border)] bg-white/85 p-6 shadow-brand-lg backdrop-blur-xl lg:col-span-5"
               >
-                <Search className="w-5 h-5 mr-2" />
-                Search Properties
-              </Button>
-              <Button 
-                size="lg" 
-                variant="outline"
-                onClick={handleBrokerNavigation}
-                className="text-lg px-8 py-3"
-              >
-                <Building2 className="w-5 h-5 mr-2" />
-                {isBroker ? 'View Broker Dashboard' : 'For Brokers'}
-              </Button>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-brand-blue-600">Miami market snapshot</p>
+                    <h3 className="text-xl font-semibold text-ink-800">This week at a glance</h3>
+                  </div>
+                  <Badge className="border-0 bg-brand-blue-600/15 text-brand-blue-700">Updated today</Badge>
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-4">
+                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Median price</div>
+                    <div className="mt-1 text-2xl font-semibold text-ink-900">$642K</div>
+                    <div className="text-sm text-ink-500">+2.4% vs last month</div>
+                  </div>
+                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Days on market</div>
+                    <div className="mt-1 text-2xl font-semibold text-ink-900">27</div>
+                    <div className="text-sm text-ink-500">Faster than statewide avg.</div>
+                  </div>
+                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-ink-400">New this week</div>
+                    <div className="mt-1 text-2xl font-semibold text-ink-900">1,124</div>
+                    <div className="text-sm text-ink-500">Fresh listings in Miami-Dade</div>
+                  </div>
+                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4">
+                    <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Price drops</div>
+                    <div className="mt-1 text-2xl font-semibold text-ink-900">312</div>
+                    <div className="text-sm text-ink-500">Homes with recent reductions</div>
+                  </div>
+                </div>
+                <div className="mt-6 flex items-center justify-between text-sm text-ink-500">
+                  <span>Source: South Florida MLS feed</span>
+                  <Button
+                    variant="link"
+                    className="p-0 text-brand-blue-600 hover:text-brand-blue-700"
+                    onClick={() => navigate('/market/miami')}
+                  >
+                    See full Miami trends →
+                  </Button>
+                </div>
+              </aside>
+            </div>
+
+            <form
+              className="relative z-10 mt-10 rounded-[28px] border border-[var(--border-subtle)] bg-white/95 p-6 shadow-brand-md"
+              onSubmit={handleSearchSubmit}
+            >
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-end">
+                <div className="flex-1 space-y-2">
+                  <label htmlFor="hero-location" className="text-sm font-semibold text-ink-700">
+                    Location
+                  </label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-brand-blue-600" />
+                    <input
+                      id="hero-location"
+                      name="location"
+                      type="text"
+                      placeholder="City, neighborhood, or school"
+                      value={searchLocation}
+                      onChange={(event) => setSearchLocation(event.target.value)}
+                      className="w-full rounded-[var(--radius-lg)] border border-[var(--border-subtle)] bg-white px-10 py-3 text-base text-ink-700 shadow-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--focus-ring)]"
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <span className="text-sm font-semibold text-ink-700">Price</span>
+                  <div className="flex flex-wrap gap-2">
+                    {priceOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setActivePrice(option.value)}
+                        className={cn(
+                          'rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+                          activePrice === option.value
+                            ? 'border-transparent bg-brand-blue-600 text-white shadow-brand'
+                            : 'border-[var(--border-subtle)] bg-white/70 text-ink-500 hover:bg-ink-75'
+                        )}
+                        aria-pressed={activePrice === option.value}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1 space-y-2">
+                  <span className="text-sm font-semibold text-ink-700">Property type</span>
+                  <div className="flex flex-wrap gap-2">
+                    {propertyTypeOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => togglePropertyType(option.value)}
+                        className={cn(
+                          'rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+                          activePropertyTypes.includes(option.value)
+                            ? 'border-transparent bg-brand-green-500 text-white shadow-brand'
+                            : 'border-[var(--border-subtle)] bg-white/70 text-ink-500 hover:bg-ink-75'
+                        )}
+                        aria-pressed={activePropertyTypes.includes(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="w-full lg:w-auto">
+                  <Button size="lg" type="submit" className="w-full">
+                    <Search className="h-5 w-5" />
+                    Search
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        {/* How it works */}
+        <section id="how-it-works" className="bg-brand-green-100/50 py-5xl">
+          <div className="container mx-auto max-w-5xl px-4">
+            <div className="text-center">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-blue-600">How Hatch works</p>
+              <h2 className="mt-4 text-ink-900">Three steps to closing day</h2>
+              <p className="mt-3 text-lg text-ink-600">No spam. Cancel anytime.</p>
+            </div>
+            <div className="mt-12 grid gap-6 md:grid-cols-3">
+              {howItWorksSteps.map((step, index) => (
+                <Card
+                  key={step.title}
+                  className="h-full border-transparent bg-white/90 shadow-brand-md transition-transform duration-200 hover:-translate-y-1"
+                >
+                  <CardHeader className="p-6 pb-3">
+                    <Badge className="mb-4 w-fit border-0 bg-brand-blue-600/15 text-brand-blue-700">
+                      Step {index + 1}
+                    </Badge>
+                    <CardTitle className="text-lg text-ink-800">{step.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-6 pb-6 text-ink-600">{step.description}</CardContent>
+                </Card>
+              ))}
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Features Section */}
-      <section className="py-20 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Why Choose Hatch?
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              We've built the most comprehensive real estate platform with cutting-edge technology 
-              and user-friendly design to make your property journey seamless.
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {features.map((feature, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <feature.icon className="h-12 w-12 text-blue-600 mb-4" />
-                  <CardTitle className="text-xl">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-gray-600">
-                    {feature.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
+        {/* Consumer feature grid */}
+        <section id="why-hatch" className="py-5xl">
+          <div className="container mx-auto max-w-6xl px-4">
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-blue-600">Why choose Hatch?</p>
+              <h2 className="mt-4 text-ink-900">Built for Florida buyers and sellers</h2>
+              <p className="mt-4 text-lg text-ink-500">
+                Warm, human guidance meets data you can trust. Every tool is designed to get you from search to closing
+                without surprises.
+              </p>
+            </div>
 
-      {/* Broker Section */}
-      <section className="py-20 bg-gray-50">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              Supercharge Your Real Estate Business
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Join thousands of successful brokers and agents who use Hatch to manage listings, 
-              generate leads, and close more deals.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="space-y-6">
-                {brokerFeatures.map((feature, index) => (
-                  <div key={index} className="flex items-start space-x-4">
-                    <div className="bg-blue-100 p-3 rounded-lg">
-                      <feature.icon className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                        {feature.title}
-                      </h3>
-                      <p className="text-gray-600">
-                        {feature.description}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="mt-8">
-                <Button 
-                  size="lg"
-                  onClick={handleBrokerNavigation}
-                  className="bg-green-600 hover:bg-green-700"
+            <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {consumerFeatures.map((feature) => (
+                <Card
+                  key={feature.title}
+                  className="group h-full border border-[var(--border-subtle)] bg-white/95 shadow-none transition-all duration-200 hover:-translate-y-1 hover:shadow-brand-md"
                 >
-                  <DollarSign className="w-5 h-5 mr-2" />
-                  {isBroker ? 'Open Broker Dashboard' : 'View Pricing Plans'}
-                  <ArrowRight className="w-5 h-5 ml-2" />
+                  <CardHeader className="p-8 pb-4">
+                    <div className="mb-6 inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-blue-600/12 text-brand-blue-600">
+                      <feature.icon className="h-6 w-6" />
+                    </div>
+                    <CardTitle className="text-lg text-ink-800">{feature.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-8 pb-10 text-ink-500">{feature.description}</CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Testimonials */}
+        <section id="testimonials" className="bg-ink-75 py-5xl">
+          <div className="container mx-auto max-w-6xl px-4">
+            <div className="mx-auto max-w-2xl text-center">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-blue-600">Social proof</p>
+              <h2 className="mt-4 text-ink-900">{testimonialsTitle}</h2>
+              <p className="mt-4 text-lg text-ink-500">
+                Thousands of Floridians trust Hatch to guide their home journey with clarity and confidence.
+              </p>
+            </div>
+
+            <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {testimonials.map((testimonial) => (
+                <Card
+                  key={testimonial.name}
+                  className="flex h-full flex-col border border-transparent bg-white/95 shadow-brand transition-transform duration-200 hover:-translate-y-1 hover:shadow-brand-md"
+                >
+                  <CardHeader className="p-8 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-blue-600/12 text-brand-blue-600 font-semibold">
+                        {testimonial.initials}
+                      </div>
+                      <div className="text-left">
+                        <CardTitle className="text-lg text-ink-800">{testimonial.name}</CardTitle>
+                        <p className="text-sm text-ink-500">
+                          {testimonial.closedDate} · {testimonial.city}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-1 text-brand-green-500">
+                      {Array.from({ length: testimonial.rating }).map((_, index) => (
+                        <Star key={index} className="h-4 w-4 fill-current" />
+                      ))}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex flex-1 flex-col px-8 pb-8">
+                    <p className="text-base text-ink-600">“{testimonial.quote}”</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Professional band */}
+        <section id="for-pros" className="bg-ink-900 py-5xl text-ink-50">
+          <div className="container mx-auto max-w-6xl px-4">
+            <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
+              <div className="space-y-6 lg:col-span-6">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-green-500">For real estate professionals</p>
+                <h2 className="text-3xl font-semibold text-ink-50">Modern tools for brokerages, teams, and top agents</h2>
+                <p className="text-lg text-ink-200">
+                  Discover your next opportunity with Hatch—built to supercharge pipeline management, team performance,
+                  and compliance without the busywork.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button size="lg" onClick={() => navigate('/broker/dashboard')}>
+                    <TrendingUp className="h-5 w-5" />
+                    Open Broker Dashboard
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="border-white/30 text-ink-50 hover:bg-white/10"
+                    onClick={() => navigate('/broker/demo')}
+                  >
+                    Book a demo
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-6 rounded-[28px] border border-white/10 bg-white/5 p-8 shadow-brand-lg backdrop-blur-sm lg:col-span-6">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-[var(--radius-md)] bg-white/8 p-4">
+                    <div className="flex items-center gap-3 text-brand-green-400">
+                      <TrendingUp className="h-5 w-5" />
+                      <span className="text-sm font-semibold uppercase tracking-[0.08em]">Lead conversion</span>
+                    </div>
+                    <p className="mt-3 text-3xl font-semibold text-ink-50">↑ 38%</p>
+                    <p className="text-sm text-ink-200">Teams running Hatch playbooks</p>
+                  </div>
+                  <div className="rounded-[var(--radius-md)] bg-white/8 p-4">
+                    <div className="flex items-center gap-3 text-brand-green-400">
+                      <Clock className="h-5 w-5" />
+                      <span className="text-sm font-semibold uppercase tracking-[0.08em]">Time saved</span>
+                    </div>
+                    <p className="mt-3 text-3xl font-semibold text-ink-50">12 hrs/week</p>
+                    <p className="text-sm text-ink-200">Average per broker admin</p>
+                  </div>
+                </div>
+                <ul className="space-y-3 text-sm text-ink-200">
+                  {professionalProofPoints.map((point) => (
+                    <li key={point} className="flex items-start gap-2">
+                      <CheckCircle className="mt-0.5 h-4 w-4 text-brand-green-500" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="relative py-5xl">
+          <div className="container mx-auto max-w-5xl px-4">
+            <div className="relative overflow-hidden rounded-[32px] bg-brand-gradient px-8 py-12 text-ink-50 shadow-brand-lg">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25)_0,_transparent_60%)]" />
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <h2 className="text-3xl font-semibold md:text-4xl">Ready to get started?</h2>
+                <p className="mt-4 max-w-2xl text-lg text-ink-100">
+                  Search homes, save your favourites, or get matched with a verified Florida expert in minutes.
+                </p>
+                <div className="mt-8 flex w-full flex-col gap-4 sm:w-auto sm:flex-row">
+                  <Button size="lg" variant="secondary" className="bg-ink-50 text-ink-900 hover:bg-ink-75" onClick={() => navigate('/properties')}>
+                    <Search className="h-5 w-5" />
+                    Start searching
+                  </Button>
+                  <Button size="lg" onClick={() => navigate('/match?intent=buyer')}>
+                    <Users className="h-5 w-5" />
+                    Get matched with an agent
+                  </Button>
+                </div>
+                <Button
+                  variant="link"
+                  className="mt-4 text-sm text-ink-100 hover:text-ink-50"
+                  onClick={() => navigate('/#for-pros')}
+                >
+                  Are you a broker? Learn more →
                 </Button>
               </div>
             </div>
-
-            <div className="bg-white p-8 rounded-xl shadow-lg">
-              <h3 className="text-2xl font-bold text-gray-900 mb-6">
-                Success Stories
-              </h3>
-              <div className="space-y-6">
-                <div className="border-l-4 border-blue-600 pl-4">
-                  <p className="text-gray-600 italic mb-2">
-                    "Hatch increased my lead conversion rate by 40% in just 3 months. 
-                    The analytics dashboard shows me exactly where my best leads come from."
-                  </p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    - Jennifer Martinez, Top Producer
-                  </p>
-                </div>
-                <div className="border-l-4 border-green-600 pl-4">
-                  <p className="text-gray-600 italic mb-2">
-                    "The bulk upload feature is a game-changer. I can now manage 500+ listings 
-                    efficiently and focus on what matters most - closing deals."
-                  </p>
-                  <p className="text-sm font-semibold text-gray-900">
-                    - Robert Kim, Brokerage Owner
-                  </p>
-                </div>
-              </div>
-            </div>
           </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="py-20 bg-white">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-gray-900 mb-4">
-              What Our Users Say
-            </h2>
-            <p className="text-xl text-gray-600">
-              Join thousands of satisfied customers who found their perfect match with Hatch
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-center space-x-1 mb-2">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                    ))}
-                  </div>
-                  <CardTitle className="text-lg">{testimonial.name}</CardTitle>
-                  <CardDescription>{testimonial.role}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600 italic">"{testimonial.content}"</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 bg-blue-600">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-4xl font-bold text-white mb-4">
-            Ready to Find Your Next Hatch?
-          </h2>
-          <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-            Join thousands of users who have found their perfect property or grown their business with Hatch. 
-            Start your journey today.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button 
-              size="lg" 
-              variant="secondary"
-              onClick={() => navigate('/properties')}
-              className="text-lg px-8 py-3"
-            >
-              <Search className="w-5 h-5 mr-2" />
-              Start Searching
-            </Button>
-            {isAuthenticated ? (
-              <Button 
-                size="lg" 
-                onClick={handleAccountNavigation}
-                className="text-lg px-8 py-3 bg-white text-blue-600 border-white hover:bg-blue-50 hover:text-blue-700"
-              >
-                <ArrowRight className="w-5 h-5 mr-2" />
-                Go to {dashboardLabel}
-              </Button>
-            ) : (
-              <Button 
-                size="lg" 
-                onClick={handleAccountNavigation}
-                className="text-lg px-8 py-3 bg-white text-blue-600 border-white hover:bg-blue-50 hover:text-blue-700"
-              >
-                <UserPlus className="w-5 h-5 mr-2" />
-                Create Account
-              </Button>
-            )}
-          </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+      <footer className="bg-ink-900 py-12 text-ink-300">
+        <div className="container mx-auto max-w-6xl px-4">
+          <div className="grid gap-8 md:grid-cols-4">
             <div>
-              <div className="flex items-center mb-4">
-                <HomeIcon className="h-6 w-6 text-blue-400 mr-2" />
+              <div className="flex items-center gap-2 text-ink-50">
+                <HomeIcon className="h-6 w-6 text-brand-blue-500" />
                 <span className="text-lg font-bold">Hatch</span>
               </div>
-              <p className="text-gray-400">
-                Find Your Next Hatch. The most advanced real estate platform for buyers, sellers, and professionals.
+              <p className="mt-3 text-sm text-ink-400">
+                Find your next Hatch. A premium real estate experience for buyers, sellers, and the teams who support them.
               </p>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">For Buyers</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto" onClick={() => navigate('/properties')}>Search Properties</Button></li>
+              <h4 className="font-semibold text-ink-100">For Buyers</h4>
+              <ul className="mt-3 space-y-2 text-sm">
                 <li>
                   <Button
                     variant="link"
-                    className="text-gray-400 p-0 h-auto"
-                    onClick={handleAccountNavigation}
+                    className="p-0 text-ink-300 hover:text-ink-50"
+                    onClick={() => navigate('/properties')}
                   >
-                    {isAuthenticated ? `Go to ${dashboardLabel}` : 'Create Account'}
+                    Search properties
                   </Button>
                 </li>
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto">Mortgage Calculator</Button></li>
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto">Neighborhood Guide</Button></li>
+                <li>
+                  <Button
+                    variant="link"
+                    className="p-0 text-ink-300 hover:text-ink-50"
+                    onClick={() => navigate('/match?intent=buyer')}
+                  >
+                    Get matched with an agent
+                  </Button>
+                </li>
+                <li>
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                    Mortgage calculator
+                  </Button>
+                </li>
+                <li>
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                    Neighborhood guide
+                  </Button>
+                </li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">For Professionals</h4>
-              <ul className="space-y-2 text-gray-400">
+              <h4 className="font-semibold text-ink-100">For Professionals</h4>
+              <ul className="mt-3 space-y-2 text-sm">
                 <li>
                   <Button
                     variant="link"
-                    className="text-gray-400 p-0 h-auto"
-                    onClick={handleBrokerNavigation}
+                    className="p-0 text-ink-300 hover:text-ink-50"
+                    onClick={() => navigate('/broker/dashboard')}
                   >
-                    {isBroker ? 'Broker Dashboard' : 'Pricing Plans'}
+                    Broker dashboard
                   </Button>
                 </li>
                 <li>
                   <Button
                     variant="link"
-                    className="text-gray-400 p-0 h-auto"
-                    onClick={handleBrokerLoginLink}
+                    className="p-0 text-ink-300 hover:text-ink-50"
+                    onClick={() => navigate('/broker/demo')}
                   >
-                    {isBroker ? 'Manage Team' : 'Broker Login'}
+                    Book a demo
                   </Button>
                 </li>
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto">API Documentation</Button></li>
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto">Support Center</Button></li>
+                <li>
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                    API documentation
+                  </Button>
+                </li>
+                <li>
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                    Support center
+                  </Button>
+                </li>
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Company</h4>
-              <ul className="space-y-2 text-gray-400">
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto">About Us</Button></li>
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto">Careers</Button></li>
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto">Privacy Policy</Button></li>
-                <li><Button variant="link" className="text-gray-400 p-0 h-auto">Terms of Service</Button></li>
+              <h4 className="font-semibold text-ink-100">Company</h4>
+              <ul className="mt-3 space-y-2 text-sm">
+                <li>
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                    About us
+                  </Button>
+                </li>
+                <li>
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                    Careers
+                  </Button>
+                </li>
+                <li>
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                    Privacy policy
+                  </Button>
+                </li>
+                <li>
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                    Terms of service
+                  </Button>
+                </li>
               </ul>
             </div>
           </div>
-          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+          <div className="mt-10 border-t border-white/10 pt-6 text-center text-sm text-ink-400">
             <p>&copy; 2024 Hatch. All rights reserved.</p>
           </div>
         </div>

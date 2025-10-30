@@ -10729,6 +10729,171 @@
           }
         ]
       }
+    },
+    "/admin/audit": {
+      "get": {
+        "operationId": "AuditController_list",
+        "parameters": [
+          {
+            "name": "actorId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by actor (user) id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "object",
+            "required": false,
+            "in": "query",
+            "description": "Filter by audited object key (e.g., accounts)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "objectId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by audited record id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "required": false,
+            "in": "query",
+            "description": "Filter by audit action",
+            "schema": {
+              "enum": [],
+              "type": "number"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "Filter events created at or after this ISO timestamp",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "description": "Filter events created at or before this ISO timestamp",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Admin/Audit"
+        ],
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
     }
   },
   "info": {
@@ -10740,6 +10905,9 @@
   "tags": [
     {
       "name": "Accounts"
+    },
+    {
+      "name": "Admin/Audit"
     },
     {
       "name": "Admin/Layout"
@@ -14315,6 +14483,98 @@
           "object",
           "kind",
           "fields"
+        ]
+      },
+      "AuditActorDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Actor user identifier"
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Actor first name"
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Actor last name"
+          },
+          "email": {
+            "type": "string",
+            "description": "Actor email address"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "AuditEventDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Audit event identifier"
+          },
+          "action": {
+            "type": "number",
+            "enum": []
+          },
+          "object": {
+            "type": "string",
+            "description": "Audited object key"
+          },
+          "objectId": {
+            "type": "string",
+            "description": "Audited record id"
+          },
+          "actor": {
+            "description": "Actor information if available",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AuditActorDto"
+              }
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "Timestamp when the audit event was recorded"
+          },
+          "diff": {
+            "type": "object",
+            "description": "Diff payload recorded by the audit interceptor"
+          },
+          "ip": {
+            "type": "string",
+            "description": "IP address associated with the request, if captured"
+          },
+          "userAgent": {
+            "type": "string",
+            "description": "User agent string associated with the request, if captured"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "createdAt"
+        ]
+      },
+      "AuditListResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEventDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "description": "Cursor to fetch the next page, if any"
+          }
+        },
+        "required": [
+          "items"
         ]
       }
     }

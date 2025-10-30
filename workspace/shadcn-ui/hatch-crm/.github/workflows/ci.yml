@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 jobs:
@@ -10,59 +9,52 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
-        ports:
-          - 5432:5432
+        image: postgres:16
         env:
-          POSTGRES_USER: hatch
-          POSTGRES_PASSWORD: hatch
-          POSTGRES_DB: hatch_crm
-        options: >-
-          --health-cmd "pg_isready -U hatch"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: crm
         ports:
-          - 6379:6379
+          - '5432:5432'
         options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - '6379:6379'
     env:
-      DATABASE_URL: postgresql://hatch:hatch@localhost:5432/hatch_crm?schema=public
-      SHADOW_DATABASE_URL: postgresql://hatch:hatch@localhost:5432/hatch_crm_shadow?schema=public
-      REDIS_URL: redis://localhost:6379
-      NEXT_PUBLIC_API_URL: http://localhost:4000
-      NEXT_PUBLIC_TENANT_ID: tenant-hatch
-      NEXT_PUBLIC_DEFAULT_USER_ID: user-agent
-      EMAIL_SENDER_DOMAIN: example.hatchcrm.test
-      API_HOST: 0.0.0.0
-      API_PORT: 4000
-      API_WEBHOOK_SECRET: ci-secret
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/crm
+      SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/crm_shadow
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          version: 8.15.4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+          node-version: '20'
           cache: 'pnpm'
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Generate Prisma client
-        run: pnpm --filter @hatch/db generate
-      - name: Run migrations
-        run: pnpm --filter @hatch/db migrate:dev -- --name ci
-      - name: Seed database
-        run: pnpm --filter @hatch/db seed
-      - name: Lint
-        run: pnpm lint
-      - name: Unit tests
-        run: pnpm test
-      - name: Build
-        run: pnpm build
+      - name: Prisma migrate
+        run: pnpm exec prisma migrate deploy
+      - name: Lint & typecheck
+        run: |
+          pnpm run lint --if-present
+          pnpm run typecheck --if-present
+      - name: Tests
+        run: pnpm run test -- --coverage
+      - name: OpenAPI drift check
+        run: ./scripts/check-openapi-drift.sh
+      - name: Verify committed OpenAPI specs
+        run: pnpm run spec:verify
+      - name: Migration safety check
+        run: ./scripts/check-migration-safety.sh
+      - name: Schema snapshot drift
+        run: ./scripts/update-schema-snapshot.sh

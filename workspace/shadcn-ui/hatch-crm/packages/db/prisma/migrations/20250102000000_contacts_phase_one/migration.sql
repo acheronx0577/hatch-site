@@ -14,16 +14,26 @@ ALTER TYPE "ActivityType" ADD VALUE IF NOT EXISTS 'NOTE_ADDED';
 -- Buyer rep status enum for contacts
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'BuyerRepStatus') THEN
-    CREATE TYPE "BuyerRepStatus" AS ENUM ('ACTIVE', 'NONE', 'EXPIRED');
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'BuyerRepStatus'
+      AND typnamespace = 'public'::regnamespace
+  ) THEN
+    CREATE TYPE "public"."BuyerRepStatus" AS ENUM ('ACTIVE', 'NONE', 'EXPIRED');
   END IF;
 END$$;
 
 -- Merge status enum for contact merge proposals
 DO $$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'MergeStatus') THEN
-    CREATE TYPE "MergeStatus" AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type
+    WHERE typname = 'MergeStatus'
+      AND typnamespace = 'public'::regnamespace
+  ) THEN
+    CREATE TYPE "public"."MergeStatus" AS ENUM ('PENDING', 'ACCEPTED', 'REJECTED');
   END IF;
 END$$;
 

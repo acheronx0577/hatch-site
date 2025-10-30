@@ -441,6 +441,164 @@ export interface Database {
           updated_at?: string
         }
       }
+      firm_memberships: {
+        Row: {
+          id: string
+          user_id: string
+          firm_id: string
+          role: string
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          firm_id: string
+          role?: string
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          firm_id?: string
+          role?: string
+          created_at?: string
+          updated_at?: string | null
+        }
+      }
+      firms: {
+        Row: {
+          id: string
+          name: string
+          license_number: string | null
+          address: string | null
+          phone: string | null
+          email: string | null
+          primary_contact_email: string | null
+          subscription_tier: string | null
+          subscription_status: string | null
+          seats_purchased: number | null
+          seats_used: number | null
+          stripe_customer_id: string | null
+          subscription_id: string | null
+          current_period_start: string | null
+          current_period_end: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          license_number?: string | null
+          address?: string | null
+          phone?: string | null
+          email?: string | null
+          primary_contact_email?: string | null
+          subscription_tier?: string | null
+          subscription_status?: string | null
+          seats_purchased?: number | null
+          seats_used?: number | null
+          stripe_customer_id?: string | null
+          subscription_id?: string | null
+          current_period_start?: string | null
+          current_period_end?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          license_number?: string | null
+          address?: string | null
+          phone?: string | null
+          email?: string | null
+          primary_contact_email?: string | null
+          subscription_tier?: string | null
+          subscription_status?: string | null
+          seats_purchased?: number | null
+          seats_used?: number | null
+          stripe_customer_id?: string | null
+          subscription_id?: string | null
+          current_period_start?: string | null
+          current_period_end?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
+      agent_invitations: {
+        Row: {
+          id: string
+          firm_id: string
+          invited_by: string
+          email: string
+          role: string
+          status: string
+          token: string
+          expires_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          firm_id: string
+          invited_by: string
+          email: string
+          role?: string
+          status?: string
+          token: string
+          expires_at: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          firm_id?: string
+          invited_by?: string
+          email?: string
+          role?: string
+          status?: string
+          token?: string
+          expires_at?: string
+          created_at?: string
+        }
+      }
+      subscriptions: {
+        Row: {
+          id: string
+          firm_id: string
+          stripe_subscription_id: string
+          stripe_customer_id: string
+          status: string
+          current_period_start: string | null
+          current_period_end: string | null
+          plan_id: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          firm_id: string
+          stripe_subscription_id: string
+          stripe_customer_id: string
+          status?: string
+          current_period_start?: string | null
+          current_period_end?: string | null
+          plan_id?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          firm_id?: string
+          stripe_subscription_id?: string
+          stripe_customer_id?: string
+          status?: string
+          current_period_start?: string | null
+          current_period_end?: string | null
+          plan_id?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+      }
       properties: {
         Row: {
           id: string
@@ -451,6 +609,7 @@ export interface Database {
           state: 'PROPERTY_PENDING' | 'LIVE' | 'SOLD'
           status: 'draft' | 'active' | 'pending' | 'sold' | 'withdrawn' | 'expired'
           is_test: boolean
+          broker_id: string | null
           source: 'bulk_upload' | 'manual' | 'mls'
           file_name: string | null
           address_line: string | null
@@ -501,6 +660,54 @@ export interface Database {
           property_view: string | null
           water_source: string | null
           sewer_system: string | null
+          list_price_per_sqft: number | null
+          status_type: string | null
+          geo_area: string | null
+          development: string | null
+          property_id: string | null
+          dom: number | null
+          cdom: number | null
+          community_type: string | null
+          golf_type: string | null
+          gulf_access: string | null
+          canal_width: string | null
+          rear_exposure: string | null
+          lot_description: string | null
+          lot_dimensions: string | null
+          water: string | null
+          sewer: string | null
+          irrigation: string | null
+          boat_dock_info: string | null
+          tax_description: string | null
+          terms: string | null
+          possession: string | null
+          approval: string | null
+          management: string | null
+          master_hoa_fee: number | null
+          condo_fee: number | null
+          special_assessment: number | null
+          other_fee: number | null
+          land_lease: number | null
+          mandatory_club_fee: number | null
+          recreation_lease_fee: number | null
+          total_annual_recurring_fees: number | null
+          total_one_time_fees: number | null
+          office_code: string | null
+          office_name: string | null
+          office_phone: string | null
+          office_address: string | null
+          agent_fax: string | null
+          appointment_required: string | null
+          appointment_phone: string | null
+          target_marketing: string | null
+          internet_sites: string | null
+          listing_on_internet: string | null
+          address_on_internet: string | null
+          blogging: string | null
+          avm: string | null
+          listing_broker: string | null
+          legal_description: string | null
+          section_town_range: string | null
           subdivision: string | null
           slug: string | null
           cover_photo_url: string | null
@@ -508,6 +715,9 @@ export interface Database {
           owner_name: string | null
           owner_email: string | null
           owner_phone: string | null
+          additional_fields: Json | null
+          source_extracted: Json | null
+          source_matches: Json | null
           listing_agent_name: string | null
           listing_agent_license: string | null
           listing_agent_phone: string | null
@@ -517,6 +727,7 @@ export interface Database {
           listing_office_email: string | null
           listing_office_license: string | null
           photos: string[] | null
+          images: string[] | null
           published_at: string | null
           closed_at: string | null
           created_at: string
@@ -531,6 +742,7 @@ export interface Database {
           state?: 'PROPERTY_PENDING' | 'LIVE' | 'SOLD'
           status?: 'draft' | 'active' | 'pending' | 'sold' | 'withdrawn' | 'expired'
           is_test?: boolean
+          broker_id?: string | null
           source?: 'bulk_upload' | 'manual' | 'mls'
           file_name?: string | null
           address_line?: string | null
@@ -581,6 +793,54 @@ export interface Database {
           property_view?: string | null
           water_source?: string | null
           sewer_system?: string | null
+          list_price_per_sqft?: number | null
+          status_type?: string | null
+          geo_area?: string | null
+          development?: string | null
+          property_id?: string | null
+          dom?: number | null
+          cdom?: number | null
+          community_type?: string | null
+          golf_type?: string | null
+          gulf_access?: string | null
+          canal_width?: string | null
+          rear_exposure?: string | null
+          lot_description?: string | null
+          lot_dimensions?: string | null
+          water?: string | null
+          sewer?: string | null
+          irrigation?: string | null
+          boat_dock_info?: string | null
+          tax_description?: string | null
+          terms?: string | null
+          possession?: string | null
+          approval?: string | null
+          management?: string | null
+          master_hoa_fee?: number | null
+          condo_fee?: number | null
+          special_assessment?: number | null
+          other_fee?: number | null
+          land_lease?: number | null
+          mandatory_club_fee?: number | null
+          recreation_lease_fee?: number | null
+          total_annual_recurring_fees?: number | null
+          total_one_time_fees?: number | null
+          office_code?: string | null
+          office_name?: string | null
+          office_phone?: string | null
+          office_address?: string | null
+          agent_fax?: string | null
+          appointment_required?: string | null
+          appointment_phone?: string | null
+          target_marketing?: string | null
+          internet_sites?: string | null
+          listing_on_internet?: string | null
+          address_on_internet?: string | null
+          blogging?: string | null
+          avm?: string | null
+          listing_broker?: string | null
+          legal_description?: string | null
+          section_town_range?: string | null
           subdivision?: string | null
           slug?: string | null
           cover_photo_url?: string | null
@@ -588,6 +848,9 @@ export interface Database {
           owner_name?: string | null
           owner_email?: string | null
           owner_phone?: string | null
+          additional_fields?: Json | null
+          source_extracted?: Json | null
+          source_matches?: Json | null
           listing_agent_name?: string | null
           listing_agent_license?: string | null
           listing_agent_phone?: string | null
@@ -597,6 +860,7 @@ export interface Database {
           listing_office_email?: string | null
           listing_office_license?: string | null
           photos?: string[] | null
+          images?: string[] | null
           published_at?: string | null
           closed_at?: string | null
           created_at?: string
@@ -611,6 +875,7 @@ export interface Database {
           state?: 'PROPERTY_PENDING' | 'LIVE' | 'SOLD'
           status?: 'draft' | 'active' | 'pending' | 'sold' | 'withdrawn' | 'expired'
           is_test?: boolean
+          broker_id?: string | null
           source?: 'bulk_upload' | 'manual' | 'mls'
           file_name?: string | null
           address_line?: string | null
@@ -661,6 +926,54 @@ export interface Database {
           property_view?: string | null
           water_source?: string | null
           sewer_system?: string | null
+          list_price_per_sqft?: number | null
+          status_type?: string | null
+          geo_area?: string | null
+          development?: string | null
+          property_id?: string | null
+          dom?: number | null
+          cdom?: number | null
+          community_type?: string | null
+          golf_type?: string | null
+          gulf_access?: string | null
+          canal_width?: string | null
+          rear_exposure?: string | null
+          lot_description?: string | null
+          lot_dimensions?: string | null
+          water?: string | null
+          sewer?: string | null
+          irrigation?: string | null
+          boat_dock_info?: string | null
+          tax_description?: string | null
+          terms?: string | null
+          possession?: string | null
+          approval?: string | null
+          management?: string | null
+          master_hoa_fee?: number | null
+          condo_fee?: number | null
+          special_assessment?: number | null
+          other_fee?: number | null
+          land_lease?: number | null
+          mandatory_club_fee?: number | null
+          recreation_lease_fee?: number | null
+          total_annual_recurring_fees?: number | null
+          total_one_time_fees?: number | null
+          office_code?: string | null
+          office_name?: string | null
+          office_phone?: string | null
+          office_address?: string | null
+          agent_fax?: string | null
+          appointment_required?: string | null
+          appointment_phone?: string | null
+          target_marketing?: string | null
+          internet_sites?: string | null
+          listing_on_internet?: string | null
+          address_on_internet?: string | null
+          blogging?: string | null
+          avm?: string | null
+          listing_broker?: string | null
+          legal_description?: string | null
+          section_town_range?: string | null
           subdivision?: string | null
           slug?: string | null
           cover_photo_url?: string | null
@@ -668,6 +981,9 @@ export interface Database {
           owner_name?: string | null
           owner_email?: string | null
           owner_phone?: string | null
+          additional_fields?: Json | null
+          source_extracted?: Json | null
+          source_matches?: Json | null
           listing_agent_name?: string | null
           listing_agent_license?: string | null
           listing_agent_phone?: string | null
@@ -677,6 +993,7 @@ export interface Database {
           listing_office_email?: string | null
           listing_office_license?: string | null
           photos?: string[] | null
+          images?: string[] | null
           published_at?: string | null
           closed_at?: string | null
           created_at?: string
@@ -844,6 +1161,7 @@ export interface Database {
           verified_investor: boolean
           metadata: Json | null
           active_org_id: string | null
+          firm_id: string | null
           created_at: string
           updated_at: string
         }
@@ -869,6 +1187,7 @@ export interface Database {
           verified_investor?: boolean
           metadata?: Json | null
           active_org_id?: string | null
+          firm_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -894,6 +1213,7 @@ export interface Database {
           verified_investor?: boolean
           metadata?: Json | null
           active_org_id?: string | null
+          firm_id?: string | null
           created_at?: string
           updated_at?: string
         }

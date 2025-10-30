@@ -19,7 +19,12 @@ export const eventTypes = [
   'message.sent',
   'message.read',
   'message.failed',
-  'compliance.violation_detected'
+  'compliance.violation_detected',
+  're.offer.created',
+  're.offer.accepted',
+  're.listing.status.changed',
+  're.transaction.milestone.completed',
+  're.payouts.generated'
 ] as const;
 
 export type EventType = (typeof eventTypes)[number];
