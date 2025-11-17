@@ -1,11 +1,17 @@
-import React, { useMemo } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import React, { useCallback, useMemo } from 'react'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import BrokerSidebar from './BrokerSidebar'
 import { Button } from '@/components/ui/button'
 import { ExternalLink } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { resolveUserIdentity } from '@/lib/utils'
 import { HatchLogo } from '@/components/HatchLogo'
+import { CopilotDock } from '@/components/copilot/CopilotDock'
+import { HatchAIWidget, type HatchAIMessage } from '@/components/copilot/HatchAIWidget'
+import { chatAiPersona, type PersonaChatMessage } from '@/lib/api/hatch'
+import type { PersonaId } from '@/lib/ai/aiPersonas'
+import { useToast } from '@/components/ui/use-toast'
+import { buildMemoryToastPayload } from '@/lib/ai/memoryToast'
 
 interface BrokerLayoutProps {
   showBackButton?: boolean
@@ -13,11 +19,60 @@ interface BrokerLayoutProps {
 
 export default function BrokerLayout({ showBackButton = false }: BrokerLayoutProps) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { session, user } = useAuth()
+  const { toast } = useToast()
 
   const { displayName, initials } = useMemo(
     () => resolveUserIdentity(session?.profile, user?.email ?? null, 'Broker'),
     [session?.profile, user?.email]
+  )
+
+  const debug = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    const flag = params.get('copilotDebug')
+    return flag === '1' || flag === 'true'
+  }, [location.search])
+
+  const handleWidgetSend = useCallback(
+    async ({
+      text,
+      personaId,
+      history
+    }: {
+      text: string
+      personaId: PersonaId
+      history: HatchAIMessage[]
+    }) => {
+      const response = await chatAiPersona({
+        text,
+        currentPersonaId: personaId,
+        history: history.map<PersonaChatMessage>(({ role, content }) => ({ role, content }))
+      })
+
+      const memoryToast = buildMemoryToastPayload(response.memoryLog)
+      if (memoryToast) {
+        toast(memoryToast)
+      }
+
+      // Prefer API-provided authorship; otherwise attribute handoff then reply.
+      let firstAssistantSeen = false
+      const replies =
+        response.messages?.map<HatchAIMessage>((message) => {
+          if (message.role !== 'assistant') {
+            return { id: crypto.randomUUID(), role: message.role, content: message.content }
+          }
+          const msgPersonaId = message.personaId ?? (firstAssistantSeen ? response.activePersonaId : personaId)
+          firstAssistantSeen = true
+          return { id: crypto.randomUUID(), role: 'assistant', content: message.content, personaId: msgPersonaId }
+        }) ?? []
+
+      return {
+        activePersonaId: response.activePersonaId,
+        replies
+      }
+    },
+    [toast]
   )
 
   return (
@@ -57,6 +112,8 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
           <Outlet />
         </main>
+        <CopilotDock debug={debug} />
+        <HatchAIWidget onSend={handleWidgetSend} />
       </div>
     </div>
   )

@@ -1,0 +1,367 @@
+'use client';
+
+import * as React from 'react';
+import ReactMarkdown from 'react-markdown';
+import { ChevronDown, ChevronUp, X } from 'lucide-react';
+
+import { PERSONAS, type PersonaId, getPersonaConfigById } from '@/lib/ai/aiPersonas';
+import { AiPersonaFace } from '@/components/ai/AiPersonaFace';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { wantsAiToSendEmail } from '@/lib/ai/sendIntent';
+import { CopilotSendEmailDialog } from '@/components/copilot/CopilotSendEmailDialog';
+import { extractEmailDraft } from '@/lib/ai/emailDraft';
+import { lookupContactEmail, lookupContactEmailsFromString } from '@/lib/ai/contactLookup';
+import { extractRecipientQuery } from '@/lib/ai/recipient';
+import { useAuth } from '@/contexts/AuthContext';
+
+type UIMsg = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  /**
+   * Which AI persona authored this message. For user messages, this can capture
+   * the persona context at send time. Rendering uses this for assistant bubbles
+   * so messages keep their original author even after switching tabs.
+   */
+  personaId?: PersonaId;
+};
+
+export type HatchAIMessage = UIMsg;
+
+type HatchAIWidgetProps = {
+  onSend: (payload: {
+    text: string;
+    personaId: PersonaId;
+    history: UIMsg[];
+  }) => Promise<{ activePersonaId: PersonaId; replies: UIMsg[] }>;
+};
+
+export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
+  const [open, setOpen] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(true);
+  const [activePersonaId, setActivePersonaId] = React.useState<PersonaId>('agent_copilot');
+  const [messages, setMessages] = React.useState<UIMsg[]>([]);
+  const [input, setInput] = React.useState('');
+  const [isSending, setIsSending] = React.useState(false);
+  const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
+  const [emailDefaults, setEmailDefaults] = React.useState({ subject: '', body: '' });
+  const [pendingSendIntent, setPendingSendIntent] = React.useState(false);
+  const [pendingRecipientQuery, setPendingRecipientQuery] = React.useState<string | null>(null);
+  const [lastDraft, setLastDraft] = React.useState<{ subject: string; body: string } | null>(null);
+  const [dialogRecipients, setDialogRecipients] = React.useState<string[]>([]);
+  const [autoOpenedFromDraft, setAutoOpenedFromDraft] = React.useState(false);
+  const { session, user } = useAuth();
+
+  const persona = PERSONAS.find((p) => p.id === activePersonaId)!;
+
+  React.useEffect(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message.role !== 'assistant') continue;
+      if (!message.content.toLowerCase().includes('subject')) continue;
+      setLastDraft(extractEmailDraft(message.content));
+      return;
+    }
+  }, [messages]);
+
+  React.useEffect(() => {
+    if (!pendingSendIntent || !lastDraft) return;
+    openComposer(lastDraft, pendingRecipientQuery);
+    setPendingSendIntent(false);
+    setPendingRecipientQuery(null);
+  }, [pendingRecipientQuery, pendingSendIntent, lastDraft]);
+
+  // Auto-open composer when assistant replies with a draft that includes a Subject line
+  React.useEffect(() => {
+    if (emailDialogOpen || autoOpenedFromDraft) return;
+    const assistant = [...messages].reverse().find((m) => m.role === 'assistant') ?? null;
+    if (!assistant || !assistant.content) return;
+    if (/\bsubject\s*:/i.test(assistant.content)) {
+      const draft = extractEmailDraft(assistant.content);
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user') ?? null;
+      const userQuery = pendingSendIntent
+        ? pendingRecipientQuery
+        : lastUser
+          ? lastUser.content
+          : null;
+      openComposer(draft, userQuery ?? undefined);
+      setAutoOpenedFromDraft(true);
+    }
+  }, [messages, emailDialogOpen, autoOpenedFromDraft]);
+
+  const openComposer = (draft: { subject: string; body: string }, recipientQuery?: string | null) => {
+    setEmailDefaults(draft);
+    setEmailDialogOpen(true);
+    setDialogRecipients([]);
+    if (recipientQuery) {
+      void (async () => {
+        const list = await lookupContactEmailsFromString(recipientQuery);
+        if (list.length > 0) {
+          setDialogRecipients(Array.from(new Set(list)));
+        } else {
+          const resolved = await lookupContactEmail(recipientQuery);
+          if (resolved?.email) {
+            setDialogRecipients([resolved.email]);
+          }
+        }
+      })();
+    }
+  };
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || isSending) return;
+    // Capture persona at the moment of send so any client-inserted
+    // placeholder messages keep a stable author even if tabs switch later.
+    const sendingPersona = activePersonaId;
+
+    const userMsg: UIMsg = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text,
+      personaId: activePersonaId
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setInput('');
+
+    if (wantsAiToSendEmail(text)) {
+      const draft = lastDraft;
+      if (draft) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: 'Opening the email composer so you can send this now.',
+            personaId: sendingPersona
+          }
+        ]);
+        openComposer(draft, text);
+        setPendingSendIntent(false);
+        return;
+      }
+      // Do not open immediately; set pending and auto-open when Subject draft arrives
+      setPendingSendIntent(true);
+      setPendingRecipientQuery(text);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: 'Drafting your email. I’ll open the send window shortly.',
+          personaId: sendingPersona
+        }
+      ]);
+      // Do not return; continue to send the prompt to AI so a proper draft arrives
+    }
+
+    setIsSending(true);
+    try {
+      const sentFromPersona = sendingPersona;
+      const result = await onSend({
+        text,
+        personaId: activePersonaId,
+        history: [...messages, userMsg]
+      });
+
+      setActivePersonaId(result.activePersonaId);
+      // Ensure assistant replies keep the persona that answered at the time
+      // of this turn. If the backend doesn't annotate personaId per message,
+      // fall back to the persona used to send the prompt.
+      const attributed = result.replies.map((m) =>
+        m.role === 'assistant' && !m.personaId ? { ...m, personaId: sentFromPersona } : m
+      );
+      setMessages((prev) => [...prev, ...attributed]);
+    } catch (error) {
+      console.error(error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: 'Sorry — something went wrong talking to your AI coworker. Try again in a moment.',
+          personaId: sendingPersona
+        }
+      ]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void handleSend();
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-[#1F5FFF] px-4 text-sm font-medium text-white shadow-lg hover:shadow-xl"
+      >
+        <AiPersonaFace personaId="agent_copilot" size="sm" animated />
+        <span>Ask Hatch AI</span>
+      </button>
+    );
+  }
+
+  return (
+    <>
+    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end">
+      <div className="w-[460px] overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
+        {/* HEADER */}
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex items-center gap-3">
+            <AiPersonaFace personaId={activePersonaId} size="lg" animated active />
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold">New chat · {persona.name}</span>
+              <span className="text-[11px] text-muted-foreground">{persona.tagline}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="rounded-full p-1 hover:bg-muted"
+              onClick={() => setExpanded((value) => !value)}
+              aria-label={expanded ? 'Collapse' : 'Expand'}
+            >
+              {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            </button>
+            <button type="button" className="rounded-full p-1 hover:bg-muted" onClick={() => setOpen(false)} aria-label="Close">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        {expanded && (
+          <>
+            {/* PERSONA CHIPS */}
+            <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-2">
+              {PERSONAS.map((p) => {
+                const active = p.id === activePersonaId;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setActivePersonaId(p.id)}
+                    className={`flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] transition ${
+                      active ? 'border-transparent text-slate-900 bg-muted/70' : 'border-border text-muted-foreground'
+                    }`}
+                  >
+                    <AiPersonaFace personaId={p.id} size="sm" animated active={active} />
+                    <span className="truncate">{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* MESSAGES */}
+            <div className="max-h-[300px] space-y-4 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed">
+              {messages.length === 0 ? (
+                <div className="rounded-xl bg-muted/60 px-3 py-3 text-[12px] text-muted-foreground">
+                  Ask {persona.name} anything about{' '}
+                  {persona.tagline.toLowerCase()} — or choose one of the starter prompts below. Echo, for example, can look at your CRM data and tell you exactly who to call first.
+                </div>
+              ) : (
+                messages.map((message) => {
+                  const isUser = message.role === 'user';
+                  return (
+                    <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                      {isUser ? (
+                        <div className="max-w-[80%] rounded-2xl bg-[#1F5FFF] px-3 py-2 text-[13px] leading-relaxed text-white">{message.content}</div>
+                      ) : (
+                        <div className="max-w-[90%] rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-[13px] leading-relaxed text-slate-900">
+                          {(() => {
+                            const msgPersonaId = (message as UIMsg).personaId ?? activePersonaId;
+                            const msgPersona = getPersonaConfigById(msgPersonaId) ?? persona;
+                            return (
+                              <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                <AiPersonaFace personaId={msgPersona.id} size="sm" animated={false} />
+                                <span>{msgPersona.name}</span>
+                              </div>
+                            );
+                          })()}
+                          <div className="hatch-markdown text-[13px] leading-relaxed">
+                            <ReactMarkdown
+                              components={{
+                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                p: ({ children }) => <p className="mb-1 text-[13px] leading-relaxed last:mb-0">{children}</p>,
+                                li: ({ children }) => (
+                                  <li className="ml-5 list-disc text-[13px] leading-relaxed">{children}</li>
+                                ),
+                                ul: ({ children }) => <ul className="my-1 ml-1 space-y-1">{children}</ul>,
+                                ol: ({ children }) => <ol className="my-1 ml-1 list-decimal space-y-1">{children}</ol>,
+                                code: ({ children }) => (
+                                  <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
+                                )
+                              }}
+                            >
+                              {message.content}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* QUICK SUGGESTIONS */}
+            <div className="flex flex-wrap gap-1 px-4 pb-2">
+              {persona.examples.map((example) => (
+                <button
+                  key={example}
+                  type="button"
+                  onClick={() => setInput(example)}
+                  className="rounded-full border border-dashed px-2.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+
+            {/* INPUT */}
+            <div className="border-t bg-slate-50/60 px-4 py-3">
+              <div className="flex items-end gap-2">
+                <Textarea
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={persona.placeholder}
+                  rows={2}
+                  className="min-h-[46px] max-h-[110px] resize-none text-[13px]"
+                />
+                <Button type="button" size="sm" disabled={!input.trim() || isSending} onClick={handleSend}>
+                  {isSending ? '…' : 'Send'}
+                </Button>
+              </div>
+              <p className="mt-2 text-[10px] text-muted-foreground">Press Enter to send · Shift + Enter for a new line.</p>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+    <CopilotSendEmailDialog
+      open={emailDialogOpen}
+      onOpenChange={setEmailDialogOpen}
+      defaultPersonaId={activePersonaId}
+      defaultSubject={emailDefaults.subject}
+      defaultBody={emailDefaults.body}
+      defaultRecipients={dialogRecipients}
+      defaultSenderName={
+        [session?.profile?.firstName, session?.profile?.lastName].filter(Boolean).join(' ').trim() ||
+        session?.profile?.displayName ||
+        user?.email ||
+        undefined
+      }
+    />
+    </>
+  );
+}
