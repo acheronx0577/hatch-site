@@ -95,11 +95,11 @@ const computeApiUrl = () => {
   }
 
   if (typeof window === 'undefined') {
-    return resolveInternalApiUrl() ?? 'http://localhost:4000';
+    return resolveInternalApiUrl() ?? 'http://localhost:4000/api';
   }
 
   if (process.env.NODE_ENV === 'development') {
-    return 'http://localhost:4000';
+    return 'http://localhost:4000/api';
   }
 
   const inferred = buildApiUrlFromBase(window.location.origin);
@@ -354,7 +354,8 @@ export type MlsProfile = {
 };
 
 export async function listContacts(tenantId: string) {
-  return apiFetch<ContactListItem[]>(`/contacts?tenantId=${tenantId}`);
+  const response = await apiFetch<{ items: ContactListItem[]; total: number; page: number; pageSize: number }>(`/contacts?tenantId=${tenantId}`);
+  return response.items;
 }
 
 export async function getContact(tenantId: string, personId: string) {
