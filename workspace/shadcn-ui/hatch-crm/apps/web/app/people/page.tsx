@@ -55,10 +55,10 @@ export default async function PeoplePage() {
                     <Link
                       href={`/people/${contact.id}`}
                       className="text-sm font-semibold text-brand-600 hover:text-brand-700"
+                      aria-label={`Open ${contact.firstName} ${contact.lastName}`}
                     >
                       Open
-                    </Link>
-                  </td>
+                    </Link>                  </td>
                 </tr>
               ))
             ) : (
@@ -99,10 +99,10 @@ export default async function PeoplePage() {
                 <Link
                   href={`/people/${contact.id}`}
                   className="ml-4 rounded bg-brand-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700"
+                  aria-label={`Open ${contact.firstName} ${contact.lastName}`}
                 >
                   Open
-                </Link>
-              </div>
+                </Link>              </div>
             </div>
           ))
         ) : (

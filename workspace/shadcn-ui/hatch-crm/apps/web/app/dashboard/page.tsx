@@ -68,8 +68,9 @@ export default async function DashboardPage() {
                   <p className="text-xs text-slate-500">Status: {timer.status}</p>
                 </div>
                 <span className="whitespace-nowrap text-xs text-slate-500">
-                  Deadline {timer.deadlineAt ? new Date(timer.deadlineAt).toLocaleString() : 'pending'}
-                </span>
+                <span className="whitespace-nowrap text-xs text-slate-500">
+                  Deadline {timer.deadlineAt && !isNaN(new Date(timer.deadlineAt).getTime()) ? new Date(timer.deadlineAt).toLocaleString() : 'pending'}
+                </span>                </span>
               </div>
             ))
           ) : (
