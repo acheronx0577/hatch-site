@@ -14,23 +14,23 @@ For detailed setup instructions, see **[SETUP.md](SETUP.md)**.
 
 Quick commands:
 
-# 1. Create .env files (see SETUP.md for details)
-# 2. Start Docker services
+## 1. Create .env files (see SETUP.md for details)
+## 2. Start Docker services
 ```
 docker compose -f infra/docker/docker-compose.yml up -d
 ```
 
-# 3. Create shadow database
+## 3. Create shadow database
 ```
 docker exec -i docker-postgres-1 psql -U hatch -d postgres -c "CREATE DATABASE hatch_crm_shadow;"
 ```
 
-# 4. Install dependencies
+## 4. Install dependencies
 ```
 pnpm install
 ```
 
-# 5. Run migrations and seed
+## 5. Run migrations and seed
 ```
 pnpm --filter @hatch/db migrate:dev
 ```
@@ -38,7 +38,7 @@ pnpm --filter @hatch/db migrate:dev
 pnpm --filter @hatch/db seed
 ```
 
-# 6. Start services
+## 6. Start services
 ### http://localhost:4000
 ```
 pnpm --filter @hatch/api dev   
