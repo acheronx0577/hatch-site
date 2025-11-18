@@ -44,7 +44,7 @@ export default function MlsPreflightForm({ tenantId, profiles }: MlsPreflightFor
       <div>
         <label className="text-xs font-semibold uppercase text-slate-500">MLS Profile</label>
         <select
-          className="mt-1 w-full rounded border border-slate-200 p-2"
+          className="mt-1 w-full rounded border border-slate-200 bg-white p-2 text-slate-900"
           value={profileId}
           onChange={(event) => {
             const id = event.target.value;
@@ -97,7 +97,7 @@ export default function MlsPreflightForm({ tenantId, profiles }: MlsPreflightFor
       <div>
         <label className="text-xs font-semibold uppercase text-slate-500">Disclaimer</label>
         <textarea
-          className="mt-1 w-full rounded border border-slate-200 p-2"
+          className="mt-1 w-full rounded border border-slate-200 bg-white p-2 text-slate-900"
           rows={3}
           value={disclaimer}
           onChange={(event) => setDisclaimer(event.target.value)}

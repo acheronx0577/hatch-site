@@ -64,11 +64,11 @@ export default function ContactActions({ contact, tenantId }: ContactActionsProp
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-sm font-semibold text-slate-700">Quick Actions</h2>
-      <div className="mt-3 space-y-4 text-sm">
+      <div className="mt-4 space-y-4 text-sm">
         <div>
           <label className="text-xs font-semibold uppercase text-slate-500">SMS Message</label>
           <textarea
-            className="mt-1 w-full rounded border border-slate-200 p-2"
+            className="mt-1 w-full rounded border border-slate-200 bg-white p-2 text-slate-900"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
             rows={4}
@@ -87,7 +87,7 @@ export default function ContactActions({ contact, tenantId }: ContactActionsProp
           <div className="rounded border border-dashed border-amber-400 p-3">
             <p className="text-xs font-semibold uppercase text-amber-600">Consent Needed</p>
             <textarea
-              className="mt-2 w-full rounded border border-slate-200 p-2"
+              className="mt-2 w-full rounded border border-slate-200 bg-white p-2 text-slate-900"
               value={consentText}
               onChange={(event) => setConsentText(event.target.value)}
             />

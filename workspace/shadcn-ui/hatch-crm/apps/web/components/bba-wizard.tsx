@@ -55,7 +55,7 @@ export default function BbaWizard({ tenantId, contacts }: BbaWizardProps) {
       <div>
         <label className="text-xs font-semibold uppercase text-slate-500">Contact</label>
         <select
-          className="mt-1 w-full rounded border border-slate-200 p-2"
+          className="mt-1 w-full rounded border border-slate-200 bg-white p-2 text-slate-900"
           value={personId}
           onChange={(event) => setPersonId(event.target.value)}
         >

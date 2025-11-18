@@ -13,7 +13,7 @@ export default async function ContactPage({ params }: { params: { id: string } }
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[2fr_1fr]">
-      <section className="space-y-4">
+      <section className="space-y-6">
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h1 className="text-xl font-semibold text-slate-900">
             {contact.firstName} {contact.lastName}
@@ -36,55 +36,73 @@ export default async function ContactPage({ params }: { params: { id: string } }
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-700">Timeline</h2>
           <div className="mt-3 space-y-3 text-sm text-slate-600">
-            {messages.map((message: any) => (
-              <div key={message.id} className="rounded border border-slate-100 p-3">
-                <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-                  <span>
-                    {message.channel} · {message.direction}
-                  </span>
-                  <span>{new Date(message.createdAt).toLocaleString()}</span>
+            {messages.length > 0 ? (
+              messages.map((message: any) => (
+                <div key={message.id} className="rounded border border-slate-100 p-3">
+                  <div className="flex flex-col gap-1 text-xs uppercase tracking-wide text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+                    <span>
+                      {message.channel} · {message.direction}
+                    </span>
+                    <span className="whitespace-nowrap">{new Date(message.createdAt).toLocaleString()}</span>
+                  </div>
+                  <p className="mt-2 break-words whitespace-pre-wrap text-slate-700">
+                    {message.body ?? message.subject}
+                  </p>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-slate-700">{message.body ?? message.subject}</p>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="py-4 text-center text-sm text-slate-500">No messages in timeline.</p>
+            )}
           </div>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-700">Activity Summary</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            {activitySummary.map((entry: any) => (
-              <li key={entry.type} className="flex items-center justify-between">
-                <span>{entry.type}</span>
-                <span className="text-slate-500">{entry._count.type}</span>
-              </li>
-            ))}
+            {activitySummary.length > 0 ? (
+              activitySummary.map((entry: any) => (
+                <li key={entry.type} className="flex items-center justify-between">
+                  <span>{entry.type}</span>
+                  <span className="text-slate-500">{entry._count.type}</span>
+                </li>
+              ))
+            ) : (
+              <li className="py-2 text-center text-sm text-slate-500">No activity data available.</li>
+            )}
           </ul>
         </div>
       </section>
 
-      <aside className="space-y-4">
+      <aside className="space-y-6">
         <ContactActions contact={contact} tenantId={TENANT_ID} />
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-700">Agreements</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            {contact.agreements?.map((agreement: any) => (
-              <li key={agreement.id}>
-                {agreement.type} · {agreement.status} ·{' '}
-                {agreement.signedAt ? new Date(agreement.signedAt).toLocaleDateString() : 'pending'}
-              </li>
-            ))}
+            {contact.agreements && contact.agreements.length > 0 ? (
+              contact.agreements.map((agreement: any) => (
+                <li key={agreement.id} className="break-words">
+                  {agreement.type} · {agreement.status} ·{' '}
+                  {agreement.signedAt ? new Date(agreement.signedAt).toLocaleDateString() : 'pending'}
+                </li>
+              ))
+            ) : (
+              <li className="py-2 text-center text-sm text-slate-500">No agreements found.</li>
+            )}
           </ul>
         </div>
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-slate-700">Upcoming Tours</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            {contact.tours?.map((tour: any) => (
-              <li key={tour.id}>
-                {tour.status} · {tour.listing?.addressLine1 ?? 'Listing'} ·{' '}
-                {new Date(tour.startAt).toLocaleString()}
-              </li>
-            )) ?? <li>No tours scheduled.</li>}
+            {contact.tours && contact.tours.length > 0 ? (
+              contact.tours.map((tour: any) => (
+                <li key={tour.id} className="break-words">
+                  {tour.status} · {tour.listing?.addressLine1 ?? 'Listing'} ·{' '}
+                  {new Date(tour.startAt).toLocaleString()}
+                </li>
+              ))
+            ) : (
+              <li className="py-2 text-center text-sm text-slate-500">No tours scheduled.</li>
+            )}
           </ul>
         </div>
       </aside>

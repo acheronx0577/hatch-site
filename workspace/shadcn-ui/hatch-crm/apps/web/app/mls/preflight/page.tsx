@@ -9,14 +9,20 @@ export default async function MlsPreflightPage() {
   const profiles = await listMlsProfiles(TENANT_ID);
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Publishing Pre-flight</h1>
-        <p className="text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-500">
           Validate marketing assets against MLS disclaimers, compensation rules, and Clear Cooperation SLA.
         </p>
       </div>
-      <MlsPreflightForm tenantId={TENANT_ID} profiles={profiles} />
+      {profiles.length > 0 ? (
+        <MlsPreflightForm tenantId={TENANT_ID} profiles={profiles} />
+      ) : (
+        <div className="rounded-lg border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <p className="text-sm text-slate-500">No MLS profiles available. Please configure MLS profiles first.</p>
+        </div>
+      )}
     </div>
   );
 }

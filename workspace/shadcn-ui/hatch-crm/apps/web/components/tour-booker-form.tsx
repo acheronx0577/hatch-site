@@ -40,11 +40,11 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div>
         <label className="text-xs font-semibold uppercase text-slate-500">Contact</label>
         <select
-          className="mt-1 w-full rounded border border-slate-200 p-2"
+          className="mt-1 w-full rounded border border-slate-200 bg-white p-2 text-slate-900"
           value={contactId}
           onChange={(event) => setContactId(event.target.value)}
         >
@@ -59,7 +59,7 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
       <div>
         <label className="text-xs font-semibold uppercase text-slate-500">Listing</label>
         <select
-          className="mt-1 w-full rounded border border-slate-200 p-2"
+          className="mt-1 w-full rounded border border-slate-200 bg-white p-2 text-slate-900"
           value={listingId}
           onChange={(event) => setListingId(event.target.value)}
         >
@@ -75,7 +75,7 @@ export default function TourBookerForm({ tenantId, contacts, listings }: TourBoo
         <label className="text-xs font-semibold uppercase text-slate-500">Start Time</label>
         <input
           type="datetime-local"
-          className="mt-1 w-full rounded border border-slate-200 p-2"
+          className="mt-1 w-full rounded border border-slate-200 bg-white p-2 text-slate-900"
           value={startAt}
           onChange={(event) => setStartAt(event.target.value)}
         />

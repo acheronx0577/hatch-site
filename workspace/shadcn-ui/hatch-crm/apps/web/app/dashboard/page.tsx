@@ -34,31 +34,48 @@ export default async function DashboardPage() {
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Deliverability</h2>
         <div className="mt-3 space-y-2 text-sm">
-          {dashboard.deliverability.map((row) => (
-            <div key={row.channel} className="flex justify-between border-b border-slate-100 pb-2 last:border-b-0">
-              <span className="font-medium text-slate-600">{row.channel}</span>
-              <span className="text-slate-500">
-                Delivered {row.delivered} / Accepted {row.accepted} • Bounced {row.bounced} • Opt-outs {row.optOuts}
-              </span>
-            </div>
-          ))}
+          {dashboard.deliverability.length > 0 ? (
+            dashboard.deliverability.map((row) => (
+              <div
+                key={row.channel}
+                className="flex flex-col gap-1 border-b border-slate-100 pb-2 last:border-b-0 sm:flex-row sm:justify-between sm:gap-0"
+              >
+                <span className="font-medium text-slate-600">{row.channel}</span>
+                <span className="break-words text-slate-500 sm:break-normal">
+                  Delivered {row.delivered} / Accepted {row.accepted} • Bounced {row.bounced} • Opt-outs {row.optOuts}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500">No deliverability data available.</p>
+          )}
         </div>
       </section>
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Clear Cooperation</h2>
-        <div className="mt-3 space-y-2 text-sm">
-          {dashboard.clearCooperation.map((timer) => (
-            <div key={timer.timerId} className="flex items-center justify-between rounded border border-slate-100 p-3">
-              <div>
-                <p className="font-medium text-slate-700">{timer.listing?.addressLine1 ?? 'Unassigned Listing'}</p>
-                <p className="text-xs text-slate-500">Status: {timer.status}</p>
+        <div className="mt-3 space-y-3 text-sm">
+          {dashboard.clearCooperation.length > 0 ? (
+            dashboard.clearCooperation.map((timer) => (
+              <div
+                key={timer.timerId}
+                className="flex flex-col gap-2 rounded border border-slate-100 p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-slate-700">
+                    {timer.listing?.addressLine1 ?? 'Unassigned Listing'}
+                  </p>
+                  <p className="text-xs text-slate-500">Status: {timer.status}</p>
+                </div>
+                <span className="whitespace-nowrap text-xs text-slate-500">
+                <span className="whitespace-nowrap text-xs text-slate-500">
+                  Deadline {timer.deadlineAt && !isNaN(new Date(timer.deadlineAt).getTime()) ? new Date(timer.deadlineAt).toLocaleString() : 'pending'}
+                </span>                </span>
               </div>
-              <span className="text-xs text-slate-500">
-                Deadline {timer.deadlineAt ? new Date(timer.deadlineAt).toLocaleString() : 'pending'}
-              </span>
-            </div>
-          ))}
+            ))
+          ) : (
+            <p className="text-sm text-slate-500">No Clear Cooperation timers active.</p>
+          )}
         </div>
       </section>
     </div>
