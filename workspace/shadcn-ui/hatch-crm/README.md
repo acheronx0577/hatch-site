@@ -33,6 +33,14 @@ pnpm --filter @hatch/api dev    # http://localhost:4000
 pnpm --filter @hatch/web dev    # http://localhost:3000
 ```
 
+Seeded demo showcases:
+
+1. Attempt SMS to Casey → blocked (no consent).
+2. Capture SMS consent via Contact 360 Quick Actions → send succeeds.
+3. Request tour without BBA → API returns buyer-rep required payload.
+4. Draft + sign BBA in wizard → re-request tour → confirmed & routed.
+5. Publishing pre-flight fails without MLS disclaimer → pass after adding required text.
+
 ## Documentation
 
 - **[SETUP.md](SETUP.md)** — Complete setup guide for local development
