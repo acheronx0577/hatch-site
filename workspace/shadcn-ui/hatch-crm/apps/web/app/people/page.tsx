@@ -9,6 +9,9 @@ const TENANT_ID = process.env.NEXT_PUBLIC_TENANT_ID ?? process.env.VITE_TENANT_I
 export default async function PeoplePage() {
   const contacts = await listContacts(TENANT_ID);
 
+  // Ensure contacts is always an array
+  const contactsList = Array.isArray(contacts) ? contacts : [];
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -35,7 +38,7 @@ export default async function PeoplePage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {contacts.map((contact) => (
+            {contactsList.map((contact) => (
               <tr key={contact.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 text-slate-700">
                   {contact.firstName} {contact.lastName}
