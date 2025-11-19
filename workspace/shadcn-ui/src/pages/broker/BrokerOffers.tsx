@@ -25,24 +25,10 @@ import {
   Send,
   AlertCircle
 } from 'lucide-react';
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
+import { formatCurrency, formatDateTime } from '@/utils/export';
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  return formatDateTime(dateString);
 };
 
 const BrokerOffers = () => {

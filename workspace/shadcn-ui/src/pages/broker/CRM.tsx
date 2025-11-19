@@ -70,6 +70,7 @@ import AssignOwnerDialog from '@/components/contacts/AssignOwnerDialog'
 import ContactDetailsDrawer from '@/components/contacts/ContactDetailsDrawer'
 import ContactBulkBar from '@/components/contacts/ContactBulkBar'
 import { useMessenger } from '@/contexts/MessengerContext'
+import { formatCurrencySafe } from '@/utils/export'
 
 const TENANT_ID = import.meta.env.VITE_TENANT_ID || 'tenant-hatch'
 
@@ -156,11 +157,6 @@ const eventTypeLabel = (type: CalendarEventRecord['eventType']) =>
 const percentage = (value?: number | null) =>
   typeof value === 'number' && Number.isFinite(value)
     ? `${Math.round(value * 1000) / 10}%`
-    : '—'
-
-const formatCurrency = (value?: number | null) =>
-  typeof value === 'number' && Number.isFinite(value)
-    ? `$${Math.round(value).toLocaleString()}`
     : '—'
 
 const OverviewSkeleton = () => (
@@ -821,10 +817,10 @@ const CRM = () => {
                           <div key={`deal-${deal.stage}`} className="flex items-center justify-between border rounded-lg p-4">
                             <div>
                               <p className="font-semibold">{formatStage(deal.stage)}</p>
-                              <p className="text-sm text-gray-600">Forecast: {formatCurrency(deal.forecastGci)}</p>
+                              <p className="text-sm text-gray-600">Forecast: {formatCurrencySafe(deal.forecastGci)}</p>
                             </div>
                             <div className="text-right text-sm text-gray-600">
-                              <div>Closed: {formatCurrency(deal.actualGci)}</div>
+                              <div>Closed: {formatCurrencySafe(deal.actualGci)}</div>
                             </div>
                           </div>
                         ))

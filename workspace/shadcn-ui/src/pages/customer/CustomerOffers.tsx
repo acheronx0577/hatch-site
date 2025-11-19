@@ -14,23 +14,7 @@ import {
   Home,
   AlertCircle
 } from 'lucide-react';
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  });
-};
+import { formatCurrency, formatDate } from '@/utils/export';
 
 const CustomerOffers = () => {
   const [selectedTab, setSelectedTab] = useState('all');

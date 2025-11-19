@@ -26,6 +26,7 @@ import {
   type CommissionPlanAssignment,
   type CreateCommissionPlanPayload
 } from '@/lib/api/hatch'
+import { formatCurrency } from '@/utils/export'
 
 const DEFAULT_DEFINITION = JSON.stringify(
   {
@@ -54,9 +55,6 @@ const modalTitle = {
   create: 'Create Commission Plan',
   assign: 'Assign Commission Plan'
 }
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value)
 
 export default function CommissionPlansPage() {
   const { toast } = useToast()

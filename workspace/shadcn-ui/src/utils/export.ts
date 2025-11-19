@@ -22,6 +22,13 @@ export const formatCurrency = (amount: number): string => {
   }).format(amount);
 };
 
+export const formatCurrencySafe = (value?: number | null, fallback: string = '—'): string => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return formatCurrency(value);
+  }
+  return fallback;
+};
+
 export const formatDate = (date: string): string => {
   return new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -39,4 +46,41 @@ export const formatDateTime = (date: string): string => {
     minute: '2-digit',
     hour12: true
   });
+};
+
+export const formatPhoneNumber = (phone: string): string => {
+  const cleaned = phone.replace(/\D/g, '');
+  const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
+  if (match) {
+    return `(${match[1]}) ${match[2]}-${match[3]}`;
+  }
+  return phone;
+};
+
+export const formatPercentage = (value: number, decimals: number = 0): string => {
+  return `${value.toFixed(decimals)}%`;
+};
+
+export const formatNumber = (value: number, decimals: number = 0): string => {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+};
+
+export const truncateText = (text: string, maxLength: number): string => {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
+};
+
+export const capitalize = (text: string): string => {
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+};
+
+export const slugify = (text: string): string => {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 };
