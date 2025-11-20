@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +23,22 @@ import {
   UserPlus,
   Home as HomeIcon
 } from 'lucide-react'
+
+// Animation variants
+const buttonHover = {
+  scale: 1.02,
+  transition: { type: "spring", stiffness: 400, damping: 25 }
+}
+
+const buttonTap = {
+  scale: 0.98
+}
+
+const cardHover = {
+  y: -8,
+  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)",
+  transition: { type: "spring", stiffness: 300, damping: 25 }
+}
 
 export default function Home() {
   const navigate = useNavigate()
@@ -170,7 +187,15 @@ export default function Home() {
               <Button 
                 size="lg" 
                 onClick={() => navigate('/properties')}
-                className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-3"
+                className="bg-blue-600 hover:bg-blue-700 text-lg px-8 py-3 shadow-lg hover:shadow-xl transition-shadow font-medium"
+                style={{ 
+                  fontWeight: 500,
+                  WebkitFontSmoothing: 'antialiased',
+                  MozOsxFontSmoothing: 'grayscale',
+                  textRendering: 'optimizeLegibility',
+                  backfaceVisibility: 'hidden',
+                  transform: 'translateZ(0)'
+                }}
               >
                 <Search className="w-5 h-5 mr-2" />
                 Search Properties
@@ -179,7 +204,15 @@ export default function Home() {
                 size="lg" 
                 variant="outline"
                 onClick={handleBrokerNavigation}
-                className="text-lg px-8 py-3"
+                className="text-lg px-8 py-3 border-2 hover:border-blue-600 hover:text-blue-600 shadow-md hover:shadow-lg transition-all font-medium"
+                style={{ 
+                  fontWeight: 500,
+                  WebkitFontSmoothing: 'antialiased',
+                  MozOsxFontSmoothing: 'grayscale',
+                  textRendering: 'optimizeLegibility',
+                  backfaceVisibility: 'hidden',
+                  transform: 'translateZ(0)'
+                }}
               >
                 <Building2 className="w-5 h-5 mr-2" />
                 {isBroker ? 'View Broker Dashboard' : 'For Brokers'}
@@ -204,17 +237,26 @@ export default function Home() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((feature, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <feature.icon className="h-12 w-12 text-blue-600 mb-4" />
-                  <CardTitle className="text-xl">{feature.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription className="text-gray-600">
-                    {feature.description}
-                  </CardDescription>
-                </CardContent>
-              </Card>
+              <motion.div
+                key={index}
+                whileHover={cardHover}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+              >
+                <Card className="h-full border-2 border-transparent hover:border-blue-100 transition-colors cursor-pointer shadow-md">
+                  <CardHeader>
+                    <feature.icon className="h-12 w-12 text-blue-600 mb-4" />
+                    <CardTitle className="text-xl font-bold">{feature.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className="text-gray-600 leading-relaxed">
+                      {feature.description}
+                    </CardDescription>
+                  </CardContent>
+                </Card>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -237,8 +279,16 @@ export default function Home() {
             <div>
               <div className="space-y-6">
                 {brokerFeatures.map((feature, index) => (
-                  <div key={index} className="flex items-start space-x-4">
-                    <div className="bg-blue-100 p-3 rounded-lg">
+                  <motion.div
+                    key={index}
+                    className="flex items-start space-x-4 p-4 rounded-xl hover:bg-white transition-colors cursor-pointer"
+                    initial={{ opacity: 0, x: -20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    whileHover={{ x: 8, transition: { type: "spring", stiffness: 300, damping: 25 } }}
+                  >
+                    <div className="bg-blue-100 p-3 rounded-lg flex-shrink-0">
                       <feature.icon className="h-6 w-6 text-blue-600" />
                     </div>
                     <div>
@@ -249,7 +299,7 @@ export default function Home() {
                         {feature.description}
                       </p>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
               
@@ -257,7 +307,15 @@ export default function Home() {
                 <Button 
                   size="lg"
                   onClick={handleBrokerNavigation}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-green-600 hover:bg-green-700 text-lg px-8 py-3 shadow-lg hover:shadow-xl transition-shadow font-medium"
+                  style={{ 
+                    fontWeight: 500,
+                    WebkitFontSmoothing: 'antialiased',
+                    MozOsxFontSmoothing: 'grayscale',
+                    textRendering: 'optimizeLegibility',
+                    backfaceVisibility: 'hidden',
+                    transform: 'translateZ(0)'
+                  }}
                 >
                   <DollarSign className="w-5 h-5 mr-2" />
                   {isBroker ? 'Open Broker Dashboard' : 'View Pricing Plans'}
@@ -309,20 +367,37 @@ export default function Home() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {testimonials.map((testimonial, index) => (
-              <Card key={index} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex items-center space-x-1 mb-2">
-                    {[...Array(testimonial.rating)].map((_, i) => (
-                      <Star key={i} className="h-5 w-5 text-yellow-400 fill-current" />
-                    ))}
-                  </div>
-                  <CardTitle className="text-lg">{testimonial.name}</CardTitle>
-                  <CardDescription>{testimonial.role}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600 italic">"{testimonial.content}"</p>
-                </CardContent>
-              </Card>
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.5, delay: index * 0.1 }}
+                whileHover={cardHover}
+              >
+                <Card className="h-full border-2 border-transparent hover:border-yellow-100 transition-colors cursor-pointer shadow-md">
+                  <CardHeader>
+                    <div className="flex items-center space-x-1 mb-2">
+                      {[...Array(testimonial.rating)].map((_, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ scale: 0 }}
+                          whileInView={{ scale: 1 }}
+                          viewport={{ once: true }}
+                          transition={{ delay: 0.3 + (i * 0.1), type: "spring", stiffness: 300, damping: 25 }}
+                        >
+                          <Star className="h-5 w-5 text-yellow-400 fill-current" />
+                        </motion.div>
+                      ))}
+                    </div>
+                    <CardTitle className="text-lg font-bold">{testimonial.name}</CardTitle>
+                    <CardDescription className="text-blue-600 font-medium">{testimonial.role}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700 italic leading-relaxed">"{testimonial.content}"</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
             ))}
           </div>
         </div>
@@ -343,7 +418,15 @@ export default function Home() {
               size="lg" 
               variant="secondary"
               onClick={() => navigate('/properties')}
-              className="text-lg px-8 py-3"
+              className="text-lg px-8 py-3 shadow-xl hover:shadow-2xl transition-shadow font-medium"
+              style={{ 
+                fontWeight: 500,
+                WebkitFontSmoothing: 'antialiased',
+                MozOsxFontSmoothing: 'grayscale',
+                textRendering: 'optimizeLegibility',
+                backfaceVisibility: 'hidden',
+                transform: 'translateZ(0)'
+              }}
             >
               <Search className="w-5 h-5 mr-2" />
               Start Searching
@@ -352,7 +435,15 @@ export default function Home() {
               <Button 
                 size="lg" 
                 onClick={handleAccountNavigation}
-                className="text-lg px-8 py-3 bg-white text-blue-600 border-white hover:bg-blue-50 hover:text-blue-700"
+                className="text-lg px-8 py-3 bg-white text-blue-600 border-white hover:bg-blue-50 hover:text-blue-700 shadow-xl hover:shadow-2xl transition-all font-medium"
+                style={{ 
+                  fontWeight: 500,
+                  WebkitFontSmoothing: 'antialiased',
+                  MozOsxFontSmoothing: 'grayscale',
+                  textRendering: 'optimizeLegibility',
+                  backfaceVisibility: 'hidden',
+                  transform: 'translateZ(0)'
+                }}
               >
                 <ArrowRight className="w-5 h-5 mr-2" />
                 Go to {dashboardLabel}
@@ -361,7 +452,15 @@ export default function Home() {
               <Button 
                 size="lg" 
                 onClick={handleAccountNavigation}
-                className="text-lg px-8 py-3 bg-white text-blue-600 border-white hover:bg-blue-50 hover:text-blue-700"
+                className="text-lg px-8 py-3 bg-white text-blue-600 border-white hover:bg-blue-50 hover:text-blue-700 shadow-xl hover:shadow-2xl transition-all font-medium"
+                style={{ 
+                  fontWeight: 500,
+                  WebkitFontSmoothing: 'antialiased',
+                  MozOsxFontSmoothing: 'grayscale',
+                  textRendering: 'optimizeLegibility',
+                  backfaceVisibility: 'hidden',
+                  transform: 'translateZ(0)'
+                }}
               >
                 <UserPlus className="w-5 h-5 mr-2" />
                 Create Account

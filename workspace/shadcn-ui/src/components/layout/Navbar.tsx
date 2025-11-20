@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -10,6 +11,15 @@ import {
 } from 'lucide-react'
 import { cn, resolveUserIdentity } from '@/lib/utils'
 import { HatchLogo } from '@/components/HatchLogo'
+
+const buttonHover = {
+  scale: 1.02,
+  transition: { type: "spring", stiffness: 400, damping: 25 }
+}
+
+const buttonTap = {
+  scale: 0.98
+}
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
@@ -91,17 +101,22 @@ export function Navbar() {
           {/* Desktop Navigation */}
           <div className={desktopNavClasses}>
             {navigation.map((item) => (
-              <Link
+              <motion.div
                 key={item.name}
-                to={item.href}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                  isActive(item.href)
-                    ? 'text-blue-600 bg-blue-50'
-                    : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
-                }`}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.98 }}
               >
-                {item.name}
-              </Link>
+                <Link
+                  to={item.href}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors inline-block ${
+                    isActive(item.href)
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-700 hover:text-blue-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {item.name}
+                </Link>
+              </motion.div>
             ))}
           </div>
 
@@ -122,29 +137,37 @@ export function Navbar() {
                 </div>
                 {isBroker && (
                   <Link to="/broker/dashboard">
-                    <Button variant="outline" size="sm">
-                      <BarChart3 className="w-4 h-4 mr-2" />
-                      Dashboard
-                    </Button>
+                    <motion.div whileHover={buttonHover} whileTap={buttonTap}>
+                      <Button variant="outline" size="sm">
+                        <BarChart3 className="w-4 h-4 mr-2" />
+                        Dashboard
+                      </Button>
+                    </motion.div>
                   </Link>
                 )}
-                <Button variant="outline" size="sm" onClick={handleSignOut}>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </Button>
+                <motion.div whileHover={buttonHover} whileTap={buttonTap}>
+                  <Button variant="outline" size="sm" onClick={handleSignOut}>
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </Button>
+                </motion.div>
               </div>
             ) : (
               <div className="flex items-center space-x-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate('/login')}
-                >
-                  Sign In
-                </Button>
-                <Button size="sm" onClick={() => navigate('/register')}>
-                  Get Started
-                </Button>
+                <motion.div whileHover={buttonHover} whileTap={buttonTap}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigate('/login')}
+                  >
+                    Sign In
+                  </Button>
+                </motion.div>
+                <motion.div whileHover={buttonHover} whileTap={buttonTap}>
+                  <Button size="sm" onClick={() => navigate('/register')}>
+                    Get Started
+                  </Button>
+                </motion.div>
               </div>
             )}
           </div>
