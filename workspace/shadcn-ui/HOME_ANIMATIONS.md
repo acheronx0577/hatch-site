@@ -65,7 +65,7 @@
 ## 🎬 Animation Details
 
 ### Button Variants Used:
-\\\javascript
+```javascript
 // Hover effect
 scale: 1.05
 y: -2px
@@ -73,31 +73,31 @@ Spring physics (stiffness: 400, damping: 17)
 
 // Tap effect
 scale: 0.98
-\\\
+```
 
 ### Card Variants:
-\\\javascript
+```javascript
 y: -8px
 scale: 1.02
 Enhanced shadow
 Spring physics (stiffness: 300, damping: 20)
-\\\
+```
 
 ### Icon Wiggle:
-\\\javascript
+```javascript
 scale: 1.1
 rotate: [0, -10, 10, -10, 0]
 duration: 0.5s
-\\\
+```
 
 ---
 
 ## 🧪 How to Test
 
 1. **Run the app**:
-   \\\ash
+   ```ash
    npm run dev
-   \\\
+   ```
 
 2. **Visit**: http://localhost:5173
 
