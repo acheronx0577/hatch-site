@@ -1,67 +1,97 @@
-# Hatch CRM Monorepo
+# Hatch Real Estate Platform
 
-Hatch CRM is a contact-first, consent-driven CRM for real estate brokerages. This Turborepo provides:
+Full-stack real estate platform: Frontend (React) + Backend (NestJS CRM)
 
-- `apps/api` — NestJS + Fastify REST API with Prisma/PostgreSQL, Redis-backed outbox, routing engine, and compliance guardrails.
-- `apps/web` — Next.js (App Router) frontend for broker dashboard, Contact 360, Tour Booker, Buyer-Rep wizard, and MLS publishing pre-flight.
-- `packages/db` — Prisma schema, migrations, and seeds for multi-tenant domain entities.
-- `packages/shared` — Domain utilities (consent enforcement, routing, MLS rules, journey simulation, event envelopes).
-- `infra/docker` — Local dependencies (Postgres, Redis, MinIO, Mailhog).
+## Prerequisites
 
-## Quick Start
+- Node.js 22.x
+- pnpm: `npm install -g pnpm`
+- Docker Desktop
+- Supabase account (for frontend auth)
 
-For detailed setup instructions, see **[SETUP.md](SETUP.md)**.
+---
 
-Quick commands:
+## Frontend Setup
 
-## 1. Create .env files (see SETUP.md for details)
-## 2. Start Docker services
-```
-docker compose -f infra/docker/docker-compose.yml up -d
-```
-
-## 3. Create shadow database
-```
-docker exec -i docker-postgres-1 psql -U hatch -d postgres -c "CREATE DATABASE hatch_crm_shadow;"
-```
-
-## 4. Install dependencies
-```
+### 1. Install & Configure
+```bash
+cd workspace/shadcn-ui
 pnpm install
 ```
 
-## 5. Run migrations and seed
+Create `.env` file:
+```env
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_ANON_KEY=your_supabase_key
 ```
+
+Get credentials from [supabase.com](https://supabase.com) → Settings → API
+
+### 2. Setup Database (Supabase SQL Editor)
+```sql
+CREATE TABLE public.profiles (
+    id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    role TEXT DEFAULT 'customer' CHECK (role IN ('customer', 'agent', 'broker', 'admin'))
+);
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+```
+
+### 3. Run
+```bash
+pnpm dev
+```
+→ http://localhost:5173
+
+---
+
+## Backend Setup
+
+### 1. Install & Configure
+```bash
+cd workspace/shadcn-ui/hatch-crm
+pnpm install
+```
+
+Create `.env` in 3 locations (`packages/db/.env`, `apps/api/.env`, `hatch-crm/.env`):
+```env
+DATABASE_URL=postgresql://hatch:hatch@localhost:5432/hatch_crm?schema=public
+SHADOW_DATABASE_URL=postgresql://hatch:hatch@localhost:5432/hatch_crm_shadow?schema=public
+REDIS_URL=redis://localhost:6379
+API_PORT=4000
+NEXT_PUBLIC_API_URL=http://localhost:4000
+```
+
+### 2. Start Docker
+```bash
+docker compose -f infra/docker/docker-compose.yml up -d
+docker exec -i docker-postgres-1 psql -U hatch -d postgres -c "CREATE DATABASE hatch_crm_shadow;"
+```
+
+### 3. Setup Database
+```bash
 pnpm --filter @hatch/db migrate:dev
-```
-```
 pnpm --filter @hatch/db seed
 ```
 
-## 6. Start services
-### http://localhost:4000
+### 4. Run
+```bash
+pnpm --filter @hatch/api dev
 ```
-pnpm --filter @hatch/api dev   
-```
-### http://localhost:3000
-```
-pnpm --filter @hatch/web dev    
+→ http://localhost:4000
+
+---
+
+## Troubleshooting
+
+**Port in use:**
+```bash
+netstat -ano | findstr :5173
+Stop-Process -Id <PID> -Force
 ```
 
-Seeded demo showcases:
-
-1. Attempt SMS to Casey → blocked (no consent).
-2. Capture SMS consent via Contact 360 Quick Actions → send succeeds.
-3. Request tour without BBA → API returns buyer-rep required payload.
-4. Draft + sign BBA in wizard → re-request tour → confirmed & routed.
-5. Publishing pre-flight fails without MLS disclaimer → pass after adding required text.
-
-## Documentation
-
-- **[SETUP.md](SETUP.md)** — Complete setup guide for local development
-- **[MONOREPO_ARCHITECTURE.md](MONOREPO_ARCHITECTURE.md)** — Detailed explanation of monorepo structure, apps organization, and how components connect
-- [Architecture](docs/architecture.md) — System architecture and module overview
-- [Data Model](docs/data-model.md) — Prisma schema notes and entity descriptions
-- [Compliance Guardrails](docs/compliance.md) — Consent, MLS, and audit guardrails reference
-- [Testing Strategy](docs/testing.md) — Testing strategy, coverage, and how to run suites
-- [Runbooks](docs/runbooks.md) — Operational runbooks for local dev, staging, and prod
+**Docker issues:**
+```bash
+cd workspace/shadcn-ui/hatch-crm
+docker compose -f infra/docker/docker-compose.yml restart
+```
