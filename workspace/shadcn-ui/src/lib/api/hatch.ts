@@ -1,4 +1,4 @@
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+const rawBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
 const API_BASE_URL = rawBaseUrl.endsWith('/') ? rawBaseUrl : `${rawBaseUrl}/`;
 
 interface FetchOptions extends RequestInit {
