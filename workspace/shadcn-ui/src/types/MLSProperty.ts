@@ -3,7 +3,7 @@ export interface MLSProperty {
   // Core identification
   id: string
   mlsNumber?: string
-  status: 'draft' | 'active' | 'pending' | 'sold' | 'expired'
+  status: 'draft' | 'active' | 'pending' | 'sold' | 'expired' | 'withdrawn'
   workflowState?: 'PROPERTY_PENDING' | 'LIVE' | 'SOLD'
   
   // Basic property information
@@ -148,7 +148,7 @@ export interface PropertySearchResult {
 }
 
 // Property status and workflow
-export type PropertyStatus = 'draft' | 'active' | 'pending' | 'sold' | 'expired'
+export type PropertyStatus = 'draft' | 'active' | 'pending' | 'sold' | 'expired' | 'withdrawn'
 
 export interface PropertyStatusUpdate {
   propertyId: string

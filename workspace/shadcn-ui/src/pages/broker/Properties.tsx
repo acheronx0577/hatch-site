@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useBroker } from '@/contexts/BrokerContext'
 import { MLSProperty } from '@/types/MLSProperty'
 import PropertyPreview from '@/components/PropertyPreview'
+import { motion } from 'framer-motion'
 import {
   Building2,
   Search,
@@ -44,7 +45,7 @@ import { toast } from '@/components/ui/use-toast'
 
 const STATUS_OPTIONS: MLSProperty['status'][] = ['draft', 'active', 'pending', 'sold', 'withdrawn', 'expired']
 const PROPERTY_TYPE_OPTIONS = ['residential', 'commercial', 'land', 'rental', 'condo', 'townhouse', 'multi-family']
-const PUBLISHED_STATUS_OPTIONS = STATUS_OPTIONS.filter((status) => status !== 'draft')
+const PUBLISHED_STATUS_OPTIONS = STATUS_OPTIONS.filter((status): status is Exclude<MLSProperty['status'], 'draft'> => status !== 'draft')
 const STATUS_CHANGE_OPTIONS: Array<{ value: MLSProperty['status']; label: string; description: string }> = [
   {
     value: 'active',
@@ -96,6 +97,68 @@ export default function Properties() {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [analyticsProperty, setAnalyticsProperty] = useState<MLSProperty | null>(null)
   const [menuLoadingId, setMenuLoadingId] = useState<string | null>(null)
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setPrefersReducedMotion(mediaQuery.matches)
+    
+    const handleChange = (e: MediaQueryListEvent) => {
+      setPrefersReducedMotion(e.matches)
+    }
+    
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [])
+
+  // Animation variants
+  const cardVariant = {
+    hidden: { opacity: 0, y: 20 },
+    visible: (index: number) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        delay: index * 0.05,
+        duration: 0.3,
+      }
+    })
+  }
+
+  const cardHoverVariant = prefersReducedMotion ? {} : {
+    whileHover: { y: -8, transition: { duration: 0.2 } }
+  }
+
+  const buttonHoverVariant = prefersReducedMotion ? {} : {
+    whileHover: { scale: 1.05, y: -2, transition: { duration: 0.2 } },
+    whileTap: { scale: 0.95 }
+  }
+
+  const headerVariant = {
+    hidden: { opacity: 0, y: -20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.5 }
+    }
+  }
+
+  const searchVariant = {
+    hidden: { opacity: 0, x: -20 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: { delay: 0.2, duration: 0.4 }
+    }
+  }
+
+  const emptyStateVariant = {
+    hidden: { opacity: 0, scale: 0.9 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      transition: { delay: 0.3, duration: 0.5 }
+    }
+  }
 
   const liveProperties = useMemo(
     () => properties.filter((property) => property.workflowState === 'LIVE' || property.workflowState === 'SOLD'),
@@ -143,13 +206,14 @@ export default function Properties() {
   }
 
   // Get leads for a specific property
-  const getPropertyLeads = (propertyId: string) => {
-    return leads.filter(lead => lead.propertyId === propertyId)
-  }
+  const getPropertyLeads = useMemo(
+    () => (propertyId: string) => leads.filter(lead => lead.propertyId === propertyId),
+    [leads]
+  )
 
   const analyticsLeads = useMemo(
     () => (analyticsProperty ? getPropertyLeads(analyticsProperty.id) : []),
-    [analyticsProperty, leads]
+    [analyticsProperty, getPropertyLeads]
   )
 
   const createEditForm = (property: MLSProperty): PropertyEditForm => ({
@@ -377,27 +441,41 @@ export default function Properties() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <motion.div 
+          className="flex justify-between items-center"
+          initial={prefersReducedMotion ? "visible" : "hidden"}
+          animate="visible"
+          variants={headerVariant}
+        >
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Properties</h1>
             <p className="text-gray-600">Manage your published property listings and track performance</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline">
-              <Filter className="w-4 h-4 mr-2" />
-              Filters
-            </Button>
-            <Button onClick={() => {
-              window.location.href = '/broker/draft-listings?newDraft=1'
-            }}>
-              <Plus className="w-4 h-4 mr-2" />
-              Add Property
-            </Button>
+            <motion.div {...buttonHoverVariant}>
+              <Button variant="outline">
+                <Filter className="w-4 h-4 mr-2" />
+                Filters
+              </Button>
+            </motion.div>
+            <motion.div {...buttonHoverVariant}>
+              <Button onClick={() => {
+                window.location.href = '/broker/draft-listings?newDraft=1'
+              }}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Property
+              </Button>
+            </motion.div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Search and Stats */}
-        <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <motion.div 
+          className="flex flex-col sm:flex-row gap-4 items-center justify-between"
+          initial={prefersReducedMotion ? "visible" : "hidden"}
+          animate="visible"
+          variants={searchVariant}
+        >
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <Input
@@ -416,18 +494,26 @@ export default function Properties() {
             <span>•</span>
             <span>{properties.filter(p => p.workflowState !== 'LIVE' && p.workflowState !== 'SOLD').length} drafts</span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Properties Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredProperties.map((property) => {
+          {filteredProperties.map((property, index) => {
             const propertyLeads = getPropertyLeads(property.id)
             const isMenuLoading = menuLoadingId === property.id
 
             return (
-              <Card key={property.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                {/* Property Image */}
-                <div className="aspect-video bg-gray-200 relative">
+              <motion.div
+                key={property.id}
+                custom={index}
+                initial={prefersReducedMotion ? "visible" : "hidden"}
+                animate="visible"
+                variants={cardVariant}
+                {...cardHoverVariant}
+              >
+                <Card className="overflow-hidden shadow-md h-full">
+                  {/* Property Image */}
+                  <div className="aspect-video bg-gray-200 relative">
                   {property.photos && property.photos.length > 0 ? (
                     <img
                       src={property.photos[0]}
@@ -436,7 +522,7 @@ export default function Properties() {
                       onError={(e) => {
                         const target = e.target as HTMLImageElement
                         target.style.display = 'none'
-                        target.nextElementSibling?.classList.remove('hidden')
+                        target.nextElementSibling?.classList.remove('invisible')
                       }}
                     />
                   ) : (
@@ -446,7 +532,7 @@ export default function Properties() {
                   )}
                   
                   {/* Hidden fallback for broken images */}
-                  <div className="hidden w-full h-full flex items-center justify-center bg-gray-100">
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100 invisible">
                     <ImageIcon className="w-12 h-12 text-gray-400" />
                   </div>
                   
@@ -635,38 +721,43 @@ export default function Properties() {
 
                     {/* Action Buttons */}
                     <div className="flex gap-2 pt-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="flex-1"
-                        onClick={() => handleEdit(property)}
-                      >
-                        <Edit className="w-4 h-4 mr-1" />
-                        Edit
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="flex-1"
-                        onClick={() => handlePreview(property)}
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        View
-                      </Button>
+                      <motion.div className="flex-1" {...buttonHoverVariant}>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={() => handleEdit(property)}
+                        >
+                          <Edit className="w-4 h-4 mr-1" />
+                          Edit
+                        </Button>
+                      </motion.div>
+                      <motion.div className="flex-1" {...buttonHoverVariant}>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="w-full"
+                          onClick={() => handlePreview(property)}
+                        >
+                          <Eye className="w-4 h-4 mr-1" />
+                          View
+                        </Button>
+                      </motion.div>
                     </div>
 
                     {/* Delete Button */}
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button 
-                          size="sm" 
-                          variant="destructive" 
-                          className="w-full"
-                        >
-                          <Trash2 className="w-4 h-4 mr-1" />
-                          Delete Property
-                        </Button>
-                      </AlertDialogTrigger>
+                    <motion.div {...buttonHoverVariant}>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="destructive" 
+                            className="w-full"
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            Delete Property
+                          </Button>
+                        </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete this property?</AlertDialogTitle>
@@ -685,17 +776,37 @@ export default function Properties() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
+                    </motion.div>
                   </div>
                 </CardContent>
               </Card>
+            </motion.div>
             )
           })}
         </div>
 
         {/* Empty State */}
         {filteredProperties.length === 0 && (
-          <div className="text-center py-12">
-            <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <motion.div 
+            className="text-center py-12"
+            initial={prefersReducedMotion ? "visible" : "hidden"}
+            animate="visible"
+            variants={emptyStateVariant}
+          >
+            <motion.div
+              {...(prefersReducedMotion ? {} : {
+                animate: { 
+                  y: [0, -10, 0],
+                  transition: { 
+                    repeat: Infinity, 
+                    duration: 2,
+                    ease: "easeInOut"
+                  }
+                }
+              })}
+            >
+              <Building2 className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            </motion.div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
               {searchTerm ? 'No properties found' : 'No published properties yet'}
             </h3>
@@ -707,26 +818,30 @@ export default function Properties() {
             </p>
             {!searchTerm && (
               <div className="flex justify-center gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    window.location.href = '/broker/draft-listings?bulkUpload=1'
-                  }}
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Bulk Upload Properties
-                </Button>
-                <Button
-                  onClick={() => {
-                    window.location.href = '/broker/draft-listings?newDraft=1'
-                  }}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Your First Property
-                </Button>
+                <motion.div {...buttonHoverVariant}>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      window.location.href = '/broker/draft-listings?bulkUpload=1'
+                    }}
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Bulk Upload Properties
+                  </Button>
+                </motion.div>
+                <motion.div {...buttonHoverVariant}>
+                  <Button
+                    onClick={() => {
+                      window.location.href = '/broker/draft-listings?newDraft=1'
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Your First Property
+                  </Button>
+                </motion.div>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
         {/* Edit Property Dialog */}
@@ -768,7 +883,7 @@ export default function Properties() {
                         <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        {!PUBLISHED_STATUS_OPTIONS.includes(editForm.status) && (
+                        {editForm.status === 'draft' && (
                           <SelectItem value={editForm.status}>
                             {editForm.status.charAt(0).toUpperCase() + editForm.status.slice(1)}
                           </SelectItem>
