@@ -2,6 +2,8 @@ import React from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { useBroker } from '@/contexts/BrokerContext'
+import { motion } from 'framer-motion'
+import { usePageAnimations } from '@/hooks/usePageAnimations'
 import {
   BarChart3,
   TrendingUp,
@@ -15,16 +17,26 @@ import {
 
 export default function Analytics() {
   const { properties, leads, agents } = useBroker()
+  const { pageVariants, cardHoverVariant, getInitialState } = usePageAnimations()
 
   return (
     <div className="p-6 space-y-6">
-      <div>
+      <motion.div
+        initial={getInitialState('headerVariant')}
+        animate="visible"
+        variants={pageVariants.headerVariant}
+      >
         <h1 className="text-3xl font-bold text-gray-900">Analytics</h1>
         <p className="text-gray-600">Track your performance and business metrics</p>
-      </div>
+      </motion.div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <motion.div 
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
+        initial={getInitialState('contentVariant')}
+        animate="visible"
+        variants={pageVariants.contentVariant}
+      >
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -76,7 +88,7 @@ export default function Analytics() {
             </p>
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
 
       {/* Charts and detailed analytics would go here */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

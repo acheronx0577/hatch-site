@@ -21,6 +21,8 @@ import { MIN_PROPERTY_PHOTOS, MAX_PROPERTY_PHOTOS } from '@/constants/photoRequi
 import PropertyPreview from '@/components/PropertyPreview'
 import { PropertyFiltersComponent, PROPERTY_FILTER_LIMITS, createDefaultPropertyFilters } from '@/components/PropertyFilters'
 import type { PropertyFilters } from '@/components/PropertyFilters'
+import { motion } from 'framer-motion'
+import { usePageAnimations } from '@/hooks/usePageAnimations'
 import {
   FileText,
   Edit,
@@ -173,6 +175,7 @@ const createEmptyDraftProperty = (): MLSProperty => {
 
 export default function DraftListings() {
   const { getDraftProperties, updateProperty, deleteProperty, publishDraftProperty, addDraftProperties } = useBroker()
+  const { pageVariants, buttonHoverVariant, cardHoverVariant, getInitialState } = usePageAnimations()
   const [editingProperty, setEditingProperty] = useState<MLSProperty | null>(null)
   const [previewProperty, setPreviewProperty] = useState<MLSProperty | null>(null)
   const [showEditDialog, setShowEditDialog] = useState(false)
@@ -1618,7 +1621,12 @@ export default function DraftListings() {
         </div>
       )}
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <motion.div 
+        className="flex justify-between items-center"
+        initial={getInitialState('headerVariant')}
+        animate="visible"
+        variants={pageVariants.headerVariant}
+      >
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Draft Listings</h1>
           <p className="text-gray-600">
@@ -1626,27 +1634,38 @@ export default function DraftListings() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setShowFiltersDialog(true)}>
-            <Filter className="w-4 h-4 mr-2" />
-            Filter
-            {activeFilterCount > 0 && (
-              <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>
-            )}
-          </Button>
-          <Button onClick={() => setShowBulkUpload(true)} className="bg-blue-600 hover:bg-blue-700">
-            <Upload className="w-4 h-4 mr-2" />
-            Upload Listings
-          </Button>
-          <Button onClick={openNewDraftDialog}>
-            <Plus className="w-4 h-4 mr-2" />
-            New Draft
-          </Button>
+          <motion.div {...buttonHoverVariant}>
+            <Button variant="outline" onClick={() => setShowFiltersDialog(true)}>
+              <Filter className="w-4 h-4 mr-2" />
+              Filter
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>
+              )}
+            </Button>
+          </motion.div>
+          <motion.div {...buttonHoverVariant}>
+            <Button onClick={() => setShowBulkUpload(true)} className="bg-blue-600 hover:bg-blue-700">
+              <Upload className="w-4 h-4 mr-2" />
+              Upload Listings
+            </Button>
+          </motion.div>
+          <motion.div {...buttonHoverVariant}>
+            <Button onClick={openNewDraftDialog}>
+              <Plus className="w-4 h-4 mr-2" />
+              New Draft
+            </Button>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Bulk Actions Bar */}
       {filteredDraftListings.length > 0 && (
-        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+        <motion.div 
+          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+          initial={getInitialState('contentVariant')}
+          animate="visible"
+          variants={pageVariants.contentVariant}
+        >
           <div className="flex items-center space-x-4">
             <Checkbox
               checked={isAllSelected}
@@ -1675,18 +1694,26 @@ export default function DraftListings() {
               </Button>
             </div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {/* Draft listings grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDraftListings.map((draft) => {
+        {filteredDraftListings.map((draft, index) => {
           const errors = validateProperty(draft)
           const canPublish = errors.length === 0
           const isPublishing = publishingId === draft.id
           
           return (
-            <Card key={draft.id} className={`hover:shadow-lg transition-shadow ${selectedListings.includes(draft.id) ? 'ring-2 ring-blue-500' : ''}`}>
+            <motion.div
+              key={draft.id}
+              custom={index}
+              initial={getInitialState('cardVariant')}
+              animate="visible"
+              variants={pageVariants.cardVariant}
+              {...cardHoverVariant}
+            >
+              <Card className={`shadow-md hover:shadow-xl transition-shadow h-full ${selectedListings.includes(draft.id) ? 'ring-2 ring-blue-500' : ''}`}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -1840,6 +1867,7 @@ export default function DraftListings() {
                 </div>
               </CardContent>
             </Card>
+          </motion.div>
           )
         })}
       </div>

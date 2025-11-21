@@ -6,6 +6,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
+import { motion } from 'framer-motion'
+import { usePageAnimations } from '@/hooks/usePageAnimations'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -207,6 +209,7 @@ const CRM = () => {
   const { activeMembership } = useAuth()
   const { openForContact } = useMessenger()
   const navigate = useNavigate()
+  const { pageVariants, buttonHoverVariant, cardHoverVariant, getInitialState } = usePageAnimations()
   const [activeTab, setActiveTab] = useState('overview')
 
   const [leads, setLeads] = useState<Lead[]>([])
@@ -644,15 +647,25 @@ const CRM = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="mb-8">
+        <motion.div 
+          className="mb-8"
+          initial={getInitialState('headerVariant')}
+          animate="visible"
+          variants={pageVariants.headerVariant}
+        >
           <h1 className="text-3xl font-bold text-gray-900 mb-2">CRM Dashboard</h1>
           <p className="text-gray-600">Operational overview for your broker team</p>
           {error && (
             <p className="text-sm text-red-600 mt-2">{error}</p>
           )}
-        </div>
+        </motion.div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <motion.div
+          initial={getInitialState('contentVariant')}
+          animate="visible"
+          variants={pageVariants.contentVariant}
+        >
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="calendar">Calendar</TabsTrigger>
@@ -1212,6 +1225,7 @@ const CRM = () => {
             )}
           </TabsContent>
         </Tabs>
+        </motion.div>
 
       </div>
       <ContactFiltersDialog

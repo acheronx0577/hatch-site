@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { motion } from 'framer-motion'
+import { usePageAnimations } from '@/hooks/usePageAnimations'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -26,6 +28,7 @@ export default function Team() {
     getTeamSummary,
     getMemberPerformance
   } = useBroker()
+  const { pageVariants, buttonHoverVariant, cardHoverVariant, getInitialState } = usePageAnimations()
   const { toast } = useToast()
 
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'pending'>('all')
@@ -139,7 +142,12 @@ export default function Team() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+      <motion.div 
+        className="flex justify-between items-center"
+        initial={getInitialState('headerVariant')}
+        animate="visible"
+        variants={pageVariants.headerVariant}
+      >
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Team</h1>
           <p className="text-gray-600">Manage your team members and track performance</p>
@@ -161,7 +169,7 @@ export default function Team() {
             Add Team Member
           </Button>
         </div>
-      </div>
+      </motion.div>
 
       {teamMembersError && (
         <Card className="border-red-200 bg-red-50 text-red-700">

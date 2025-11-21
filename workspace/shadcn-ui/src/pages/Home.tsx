@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { Navbar } from '@/components/layout/Navbar'
 import { useAuth } from '@/contexts/AuthContext'
 import { resolveUserIdentity } from '@/lib/utils'
+import { usePageAnimations } from '@/hooks/usePageAnimations'
 import { 
   Search, 
   Building2,

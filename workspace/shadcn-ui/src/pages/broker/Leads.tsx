@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
+import { usePageAnimations } from '@/hooks/usePageAnimations'
 import {
   Users,
   Phone,
@@ -63,6 +65,7 @@ const emptyFormState: LeadFormState = {
 
 const LeadsPage = () => {
   const { activeOrgId, userId } = useAuth()
+  const { pageVariants, buttonHoverVariant, cardHoverVariant, getInitialState } = usePageAnimations()
   const [leads, setLeads] = useState<ContactListItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -188,7 +191,12 @@ const LeadsPage = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+      <motion.div 
+        className="flex justify-between items-center"
+        initial={getInitialState('headerVariant')}
+        animate="visible"
+        variants={pageVariants.headerVariant}
+      >
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Leads</h1>
           <p className="text-gray-600">Manage prospects captured across your Hatch funnels</p>
@@ -274,10 +282,15 @@ const LeadsPage = () => {
             </DialogContent>
           </Dialog>
         </div>
-      </div>
+      </motion.div>
 
-      <Card>
-        <CardHeader>
+      <motion.div
+        initial={getInitialState('contentVariant')}
+        animate="visible"
+        variants={pageVariants.contentVariant}
+      >
+        <Card>
+          <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>All leads</CardTitle>
@@ -347,6 +360,7 @@ const LeadsPage = () => {
           )}
         </CardContent>
       </Card>
+      </motion.div>
     </div>
   )
 }

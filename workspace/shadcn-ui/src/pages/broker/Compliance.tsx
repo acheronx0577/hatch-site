@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { format, formatDistanceToNow, subDays } from 'date-fns'
 import { Download, RefreshCcw } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { usePageAnimations } from '@/hooks/usePageAnimations'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -48,6 +50,7 @@ const parseCsv = (value: string) =>
     .filter(Boolean)
 
 export default function ComplianceCenter() {
+  const { pageVariants, buttonHoverVariant, getInitialState } = usePageAnimations()
   const initialRangeEnd = new Date()
   const initialRangeStart = subDays(initialRangeEnd, 30)
 
