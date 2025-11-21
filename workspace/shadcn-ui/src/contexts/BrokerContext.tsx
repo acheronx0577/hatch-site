@@ -29,9 +29,12 @@ interface Lead {
   phone: string
   propertyId: string
   status: 'new' | 'contacted' | 'qualified' | 'closed'
+  priority?: 'low' | 'medium' | 'high' | 'urgent'
   source: string
   createdAt: string
   notes?: string
+  budget?: number
+  score?: number
 }
 
 interface TeamMember {
