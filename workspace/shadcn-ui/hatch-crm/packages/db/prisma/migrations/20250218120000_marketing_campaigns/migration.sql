@@ -1,4 +1,5 @@
 -- CreateEnum
+CREATE TYPE "OutreachChannel" AS ENUM ('EMAIL', 'SMS');
 CREATE TYPE "MarketingCampaignStatus" AS ENUM ('DRAFT', 'SCHEDULED', 'SENT', 'FAILED');
 
 -- CreateTable

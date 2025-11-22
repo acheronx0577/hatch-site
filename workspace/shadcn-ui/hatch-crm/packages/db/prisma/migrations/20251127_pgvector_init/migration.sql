@@ -1,5 +1,9 @@
-CREATE EXTENSION IF NOT EXISTS vector;
+-- CreateExtension
+-- Commented out pgvector extension - requires pgvector compiled extension
+-- CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Commented out VectorChunk table and related triggers as they require vector extension
+/*
 DO $$ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.tables WHERE table_name = 'VectorChunk'
@@ -72,3 +76,4 @@ DO $$ BEGIN
     );
   END IF;
 END $$;
+*/
