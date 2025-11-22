@@ -1,5 +1,12 @@
 {
 	"dependencies": {
 		"socket.io-client": "^4.8.1"
+	},
+	"pnpm": {
+		"overrides": {
+			"eslint": "9.11.1",
+			"@typescript-eslint/eslint-plugin": "8.45.0",
+			"@typescript-eslint/parser": "8.45.0"
+		}
 	}
 }
