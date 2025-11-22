@@ -237,11 +237,39 @@
   opacity: 0;
   transform: translateY(20px);
   transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+  /* Fix blurry animations */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
 }
 
 .fade-in-visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* Fix blurry hover effects on interactive elements */
+button:hover,
+a:hover,
+.transition-all:hover,
+.transition-transform:hover {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+/* Only apply will-change to actively animating elements */
+button:active,
+a:active,
+.fade-in:not(.fade-in-visible) {
+  will-change: transform, opacity;
+}
+
+/* Remove will-change after animation completes */
+.fade-in.fade-in-visible {
+  will-change: auto;
 }
 
 /* Hero section fades in immediately on page load */
