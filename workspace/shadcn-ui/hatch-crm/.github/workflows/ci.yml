@@ -4,6 +4,7 @@ on:
   push:
     branches: [local-backup]
   pull_request:
+    branches: [local-backup]
 
 jobs:
   build-test:
