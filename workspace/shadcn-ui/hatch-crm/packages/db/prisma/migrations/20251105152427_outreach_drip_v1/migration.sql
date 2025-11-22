@@ -4,8 +4,7 @@
   - A unique constraint covering the columns `[tenantId,name]` on the table `Pipeline` will be added. If there are existing duplicate values, this will fail.
 
 */
--- CreateEnum
-CREATE TYPE "OutreachChannel" AS ENUM ('EMAIL', 'SMS');
+-- OutreachChannel already created in earlier migration
 
 -- CreateEnum
 CREATE TYPE "CampaignEnrollmentStatus" AS ENUM ('ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED');
