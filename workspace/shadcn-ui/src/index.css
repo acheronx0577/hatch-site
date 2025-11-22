@@ -220,3 +220,64 @@
     box-shadow: 0 0 0 0 rgba(31, 95, 255, 0);
   }
 }
+
+/* Fade-in animation for scroll */
+.fade-in {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.fade-in-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Hero section fades in immediately on page load */
+section#hero.fade-in {
+  animation: fadeInUp 0.6s ease-out forwards;
+}
+
+/* Staggered animation for children within sections - faster */
+.fade-in:nth-child(1) {
+  transition-delay: 0.05s;
+}
+
+.fade-in:nth-child(2) {
+  transition-delay: 0.1s;
+}
+
+.fade-in:nth-child(3) {
+  transition-delay: 0.15s;
+}
+
+.fade-in:nth-child(4) {
+  transition-delay: 0.2s;
+}
+
+.fade-in:nth-child(5) {
+  transition-delay: 0.25s;
+}
+
+.fade-in:nth-child(6) {
+  transition-delay: 0.3s;
+}
+
+.fade-in:nth-child(7) {
+  transition-delay: 0.35s;
+}
+
+.fade-in:nth-child(8) {
+  transition-delay: 0.4s;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

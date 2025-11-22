@@ -90,10 +90,32 @@ export default function Index() {
     }
   ]
 
+  // Intersection Observer for fade-in animations
+  useEffect(() => {
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -100px 0px'
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('fade-in-visible')
+        }
+      })
+    }, observerOptions)
+
+    // Observe all elements with fade-in class
+    const elements = document.querySelectorAll('.fade-in')
+    elements.forEach(el => observer.observe(el))
+
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Hero Section */}
-      <section className="relative py-20 px-4">
+      <section className="relative py-20 px-4 fade-in">
         <div className="container mx-auto text-center">
           <Badge variant="secondary" className="mb-6 px-4 py-2">
             🚀 Now serving Florida real estate professionals
