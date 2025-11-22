@@ -237,7 +237,7 @@ export default function Home() {
         {/* Hero */}
         <section
           id="hero"
-          className="relative overflow-hidden bg-gradient-to-b from-ink-50 via-ink-50 to-brand-green-100/40"
+          className="relative overflow-hidden bg-gradient-to-b from-ink-50 via-ink-50 to-brand-green-100/40 fade-in"
         >
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute -left-32 top-[-12rem] h-[28rem] w-[28rem] rounded-full bg-brand-gradient blur-3xl opacity-25" />
@@ -247,7 +247,7 @@ export default function Home() {
           <div className="container relative mx-auto max-w-6xl px-4 py-6xl">
             <div className="grid gap-12 lg:grid-cols-12 lg:items-start">
               <div className="space-y-8 lg:col-span-7">
-                <div className="flex flex-wrap items-center gap-3 text-sm" id="agent-match">
+                <div className="flex flex-wrap items-center gap-3 text-sm fade-in" id="agent-match">
                   <button
                     type="button"
                     className={cn(
@@ -296,7 +296,7 @@ export default function Home() {
                   </Button>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-6 fade-in">
                   <h1 className="max-w-2xl text-ink-900">
                     Discover your next opportunity with{' '}
                     <span className="bg-gradient-to-r from-brand-blue-600 via-brand-blue-500 to-brand-green-500 bg-clip-text text-transparent">
@@ -307,7 +307,7 @@ export default function Home() {
                   <p className="max-w-xl text-lg text-ink-500">{heroContent.subhead}</p>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center fade-in">
                   <Button size="lg" onClick={handlePrimaryCta}>
                     <Search className="h-5 w-5" />
                     {heroContent.primaryLabel}
@@ -320,7 +320,7 @@ export default function Home() {
 
               <aside
                 id="market-snapshot"
-                className="relative flex flex-col rounded-[28px] border border-[var(--glass-border)] bg-white/85 p-6 shadow-brand-lg backdrop-blur-xl lg:col-span-5"
+                className="relative flex flex-col rounded-[28px] border border-[var(--glass-border)] bg-white/85 p-6 shadow-brand-lg backdrop-blur-xl lg:col-span-5 fade-in"
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -330,22 +330,22 @@ export default function Home() {
                   <Badge className="border-0 bg-brand-blue-600/15 text-brand-blue-700">Updated today</Badge>
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-4">
-                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4">
+                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4 fade-in">
                     <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Median price</div>
                     <div className="mt-1 text-2xl font-semibold text-ink-900">$642K</div>
                     <div className="text-sm text-ink-500">+2.4% vs last month</div>
                   </div>
-                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4">
+                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4 fade-in">
                     <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Days on market</div>
                     <div className="mt-1 text-2xl font-semibold text-ink-900">27</div>
                     <div className="text-sm text-ink-500">Faster than statewide avg.</div>
                   </div>
-                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4">
+                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4 fade-in">
                     <div className="text-xs uppercase tracking-[0.08em] text-ink-400">New this week</div>
                     <div className="mt-1 text-2xl font-semibold text-ink-900">1,124</div>
                     <div className="text-sm text-ink-500">Fresh listings in Miami-Dade</div>
                   </div>
-                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4">
+                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4 fade-in">
                     <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Price drops</div>
                     <div className="mt-1 text-2xl font-semibold text-ink-900">312</div>
                     <div className="text-sm text-ink-500">Homes with recent reductions</div>
@@ -365,7 +365,7 @@ export default function Home() {
             </div>
 
             <form
-              className="relative z-10 mt-10 rounded-[28px] border border-[var(--border-subtle)] bg-white/95 p-6 shadow-brand-md"
+              className="relative z-10 mt-10 rounded-[28px] border border-[var(--border-subtle)] bg-white/95 p-6 shadow-brand-md fade-in"
               onSubmit={handleSearchSubmit}
             >
               <div className="flex flex-col gap-6 lg:flex-row lg:items-end">
@@ -440,7 +440,7 @@ export default function Home() {
         </section>
 
         {/* How it works */}
-        <section id="how-it-works" className="bg-brand-green-100/50 py-5xl">
+        <section id="how-it-works" className="bg-brand-green-100/50 py-5xl fade-in">
           <div className="container mx-auto max-w-5xl px-4">
             <div className="text-center">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-blue-600">How Hatch works</p>
@@ -451,7 +451,7 @@ export default function Home() {
               {howItWorksSteps.map((step, index) => (
                 <Card
                   key={step.title}
-                  className="h-full border-transparent bg-white/90 shadow-brand-md transition-transform duration-200 hover:-translate-y-1"
+                  className="h-full border-transparent bg-white/90 shadow-brand-md transition-transform duration-200 hover:-translate-y-1 fade-in"
                 >
                   <CardHeader className="p-6 pb-3">
                     <Badge className="mb-4 w-fit border-0 bg-brand-blue-600/15 text-brand-blue-700">
@@ -467,7 +467,7 @@ export default function Home() {
         </section>
 
         {/* Consumer feature grid */}
-        <section id="why-hatch" className="py-5xl">
+        <section id="why-hatch" className="py-5xl fade-in">
           <div className="container mx-auto max-w-6xl px-4">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-blue-600">Why choose Hatch?</p>
@@ -482,7 +482,7 @@ export default function Home() {
               {consumerFeatures.map((feature) => (
                 <Card
                   key={feature.title}
-                  className="group h-full border border-[var(--border-subtle)] bg-white/95 shadow-none transition-all duration-200 hover:-translate-y-1 hover:shadow-brand-md"
+                  className="group h-full border border-[var(--border-subtle)] bg-white/95 shadow-none transition-all duration-200 hover:-translate-y-1 hover:shadow-brand-md fade-in"
                 >
                   <CardHeader className="p-8 pb-4">
                     <div className="mb-6 inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-blue-600/12 text-brand-blue-600">
@@ -498,7 +498,7 @@ export default function Home() {
         </section>
 
         {/* Testimonials */}
-        <section id="testimonials" className="bg-ink-75 py-5xl">
+        <section id="testimonials" className="bg-ink-75 py-5xl fade-in">
           <div className="container mx-auto max-w-6xl px-4">
             <div className="mx-auto max-w-2xl text-center">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-blue-600">Social proof</p>
@@ -512,7 +512,7 @@ export default function Home() {
               {testimonials.map((testimonial) => (
                 <Card
                   key={testimonial.name}
-                  className="flex h-full flex-col border border-transparent bg-white/95 shadow-brand transition-transform duration-200 hover:-translate-y-1 hover:shadow-brand-md"
+                  className="flex h-full flex-col border border-transparent bg-white/95 shadow-brand transition-transform duration-200 hover:-translate-y-1 hover:shadow-brand-md fade-in"
                 >
                   <CardHeader className="p-8 pb-4">
                     <div className="flex items-center gap-3">
@@ -542,7 +542,7 @@ export default function Home() {
         </section>
 
         {/* Professional band */}
-        <section id="for-pros" className="bg-ink-900 py-5xl text-ink-50">
+        <section id="for-pros" className="bg-ink-900 py-5xl text-ink-50 fade-in">
           <div className="container mx-auto max-w-6xl px-4">
             <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
               <div className="space-y-6 lg:col-span-6">
@@ -600,7 +600,7 @@ export default function Home() {
         </section>
 
         {/* CTA */}
-        <section className="relative py-5xl">
+        <section className="relative py-5xl fade-in">
           <div className="container mx-auto max-w-5xl px-4">
             <div className="relative overflow-hidden rounded-[32px] bg-brand-gradient px-8 py-12 text-ink-50 shadow-brand-lg">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25)_0,_transparent_60%)]" />
