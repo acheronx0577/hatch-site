@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -173,7 +173,7 @@ export default function Index() {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 px-4 bg-white">
+      <section className="py-20 px-4 bg-white fade-in">
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
@@ -187,7 +187,7 @@ export default function Index() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {features.map((feature, index) => (
-              <Card key={index} className="text-center hover:shadow-lg transition-shadow">
+              <Card key={index} className="text-center hover:shadow-lg transition-shadow fade-in">
                 <CardHeader>
                   <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center mx-auto mb-4">
                     <feature.icon className="h-6 w-6 text-white" />
@@ -206,7 +206,7 @@ export default function Index() {
       </section>
 
       {/* Featured Properties Section */}
-      <section className="py-20 px-4 bg-gray-50">
+      <section className="py-20 px-4 bg-gray-50 fade-in">
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
@@ -219,7 +219,7 @@ export default function Index() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
             {[1, 2, 3].map((i) => (
-              <Card key={i} className="overflow-hidden hover:shadow-lg transition-shadow">
+              <Card key={i} className="overflow-hidden hover:shadow-lg transition-shadow fade-in">
                 <div className="h-48 bg-gradient-to-r from-blue-200 to-purple-200 flex items-center justify-center">
                   <Home className="h-12 w-12 text-gray-600" />
                 </div>
@@ -261,7 +261,7 @@ export default function Index() {
       </section>
 
       {/* Testimonials Section */}
-      <section className="py-20 px-4 bg-white">
+      <section className="py-20 px-4 bg-white fade-in">
         <div className="container mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-4xl font-bold text-gray-900 mb-4">
@@ -274,7 +274,7 @@ export default function Index() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {testimonials.map((testimonial, index) => (
-              <Card key={index} className="text-center">
+              <Card key={index} className="text-center fade-in">
                 <CardContent className="p-6">
                   <div className="flex justify-center mb-4">
                     {[...Array(testimonial.rating)].map((_, i) => (
@@ -294,7 +294,7 @@ export default function Index() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+      <section className="py-20 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white fade-in">
         <div className="container mx-auto text-center">
           <h2 className="text-4xl font-bold mb-4">
             Ready to Get Started?
