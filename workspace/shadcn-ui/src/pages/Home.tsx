@@ -284,10 +284,10 @@ export default function Home() {
                   <button
                     type="button"
                     className={cn(
-                      'rounded-full px-4 py-2 font-semibold transition-colors',
+                      'rounded-full px-4 py-2 font-semibold transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform',
                       persona === 'buyer'
-                        ? 'bg-brand-blue-600 text-white'
-                        : 'bg-white/60 text-ink-500 hover:bg-white/80'
+                        ? 'bg-brand-blue-600 text-white shadow-brand hover:shadow-brand-md'
+                        : 'bg-white/60 text-ink-500 hover:bg-white/80 hover:shadow-sm'
                     )}
                     onClick={() => handlePersonaChange('buyer')}
                     aria-pressed={persona === 'buyer'}
@@ -297,10 +297,10 @@ export default function Home() {
                   <button
                     type="button"
                     className={cn(
-                      'rounded-full px-4 py-2 font-semibold transition-colors',
+                      'rounded-full px-4 py-2 font-semibold transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform',
                       persona === 'seller'
-                        ? 'bg-brand-blue-600 text-white'
-                        : 'bg-white/60 text-ink-500 hover:bg-white/80'
+                        ? 'bg-brand-blue-600 text-white shadow-brand hover:shadow-brand-md'
+                        : 'bg-white/60 text-ink-500 hover:bg-white/80 hover:shadow-sm'
                     )}
                     onClick={() => handlePersonaChange('seller')}
                     aria-pressed={persona === 'seller'}
@@ -310,10 +310,10 @@ export default function Home() {
                   <button
                     type="button"
                     className={cn(
-                      'rounded-full px-4 py-2 font-semibold transition-colors',
+                      'rounded-full px-4 py-2 font-semibold transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform',
                       persona === 'pro'
-                        ? 'bg-brand-blue-600 text-white'
-                        : 'bg-white/60 text-ink-500 hover:bg-white/80'
+                        ? 'bg-brand-blue-600 text-white shadow-brand hover:shadow-brand-md'
+                        : 'bg-white/60 text-ink-500 hover:bg-white/80 hover:shadow-sm'
                     )}
                     onClick={() => handlePersonaChange('pro')}
                     aria-pressed={persona === 'pro'}
@@ -322,7 +322,7 @@ export default function Home() {
                   </button>
                   <Button
                     variant="link"
-                    className="ml-auto text-sm font-semibold text-brand-blue-600 hover:text-brand-blue-700"
+                    className="ml-auto text-sm font-semibold text-brand-blue-600 hover:text-brand-blue-700 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
                     onClick={() => navigate('/#for-pros')}
                   >
                     For professionals →
@@ -341,11 +341,11 @@ export default function Home() {
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center fade-in">
-                  <Button size="lg" onClick={handlePrimaryCta}>
+                  <Button size="lg" className="transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform" onClick={handlePrimaryCta}>
                     <Search className="h-5 w-5" />
                     {heroContent.primaryLabel}
                   </Button>
-                  <Button size="lg" variant="outline" className="shadow-none" onClick={handleSecondaryCta}>
+                  <Button size="lg" variant="outline" className="shadow-none transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform" onClick={handleSecondaryCta}>
                     {heroContent.secondaryLabel}
                   </Button>
                 </div>
@@ -360,25 +360,30 @@ export default function Home() {
                     <p className="text-sm font-semibold text-brand-blue-600">Miami market snapshot</p>
                     <h3 className="text-xl font-semibold text-ink-800">This week at a glance</h3>
                   </div>
-                  <Badge className="border-0 bg-brand-blue-600/15 text-brand-blue-700">Updated today</Badge>
+                  <Badge 
+                    className="border-0 bg-brand-blue-600/15 text-brand-blue-700 hover:bg-brand-blue-600/25 hover:text-brand-blue-800 transition-all duration-200 cursor-pointer hover:scale-105 active:scale-95"
+                    onClick={() => navigate('/market/miami')}
+                  >
+                    Updated today
+                  </Badge>
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-4">
-                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4 fade-in">
+                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4 fade-in transition-all duration-150 hover:scale-105 cursor-pointer" onClick={() => navigate('/market/miami')}>
                     <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Median price</div>
                     <div className="mt-1 text-2xl font-semibold text-ink-900">$642K</div>
                     <div className="text-sm text-ink-500">+2.4% vs last month</div>
                   </div>
-                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4 fade-in">
+                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4 fade-in transition-all duration-150 hover:scale-105 cursor-pointer" onClick={() => navigate('/market/miami')}>
                     <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Days on market</div>
                     <div className="mt-1 text-2xl font-semibold text-ink-900">27</div>
                     <div className="text-sm text-ink-500">Faster than statewide avg.</div>
                   </div>
-                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4 fade-in">
+                  <div className="rounded-[var(--radius-md)] bg-brand-blue-600/8 p-4 fade-in transition-all duration-150 hover:scale-105 cursor-pointer" onClick={() => navigate('/market/miami')}>
                     <div className="text-xs uppercase tracking-[0.08em] text-ink-400">New this week</div>
                     <div className="mt-1 text-2xl font-semibold text-ink-900">1,124</div>
                     <div className="text-sm text-ink-500">Fresh listings in Miami-Dade</div>
                   </div>
-                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4 fade-in">
+                  <div className="rounded-[var(--radius-md)] bg-brand-green-500/10 p-4 fade-in transition-all duration-150 hover:scale-105 cursor-pointer" onClick={() => navigate('/market/miami')}>
                     <div className="text-xs uppercase tracking-[0.08em] text-ink-400">Price drops</div>
                     <div className="mt-1 text-2xl font-semibold text-ink-900">312</div>
                     <div className="text-sm text-ink-500">Homes with recent reductions</div>
@@ -388,7 +393,7 @@ export default function Home() {
                   <span>Source: South Florida MLS feed</span>
                   <Button
                     variant="link"
-                    className="p-0 text-brand-blue-600 hover:text-brand-blue-700"
+                    className="p-0 text-brand-blue-600 hover:text-brand-blue-700 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
                     onClick={() => navigate('/market/miami')}
                   >
                     See full Miami trends →
@@ -428,10 +433,10 @@ export default function Home() {
                         type="button"
                         onClick={() => setActivePrice(option.value)}
                         className={cn(
-                          'rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+                          'rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform',
                           activePrice === option.value
                             ? 'border-transparent bg-brand-blue-600 text-white shadow-brand'
-                            : 'border-[var(--border-subtle)] bg-white/70 text-ink-500 hover:bg-ink-75'
+                            : 'border-[var(--border-subtle)] bg-white/70 text-ink-500 hover:bg-brand-blue-600/10 hover:text-brand-blue-700 hover:border-brand-blue-600'
                         )}
                         aria-pressed={activePrice === option.value}
                       >
@@ -449,10 +454,10 @@ export default function Home() {
                         type="button"
                         onClick={() => togglePropertyType(option.value)}
                         className={cn(
-                          'rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
+                          'rounded-full border px-4 py-2 text-sm font-semibold transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform',
                           activePropertyTypes.includes(option.value)
                             ? 'border-transparent bg-brand-green-500 text-white shadow-brand'
-                            : 'border-[var(--border-subtle)] bg-white/70 text-ink-500 hover:bg-ink-75'
+                            : 'border-[var(--border-subtle)] bg-white/70 text-ink-500 hover:bg-brand-green-500/10 hover:text-brand-green-700 hover:border-brand-green-500'
                         )}
                         aria-pressed={activePropertyTypes.includes(option.value)}
                       >
@@ -462,7 +467,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="w-full lg:w-auto">
-                  <Button size="lg" type="submit" className="w-full">
+                  <Button size="lg" type="submit" className="w-full transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     <Search className="h-5 w-5" />
                     Search
                   </Button>
@@ -484,13 +489,13 @@ export default function Home() {
               {howItWorksSteps.map((step, index) => (
                 <Card
                   key={step.title}
-                  className="h-full border-transparent bg-white/90 shadow-brand-md transition-transform duration-200 hover:-translate-y-1 fade-in"
+                  className="group h-full border-transparent bg-white/90 shadow-brand-md transition-transform duration-200 ease-out hover:-translate-y-2 fade-in"
                 >
                   <CardHeader className="p-6 pb-3">
-                    <Badge className="mb-4 w-fit border-0 bg-brand-blue-600/15 text-brand-blue-700">
+                    <Badge className="mb-4 w-fit border-0 bg-brand-blue-600/15 text-brand-blue-700 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-600/25">
                       Step {index + 1}
                     </Badge>
-                    <CardTitle className="text-lg text-ink-800">{step.title}</CardTitle>
+                    <CardTitle className="text-lg text-ink-800 transition-colors duration-200 group-hover:text-brand-blue-600">{step.title}</CardTitle>
                   </CardHeader>
                   <CardContent className="px-6 pb-6 text-ink-600">{step.description}</CardContent>
                 </Card>
@@ -512,16 +517,16 @@ export default function Home() {
             </div>
 
             <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {consumerFeatures.map((feature) => (
+              {consumerFeatures.map((feature, index) => (
                 <Card
                   key={feature.title}
-                  className="group h-full border border-[var(--border-subtle)] bg-white/95 shadow-none transition-all duration-200 hover:-translate-y-1 hover:shadow-brand-md fade-in"
+                  className="group h-full border border-[var(--border-subtle)] bg-white/95 shadow-brand-md transition-transform duration-200 ease-out hover:-translate-y-2 fade-in"
                 >
                   <CardHeader className="p-8 pb-4">
-                    <div className="mb-6 inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-blue-600/12 text-brand-blue-600">
+                    <div className="mb-6 inline-flex h-12 w-12 items-center justify-center rounded-full bg-brand-blue-600/12 text-brand-blue-600 transition-all duration-200 group-hover:scale-110 group-hover:bg-brand-blue-600/20">
                       <feature.icon className="h-6 w-6" />
                     </div>
-                    <CardTitle className="text-lg text-ink-800">{feature.title}</CardTitle>
+                    <CardTitle className="text-lg text-ink-800 transition-colors duration-200 group-hover:text-brand-blue-600">{feature.title}</CardTitle>
                   </CardHeader>
                   <CardContent className="px-8 pb-10 text-ink-500">{feature.description}</CardContent>
                 </Card>
@@ -542,10 +547,10 @@ export default function Home() {
             </div>
 
             <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {testimonials.map((testimonial) => (
+              {testimonials.map((testimonial, index) => (
                 <Card
                   key={testimonial.name}
-                  className="flex h-full flex-col border border-transparent bg-white/95 shadow-brand transition-transform duration-200 hover:-translate-y-1 hover:shadow-brand-md fade-in"
+                  className="flex h-full flex-col border border-transparent bg-white/95 shadow-brand transition-all duration-200 ease-out hover:-translate-y-2 fade-in"
                 >
                   <CardHeader className="p-8 pb-4">
                     <div className="flex items-center gap-3">
@@ -560,8 +565,11 @@ export default function Home() {
                       </div>
                     </div>
                     <div className="mt-3 flex items-center gap-1 text-brand-green-500">
-                      {Array.from({ length: testimonial.rating }).map((_, index) => (
-                        <Star key={index} className="h-4 w-4 fill-current" />
+                      {Array.from({ length: testimonial.rating }).map((_, starIndex) => (
+                        <Star 
+                          key={starIndex} 
+                          className="h-4 w-4 fill-current fade-in" 
+                        />
                       ))}
                     </div>
                   </CardHeader>
@@ -579,30 +587,30 @@ export default function Home() {
           <div className="container mx-auto max-w-6xl px-4">
             <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
               <div className="space-y-6 lg:col-span-6">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-green-500">For real estate professionals</p>
-                <h2 className="text-3xl font-semibold text-ink-50">Modern tools for brokerages, teams, and top agents</h2>
-                <p className="text-lg text-ink-200">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-brand-green-500 fade-in">For real estate professionals</p>
+                <h2 className="text-3xl font-semibold text-ink-50 fade-in">Modern tools for brokerages, teams, and top agents</h2>
+                <p className="text-lg text-ink-200 fade-in">
                   Discover your next opportunity with Hatch—built to supercharge pipeline management, team performance,
                   and compliance without the busywork.
                 </p>
-                <div className="flex flex-wrap gap-3">
-                  <Button size="lg" onClick={() => navigate('/broker/dashboard')}>
+                <div className="flex flex-wrap gap-3 fade-in">
+                  <Button size="lg" onClick={() => navigate('/broker/dashboard')} className="transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     <TrendingUp className="h-5 w-5" />
                     Open Broker Dashboard
                   </Button>
                   <Button
                     size="lg"
                     variant="outline"
-                    className="border-white/30 text-ink-50 hover:bg-white/10"
+                    className="border-white/30 bg-white/5 text-ink-50 hover:bg-white/10 hover:border-brand-blue-400 hover:text-brand-blue-300 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform backdrop-blur-sm"
                     onClick={() => navigate('/broker/demo')}
                   >
                     Book a demo
                   </Button>
                 </div>
               </div>
-              <div className="space-y-6 rounded-[28px] border border-white/10 bg-white/5 p-8 shadow-brand-lg backdrop-blur-sm lg:col-span-6">
+              <div className="space-y-6 rounded-[28px] border border-white/10 bg-white/5 p-8 shadow-brand-lg backdrop-blur-sm lg:col-span-6 fade-in">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-[var(--radius-md)] bg-white/8 p-4">
+                  <div className="rounded-[var(--radius-md)] bg-white/8 p-4 fade-in">
                     <div className="flex items-center gap-3 text-brand-green-400">
                       <TrendingUp className="h-5 w-5" />
                       <span className="text-sm font-semibold uppercase tracking-[0.08em]">Lead conversion</span>
@@ -610,7 +618,7 @@ export default function Home() {
                     <p className="mt-3 text-3xl font-semibold text-ink-50">↑ 38%</p>
                     <p className="text-sm text-ink-200">Teams running Hatch playbooks</p>
                   </div>
-                  <div className="rounded-[var(--radius-md)] bg-white/8 p-4">
+                  <div className="rounded-[var(--radius-md)] bg-white/8 p-4 fade-in">
                     <div className="flex items-center gap-3 text-brand-green-400">
                       <Clock className="h-5 w-5" />
                       <span className="text-sm font-semibold uppercase tracking-[0.08em]">Time saved</span>
@@ -620,8 +628,8 @@ export default function Home() {
                   </div>
                 </div>
                 <ul className="space-y-3 text-sm text-ink-200">
-                  {professionalProofPoints.map((point) => (
-                    <li key={point} className="flex items-start gap-2">
+                  {professionalProofPoints.map((point, index) => (
+                    <li key={point} className="flex items-start gap-2 fade-in">
                       <CheckCircle className="mt-0.5 h-4 w-4 text-brand-green-500" />
                       <span>{point}</span>
                     </li>
@@ -638,23 +646,23 @@ export default function Home() {
             <div className="relative overflow-hidden rounded-[32px] bg-brand-gradient px-8 py-12 text-ink-50 shadow-brand-lg">
               <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.25)_0,_transparent_60%)]" />
               <div className="relative z-10 flex flex-col items-center text-center">
-                <h2 className="text-3xl font-semibold md:text-4xl">Ready to get started?</h2>
-                <p className="mt-4 max-w-2xl text-lg text-ink-100">
+                <h2 className="text-3xl font-semibold md:text-4xl fade-in">Ready to get started?</h2>
+                <p className="mt-4 max-w-2xl text-lg text-ink-100 fade-in">
                   Search homes, save your favourites, or get matched with a verified Florida expert in minutes.
                 </p>
-                <div className="mt-8 flex w-full flex-col gap-4 sm:w-auto sm:flex-row">
-                  <Button size="lg" variant="secondary" className="bg-ink-50 text-ink-900 hover:bg-ink-75" onClick={() => navigate('/properties')}>
+                <div className="mt-8 flex w-full flex-col gap-4 sm:w-auto sm:flex-row fade-in">
+                  <Button size="lg" variant="secondary" className="bg-ink-50 text-ink-900 hover:bg-white transition-all duration-150 hover:scale-105 active:scale-95 will-change-transform" onClick={() => navigate('/properties')}>
                     <Search className="h-5 w-5" />
                     Start searching
                   </Button>
-                  <Button size="lg" onClick={() => navigate('/match?intent=buyer')}>
+                  <Button size="lg" className="transition-all duration-150 hover:scale-105 active:scale-95 will-change-transform" onClick={() => navigate('/match?intent=buyer')}>
                     <Users className="h-5 w-5" />
                     Get matched with an agent
                   </Button>
                 </div>
                 <Button
                   variant="link"
-                  className="mt-4 text-sm text-ink-100 hover:text-ink-50"
+                  className="mt-4 text-sm text-ink-100 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform fade-in"
                   onClick={() => navigate('/#for-pros')}
                 >
                   Are you a broker? Learn more →
@@ -666,10 +674,10 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="bg-ink-900 py-12 text-ink-300">
+      <footer className="bg-ink-900 py-12 text-ink-300 fade-in">
         <div className="container mx-auto max-w-6xl px-4">
           <div className="grid gap-8 md:grid-cols-4">
-            <div>
+            <div className="fade-in">
               <div className="flex items-center gap-2 text-ink-50">
                 <HomeIcon className="h-6 w-6 text-brand-blue-500" />
                 <span className="text-lg font-bold">Hatch</span>
@@ -678,13 +686,13 @@ export default function Home() {
                 Find your next Hatch. A premium real estate experience for buyers, sellers, and the teams who support them.
               </p>
             </div>
-            <div>
+            <div className="fade-in">
               <h4 className="font-semibold text-ink-100">For Buyers</h4>
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
                   <Button
                     variant="link"
-                    className="p-0 text-ink-300 hover:text-ink-50"
+                    className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
                     onClick={() => navigate('/properties')}
                   >
                     Search properties
@@ -693,31 +701,31 @@ export default function Home() {
                 <li>
                   <Button
                     variant="link"
-                    className="p-0 text-ink-300 hover:text-ink-50"
+                    className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
                     onClick={() => navigate('/match?intent=buyer')}
                   >
                     Get matched with an agent
                   </Button>
                 </li>
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     Mortgage calculator
                   </Button>
                 </li>
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     Neighborhood guide
                   </Button>
                 </li>
               </ul>
             </div>
-            <div>
+            <div className="fade-in">
               <h4 className="font-semibold text-ink-100">For Professionals</h4>
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
                   <Button
                     variant="link"
-                    className="p-0 text-ink-300 hover:text-ink-50"
+                    className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
                     onClick={() => navigate('/broker/dashboard')}
                   >
                     Broker dashboard
@@ -726,44 +734,44 @@ export default function Home() {
                 <li>
                   <Button
                     variant="link"
-                    className="p-0 text-ink-300 hover:text-ink-50"
+                    className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
                     onClick={() => navigate('/broker/demo')}
                   >
                     Book a demo
                   </Button>
                 </li>
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     API documentation
                   </Button>
                 </li>
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     Support center
                   </Button>
                 </li>
               </ul>
             </div>
-            <div>
+            <div className="fade-in">
               <h4 className="font-semibold text-ink-100">Company</h4>
               <ul className="mt-3 space-y-2 text-sm">
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     About us
                   </Button>
                 </li>
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     Careers
                   </Button>
                 </li>
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     Privacy policy
                   </Button>
                 </li>
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50">
+                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     Terms of service
                   </Button>
                 </li>
