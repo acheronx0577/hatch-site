@@ -121,6 +121,16 @@
     background-image: linear-gradient(180deg, #f8faff 0%, #eff6ff 100%);
     color: var(--text-primary);
   }
+  
+  /* Fix blurry text on transform/scale */
+  a, button {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transform-style: preserve-3d;
+    -webkit-transform-style: preserve-3d;
+  }
 
   ::selection {
     background: rgba(22, 118, 199, 0.2);
