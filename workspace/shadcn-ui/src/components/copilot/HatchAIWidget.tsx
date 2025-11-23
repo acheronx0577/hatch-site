@@ -79,6 +79,8 @@ const ThinkingIndicator: React.FC<{ isThinking: boolean }> = ({ isThinking }) =>
 
 export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
   const [open, setOpen] = React.useState(false);
+  // For animation: controls mounting/unmounting
+  const [show, setShow] = React.useState(false);
   const [expanded, setExpanded] = React.useState(true);
   const [activePersonaId, setActivePersonaId] = React.useState<PersonaId>('agent_copilot');
   const [messages, setMessages] = React.useState<UIMsg[]>([]);
@@ -237,11 +239,27 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
     }
   };
 
-  if (!open) {
+
+  // Handle mounting/unmounting for animation
+  React.useEffect(() => {
+    if (open && !show) {
+      // Mount first, then trigger transition on next tick
+      setShow(true);
+    } else if (!open && show) {
+      // Delay unmount for animation
+      const timeout = setTimeout(() => setShow(false), 250);
+      return () => clearTimeout(timeout);
+    }
+  }, [open, show]);
+
+  if (!open && !show) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setShow(true);
+          setTimeout(() => setOpen(true), 10); // ensure mount before open for animation
+        }}
         className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-[#1F5FFF] px-4 text-sm font-medium text-white shadow-lg hover:shadow-xl"
       >
         <AiPersonaFace personaId="agent_copilot" size="sm" animated />
@@ -252,7 +270,11 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
 
   return (
     <>
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end">
+    <div
+      className={`fixed bottom-4 right-4 z-40 flex flex-col items-end transition-all duration-300 ease-in-out
+        ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+      style={{ willChange: 'opacity, transform' }}
+    >
       <div className="w-[460px] overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
         {/* HEADER */}
         <div className="flex items-center justify-between border-b px-4 py-3">
