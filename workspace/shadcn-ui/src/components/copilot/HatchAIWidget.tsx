@@ -78,7 +78,42 @@ const ThinkingIndicator: React.FC<{ isThinking: boolean }> = ({ isThinking }) =>
 };
 
 export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
+  // ...existing code...
+  // ...existing code...
+  const [showAllPersonas, setShowAllPersonas] = React.useState(false);
+  // Close persona modal on Escape key
+  React.useEffect(() => {
+    if (!showAllPersonas) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAllPersonas(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showAllPersonas]);
+  // Close persona modal on Escape key
+  React.useEffect(() => {
+    if (!showAllPersonas) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowAllPersonas(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showAllPersonas]);
+
+  // Number of persona chips to show before the "+N more" button
+  const SHOW_PERSONA_CHIPS = 4;
+
   const [open, setOpen] = React.useState(false);
+  // For animation: controls mounting/unmounting
+  const [show, setShow] = React.useState(false);
   const [expanded, setExpanded] = React.useState(true);
   const [activePersonaId, setActivePersonaId] = React.useState<PersonaId>('agent_copilot');
   const [messages, setMessages] = React.useState<UIMsg[]>([]);
@@ -237,11 +272,27 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
     }
   };
 
-  if (!open) {
+
+  // Handle mounting/unmounting for animation
+  React.useEffect(() => {
+    if (open && !show) {
+      // Mount first, then trigger transition on next tick
+      setShow(true);
+    } else if (!open && show) {
+      // Delay unmount for animation
+      const timeout = setTimeout(() => setShow(false), 250);
+      return () => clearTimeout(timeout);
+    }
+  }, [open, show]);
+
+  if (!open && !show) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setShow(true);
+          setTimeout(() => setOpen(true), 10); // ensure mount before open for animation
+        }}
         className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-[#1F5FFF] px-4 text-sm font-medium text-white shadow-lg hover:shadow-xl"
       >
         <AiPersonaFace personaId="agent_copilot" size="sm" animated />
@@ -252,7 +303,11 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
 
   return (
     <>
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end">
+    <div
+      className={`fixed bottom-4 right-4 z-40 flex flex-col items-end transition-all duration-300 ease-in-out
+        ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}
+      style={{ willChange: 'opacity, transform' }}
+    >
       <div className="w-[460px] overflow-hidden rounded-2xl border border-border bg-background shadow-2xl">
         {/* HEADER */}
         <div className="flex items-center justify-between border-b px-4 py-3">
@@ -281,25 +336,75 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
 
         {expanded && (
           <>
-            {/* PERSONA CHIPS */}
-            <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-2">
-              {PERSONAS.map((p) => {
-                const active = p.id === activePersonaId;
+            {/* PERSONA CHIPS - Horizontal, no selection border, functional +N more */}
+            <div className="flex gap-2 px-4 pt-3 pb-2">
+              {/* Show up to SHOW_PERSONA_CHIPS personas, skipping 'market_analyst' (Atlas) unless in modal */}
+              {(() => {
+                // Find Atlas index
+                const atlasIdx = PERSONAS.findIndex(p => p.id === 'market_analyst');
+                // Compose visible personas: first 2, then skip Atlas, then next 2 (excluding Atlas)
+                let visible = PERSONAS.filter((p, i) => i < 2 || (i > 2 && p.id !== 'market_analyst')).slice(0, SHOW_PERSONA_CHIPS);
+                // If Atlas is in the first SHOW_PERSONA_CHIPS, remove it and add the next persona after SHOW_PERSONA_CHIPS
+                if (visible.some(p => p.id === 'market_analyst')) {
+                  const withoutAtlas = visible.filter(p => p.id !== 'market_analyst');
+                  if (PERSONAS[SHOW_PERSONA_CHIPS]) withoutAtlas.push(PERSONAS[SHOW_PERSONA_CHIPS]);
+                  visible = withoutAtlas;
+                }
+                // Calculate the number of hidden personas for the '+N more' button
+                const numVisible = visible.length;
+                const numHidden = PERSONAS.length - numVisible;
                 return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => setActivePersonaId(p.id)}
-                    className={`flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] transition ${
-                      active ? 'border-transparent text-slate-900 bg-muted/70' : 'border-border text-muted-foreground'
-                    }`}
-                  >
-                    <AiPersonaFace personaId={p.id} size="sm" animated active={active} />
-                    <span className="truncate">{p.name}</span>
-                  </button>
+                  <>
+                    {visible.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setActivePersonaId(p.id)}
+                        className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-[12px] font-semibold bg-white hover:bg-blue-50 hover:text-blue-900 transition"
+                        title={p.name}
+                      >
+                        <AiPersonaFace personaId={p.id} size="sm" animated active={p.id === activePersonaId} />
+                        <span className="truncate max-w-[80px] text-slate-900" title={p.name}>{p.name}</span>
+                      </button>
+                    ))}
+                    {numHidden > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllPersonas(true)}
+                        className="flex items-center justify-center rounded-full border border-dashed border-blue-300 px-3 py-1.5 text-[12px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition"
+                        title={`Show ${numHidden} more personas`}
+                      >
+                        +{numHidden} more
+                      </button>
+                    )}
+                  </>
                 );
-              })}
+              })()}
             </div>
+
+            {/* Modal/Popover for all personas */}
+            {showAllPersonas && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center rounded-2xl" style={{background: 'rgba(30,41,59,0.18)', backdropFilter: 'blur(2px)'}} onClick={() => setShowAllPersonas(false)}>
+                <div className="bg-white/90 rounded-2xl shadow-2xl p-6 min-w-[320px] max-w-[90vw]" onClick={e => e.stopPropagation()}>
+                  <div className="mb-3 text-lg font-bold text-slate-900">Select a Persona</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PERSONAS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => { setActivePersonaId(p.id); setShowAllPersonas(false); }}
+                        className="flex items-center gap-2 rounded-full border border-border px-3 py-2 text-[13px] font-semibold bg-white hover:bg-blue-50 hover:text-blue-900 transition"
+                        title={p.name}
+                      >
+                        <AiPersonaFace personaId={p.id} size="sm" animated active={p.id === activePersonaId} />
+                        <span className="truncate max-w-[100px] text-slate-900" title={p.name}>{p.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <button className="mt-4 w-full rounded-md bg-blue-100 text-blue-700 py-2 font-semibold hover:bg-blue-200 transition" onClick={() => setShowAllPersonas(false)}>Close</button>
+                </div>
+              </div>
+            )}
 
             {/* MESSAGES */}
             <div className="max-h-[300px] space-y-4 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed">
