@@ -44,6 +44,7 @@ import LiveActivityPage from './pages/broker/LiveActivity'
 import BrokerFinancials from './pages/broker/Financials'
 import BrokerOfferIntents from './pages/broker/OfferIntents'
 import BrokerRentals from './pages/broker/Rentals'
+import FormsLibrary from './pages/broker/forms/FormsLibrary'
 import DocumentViewerPage from './pages/broker/DocumentViewer'
 import { AgentPerformanceList } from './pages/broker/agent-performance/AgentPerformanceList'
 import { AgentPerformanceDetail } from './pages/broker/agent-performance/AgentPerformanceDetail'
@@ -110,6 +111,7 @@ function App() {
                   <Route path="draft-listings" element={<DraftListingsPage />} />
                   <Route path="pricing" element={<Pricing />} />
                   <Route path="payment" element={<Payment />} />
+                  <Route path="forms" element={<FormsLibrary />} />
                   <Route path="playbooks" element={<PlaybooksList />} />
                   <Route path="playbooks/:playbookId" element={<PlaybookEditor />} />
                   <Route path="live-activity" element={<LiveActivityPage />} />
@@ -122,6 +124,8 @@ function App() {
                   {/* Default broker route */}
                   <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>
+
+                <Route path="/dashboard/forms" element={<Navigate to="/broker/forms" replace />} />
 
                 {/* Customer Routes */}
                 <Route path="/customer/dashboard" element={<CustomerDashboard />} />
