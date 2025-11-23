@@ -14,6 +14,7 @@ import { extractEmailDraft } from '@/lib/ai/emailDraft';
 import { lookupContactEmail, lookupContactEmailsFromString } from '@/lib/ai/contactLookup';
 import { extractRecipientQuery } from '@/lib/ai/recipient';
 import { useAuth } from '@/contexts/AuthContext';
+import { resolveUserIdentity } from '@/lib/utils';
 
 type UIMsg = {
   id: string;
@@ -37,21 +38,40 @@ type HatchAIWidgetProps = {
   }) => Promise<{ activePersonaId: PersonaId; replies: UIMsg[] }>;
 };
 
-// Thinking Indicator Component
+// Enhanced Thinking Indicator Component with animations
 const ThinkingIndicator: React.FC<{ isThinking: boolean }> = ({ isThinking }) => {
   if (!isThinking) return null;
   return (
-    <div className="flex items-center gap-3 px-3 py-2 mt-1">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-        <div className="h-5 w-5 rounded-full bg-primary/80 animate-pulse" />
+    <div className="flex items-start gap-3 px-3 py-2 mt-1 animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {/* Animated AI Avatar */}
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary/20 to-primary/10 relative">
+        <div className="absolute inset-0 rounded-full bg-primary/20 animate-ping" />
+        <div className="h-5 w-5 rounded-full bg-primary/80 animate-pulse relative z-10" />
       </div>
-      <div className="flex items-center gap-2 rounded-full bg-muted px-3 py-1">
-        <div className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
-          <span className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
+      
+      {/* Thinking Bubble with Animated Dots */}
+      <div className="flex-1 max-w-[85%]">
+        <div className="inline-flex items-center gap-3 rounded-2xl bg-gradient-to-r from-muted to-muted/80 px-4 py-2.5 shadow-sm border border-border/50">
+          {/* Animated thinking dots */}
+          <div className="flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.3s] [animation-duration:1s]" />
+            <span className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-delay:-0.15s] [animation-duration:1s]" />
+            <span className="h-2 w-2 rounded-full bg-primary animate-bounce [animation-duration:1s]" />
+          </div>
+          
+          {/* Thinking text with shimmer effect */}
+          <div className="flex flex-col gap-0.5">
+            <span className="text-xs font-medium text-foreground/90">Thinking...</span>
+            <span className="text-[10px] text-muted-foreground/70">Processing your request</span>
+          </div>
         </div>
-        <span className="text-xs text-muted-foreground/80">Thinking...</span>
+        
+        {/* Typing indicator bars (subtle loading animation) */}
+        <div className="flex gap-1 mt-2 ml-1">
+          <div className="h-1 w-8 rounded-full bg-primary/30 animate-pulse [animation-delay:-0.4s]" />
+          <div className="h-1 w-12 rounded-full bg-primary/20 animate-pulse [animation-delay:-0.2s]" />
+          <div className="h-1 w-6 rounded-full bg-primary/10 animate-pulse" />
+        </div>
       </div>
     </div>
   );
@@ -359,8 +379,27 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
                   rows={2}
                   className="min-h-[46px] max-h-[110px] resize-none text-[13px]"
                 />
-                <Button type="button" size="sm" disabled={!input.trim() || isSending} onClick={handleSend}>
-                  {isSending ? '…' : 'Send'}
+                <Button 
+                  type="button" 
+                  size="sm" 
+                  disabled={!input.trim() || isSending} 
+                  onClick={handleSend}
+                  className="transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
+                  aria-busy={isSending}
+                  aria-live="polite"
+                >
+                  {isSending ? (
+                    <>
+                      <span className="flex items-center gap-0.5" aria-hidden="true">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s] [animation-duration:0.8s]" />
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.15s] [animation-duration:0.8s]" />
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-duration:0.8s]" />
+                      </span>
+                      <span className="sr-only">Sending…</span>
+                    </>
+                  ) : (
+                    'Send'
+                  )}
                 </Button>
               </div>
               <p className="mt-2 text-[10px] text-muted-foreground">Press Enter to send · Shift + Enter for a new line.</p>
@@ -376,12 +415,7 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
       defaultSubject={emailDefaults.subject}
       defaultBody={emailDefaults.body}
       defaultRecipients={dialogRecipients}
-      defaultSenderName={
-        [session?.profile?.firstName, session?.profile?.lastName].filter(Boolean).join(' ').trim() ||
-        session?.profile?.displayName ||
-        user?.email ||
-        undefined
-      }
+      defaultSenderName={resolveUserIdentity(session?.profile, user?.email).displayName}
     />
     </>
   );
