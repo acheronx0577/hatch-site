@@ -14,9 +14,10 @@ type AgentChatWindowProps = {
   input: string;
   setInput: (value: string) => void;
   onSend: (text: string) => void;
+  isLoading?: boolean;
 };
 
-export function AgentChatWindow({ activePersonaId, messages, input, setInput, onSend }: AgentChatWindowProps) {
+export function AgentChatWindow({ activePersonaId, messages, input, setInput, onSend, isLoading = false }: AgentChatWindowProps) {
   const persona = React.useMemo(() => PERSONAS.find((p) => p.id === activePersonaId) ?? PERSONAS[0], [activePersonaId]);
 
   const handleSend = () => {
@@ -86,8 +87,26 @@ export function AgentChatWindow({ activePersonaId, messages, input, setInput, on
         </div>
 
         <div className="mt-3 flex justify-end">
-          <Button size="sm" disabled={!input.trim()} onClick={handleSend}>
-            Send
+          <Button 
+            size="sm" 
+            disabled={!input.trim() || isLoading} 
+            onClick={handleSend}
+            className="transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
+            aria-busy={isLoading}
+            aria-live="polite"
+          >
+            {isLoading ? (
+              <>
+                <span className="flex items-center gap-0.5" aria-hidden="true">
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s] [animation-duration:0.8s]" />
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.15s] [animation-duration:0.8s]" />
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-duration:0.8s]" />
+                </span>
+                <span className="sr-only">Sending…</span>
+              </>
+            ) : (
+              'Send'
+            )}
           </Button>
         </div>
       </div>
