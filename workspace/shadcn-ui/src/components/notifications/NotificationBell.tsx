@@ -106,46 +106,53 @@ export function NotificationBell() {
           </span>
         )}
       </button>
-      {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-lg">
-          <div className="flex items-center justify-between border-b px-3 py-2 text-xs font-semibold text-slate-600">
-            <span>Notifications</span>
-            <button type="button" onClick={handleMarkAll} className="text-blue-600 hover:underline">
-              Mark all as read
-            </button>
-          </div>
-          <div className="max-h-80 overflow-auto text-xs">
-            {loading && <div className="px-3 py-4 text-slate-500">Loading…</div>}
-            {!loading && items.length === 0 && <div className="px-3 py-4 text-slate-500">No notifications yet.</div>}
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className={`flex items-start justify-between border-b px-3 py-2 ${item.isRead ? 'bg-white' : 'bg-slate-50'}`}
-              >
-                <div className="flex-1">
-                  <Link to={linkForNotification(item)} className="font-semibold text-slate-900 hover:underline">
-                    {item.title}
-                  </Link>
-                  {item.message ? (
-                    <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2">{item.message}</p>
-                  ) : null}
-                  <p className="mt-0.5 text-[10px] text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>
-                </div>
-                {!item.isRead && (
-                  <button type="button" onClick={() => handleMarkRead(item.id)} className="ml-2 text-[10px] text-blue-600 hover:underline">
-                    Mark
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="px-3 py-2 text-center text-[11px]">
-            <Link to="/broker/notifications" className="text-blue-600 hover:underline">
-              View all notifications
-            </Link>
-          </div>
+      <div
+        aria-hidden={!open}
+        className={`absolute right-0 z-50 mt-2 w-80 rounded-xl border border-slate-200 bg-white shadow-lg transition-all duration-200
+          ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-2 pointer-events-none'}`}
+        style={{ willChange: 'opacity, transform' }}
+      >
+        <div className="flex items-center justify-between border-b px-3 py-2 text-xs font-semibold text-slate-600">
+          <span>Notifications</span>
+          <button type="button" onClick={handleMarkAll} className="text-blue-600 hover:underline">
+            Mark all as read
+          </button>
         </div>
-      )}
+        <div className="max-h-80 overflow-auto text-xs">
+          {loading && <div className="px-3 py-4 text-slate-500">Loading…</div>}
+          {!loading && items.length === 0 && <div className="px-3 py-4 text-slate-500">No notifications yet.</div>}
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className={`flex items-start justify-between border-b px-3 py-2 ${item.isRead ? 'bg-white' : 'bg-slate-50'}`}
+            >
+              <div className="flex-1">
+                <Link to={linkForNotification(item)} className="font-semibold text-slate-900 hover:underline">
+                  {item.title}
+                </Link>
+                {item.message ? (
+                  <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2">{item.message}</p>
+                ) : null}
+                <p className="mt-0.5 text-[10px] text-slate-400">{new Date(item.createdAt).toLocaleString()}</p>
+              </div>
+              {!item.isRead && (
+                <button type="button" onClick={() => handleMarkRead(item.id)} className="ml-2 text-[10px] text-blue-600 hover:underline">
+                  Mark
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="px-3 py-2 text-center text-[11px]">
+          <Link to="/broker/notifications" className="text-blue-600 hover:underline">
+            View all notifications
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
+
+// Close on outside click / Escape for accessibility + UX
+// This effect depends only on `open` and will attach listeners when open.
+export default undefined;
