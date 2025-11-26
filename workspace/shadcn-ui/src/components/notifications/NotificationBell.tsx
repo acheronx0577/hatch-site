@@ -59,7 +59,7 @@ export function NotificationBell() {
     if (notification.offerIntentId) return `/broker/lead-routing?focus=${notification.offerIntentId}`;
     if (notification.listingId) return `/broker/properties?focus=${notification.listingId}`;
     if (notification.transactionId) return `/broker/transactions?focus=${notification.transactionId}`;
-    if (notification.leaseId) return `/broker/rentals?focus=${notification.leaseId}`;
+    if (notification.leaseId) return `/broker/properties?focus=${notification.leaseId}`;
     return '/broker/mission-control';
   };
 

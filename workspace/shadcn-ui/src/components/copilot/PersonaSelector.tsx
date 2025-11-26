@@ -11,7 +11,7 @@ type PersonaSelectorProps = {
 
 export function PersonaSelector({ activeId, onSelect, statuses }: PersonaSelectorProps) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2">
+    <div className="flex max-w-full gap-2 overflow-x-auto pb-2 pr-1">
       {PERSONAS.map((persona) => {
         const isActive = persona.id === activeId;
         const status = statuses?.[persona.id];

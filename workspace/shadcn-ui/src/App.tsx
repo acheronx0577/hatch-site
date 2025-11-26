@@ -42,7 +42,6 @@ import PlaybookEditor from './pages/broker/playbooks/PlaybookEditor'
 import LiveActivityPage from './pages/broker/LiveActivity'
 import BrokerFinancials from './pages/broker/Financials'
 import BrokerOfferIntents from './pages/broker/OfferIntents'
-import BrokerRentals from './pages/broker/Rentals'
 import FormsLibrary from './pages/broker/forms/FormsLibrary'
 import DocumentViewerPage from './pages/broker/DocumentViewer'
 import { AgentPerformanceList } from './pages/broker/agent-performance/AgentPerformanceList'
@@ -116,7 +115,6 @@ function App() {
                   <Route path="live-activity" element={<LiveActivityPage />} />
                   <Route path="financials" element={<BrokerFinancials />} />
                   <Route path="offer-intents" element={<BrokerOfferIntents />} />
-                  <Route path="rentals" element={<BrokerRentals />} />
                   <Route path="documents/:fileId" element={<DocumentViewerPage />} />
                   <Route path="agent-performance" element={<AgentPerformanceList />} />
                   <Route path="agent-performance/:agentProfileId" element={<AgentPerformanceDetail />} />

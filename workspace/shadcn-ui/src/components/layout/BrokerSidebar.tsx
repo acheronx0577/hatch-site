@@ -8,6 +8,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  GitBranch,
+  Handshake,
   FileText,
   Globe,
   LogOut,
@@ -21,6 +23,8 @@ import {
   Shuffle,
   Sparkles,
   TrendingUp,
+  Wallet,
+  Activity,
   UserCheck,
   Users,
   Home as HomeIcon
@@ -83,6 +87,8 @@ const NAV_SECTIONS: NavSection[] = [
         children: [
           { icon: HomeIcon, label: 'Properties', path: '/broker/properties', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Shuffle, label: 'Transactions', path: '/broker/transactions', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Handshake, label: 'Offer Intents', path: '/broker/offer-intents', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Wallet, label: 'Financials', path: '/broker/financials', roles: ['BROKER', 'ADMIN'] },
           { icon: FileText, label: 'Draft Listings', path: '/broker/draft-listings', roles: ['BROKER', 'ADMIN'] },
           { icon: Percent, label: 'Commission Plans', path: '/broker/commission-plans', roles: ['BROKER', 'ADMIN'] }
         ]
@@ -99,8 +105,10 @@ const NAV_SECTIONS: NavSection[] = [
         roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
           { icon: NotebookPen, label: 'Leads & CRM', path: '/broker/crm', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: GitBranch, label: 'Lead Routing', path: '/broker/lead-routing', roles: ['BROKER', 'ADMIN'] },
           { icon: Megaphone, label: 'Marketing', path: '/broker/marketing', roles: ['BROKER', 'ADMIN'] },
-          { icon: BarChart3, label: 'Analytics', path: '/broker/analytics', roles: ['BROKER', 'ADMIN'] }
+          { icon: BarChart3, label: 'Analytics', path: '/broker/analytics', roles: ['BROKER', 'ADMIN'] },
+          { icon: Activity, label: 'Live Activity', path: '/broker/live-activity', roles: ['BROKER', 'ADMIN'] }
         ]
       }
     ]

@@ -345,7 +345,7 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
           }}
         >
           {/* PERSONA CHIPS - Horizontal, no selection border, functional +N more */}
-          <div className="flex gap-2 px-4 pt-3 pb-2">
+          <div className="flex w-full max-w-full gap-2 overflow-x-auto overflow-y-hidden px-4 pt-3 pb-2 pr-5">
             {/* Show up to SHOW_PERSONA_CHIPS personas, skipping 'market_analyst' (Atlas) unless in modal */}
             {(() => {
               // Find Atlas index

@@ -98,20 +98,12 @@ const metricLinkMap: Record<string, string> = {
   'Under review': '/broker/lead-routing?status=UNDER_REVIEW',
   Accepted: '/broker/lead-routing?status=ACCEPTED',
   Declined: '/broker/lead-routing?status=DECLINED',
-  'Properties under mgmt': '/broker/properties',
-  'Active leases': '/broker/properties',
-  'Seasonal leases': '/broker/properties',
-  'Upcoming tax due': '/broker/properties',
-  'Overdue tax': '/broker/properties',
   'Transactions synced': '/broker/transactions',
   'Transactions failed': '/broker/transactions',
-  'Leases synced': '/broker/transactions',
-  'Leases failed': '/broker/transactions',
   'Est. GCI': '/broker/analytics',
   'PM income (est)': '/broker/analytics',
   'Indexed listings': '/broker/marketing',
   'Active for sale': '/broker/marketing',
-  'Active rentals': '/broker/marketing',
   'Total saved searches': '/broker/marketing',
   'Alerts enabled': '/broker/marketing',
   'Daily alerts': '/broker/marketing',
@@ -249,36 +241,6 @@ function mapOverviewToMetrics(overview?: MissionControlOverviewData): Metric[] {
       href: metricLinkMap.Declined
     },
     {
-      category: 'Rentals',
-      label: 'Properties under mgmt',
-      value: numberFormatter.format(overview.rentalStats.propertiesUnderManagement),
-      href: metricLinkMap['Properties under mgmt']
-    },
-    {
-      category: 'Rentals',
-      label: 'Active leases',
-      value: numberFormatter.format(overview.rentalStats.activeLeases),
-      href: metricLinkMap['Active leases']
-    },
-    {
-      category: 'Rentals',
-      label: 'Seasonal leases',
-      value: numberFormatter.format(overview.rentalStats.seasonalLeases),
-      href: metricLinkMap['Seasonal leases']
-    },
-    {
-      category: 'Rentals',
-      label: 'Upcoming tax due',
-      value: numberFormatter.format(overview.rentalStats.upcomingTaxDueCount),
-      href: metricLinkMap['Upcoming tax due']
-    },
-    {
-      category: 'Rentals',
-      label: 'Overdue tax',
-      value: numberFormatter.format(overview.rentalStats.overdueTaxCount),
-      href: metricLinkMap['Overdue tax']
-    },
-    {
       category: 'Financials',
       label: 'Transactions synced',
       value: numberFormatter.format(overview.financialStats.transactionsSyncedCount),
@@ -289,18 +251,6 @@ function mapOverviewToMetrics(overview?: MissionControlOverviewData): Metric[] {
       label: 'Transactions failed',
       value: numberFormatter.format(overview.financialStats.transactionsSyncFailedCount),
       href: metricLinkMap['Transactions failed']
-    },
-    {
-      category: 'Financials',
-      label: 'Leases synced',
-      value: numberFormatter.format(overview.financialStats.rentalLeasesSyncedCount),
-      href: metricLinkMap['Leases synced']
-    },
-    {
-      category: 'Financials',
-      label: 'Leases failed',
-      value: numberFormatter.format(overview.financialStats.rentalLeasesSyncFailedCount),
-      href: metricLinkMap['Leases failed']
     },
     {
       category: 'Financials',
@@ -325,12 +275,6 @@ function mapOverviewToMetrics(overview?: MissionControlOverviewData): Metric[] {
       label: 'Active for sale',
       value: numberFormatter.format(overview.mlsStats?.activeForSale ?? 0),
       href: metricLinkMap['Active for sale']
-    },
-    {
-      category: 'MLS',
-      label: 'Active rentals',
-      value: numberFormatter.format(overview.mlsStats?.activeRentals ?? 0),
-      href: metricLinkMap['Active rentals']
     },
     {
       category: 'Saved searches',
