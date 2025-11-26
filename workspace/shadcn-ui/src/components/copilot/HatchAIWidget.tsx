@@ -293,7 +293,7 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
           setShow(true);
           setTimeout(() => setOpen(true), 10); // ensure mount before open for animation
         }}
-        className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-[#1F5FFF] px-4 text-sm font-medium text-white shadow-lg hover:shadow-xl"
+        className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-[#1F5FFF] px-4 text-sm font-medium text-white shadow-lg antialiased [text-rendering:geometricPrecision] transition-all duration-200 motion-safe:will-change-transform scale-100 hover:scale-105 active:scale-97"
       >
         <AiPersonaFace personaId="agent_copilot" size="sm" animated />
         <span>Ask Hatch AI</span>
@@ -302,7 +302,7 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
   }
 
   return (
-    <>
+    <div>
     <div
       className={`fixed bottom-4 right-4 z-40 flex flex-col items-end transition-all duration-300 ease-in-out
         ${open ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}
@@ -326,7 +326,9 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
               onClick={() => setExpanded((value) => !value)}
               aria-label={expanded ? 'Collapse' : 'Expand'}
             >
-              {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              <ChevronDown
+                className={`h-4 w-4 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+              />
             </button>
             <button type="button" className="rounded-full p-1 hover:bg-muted" onClick={() => setOpen(false)} aria-label="Close">
               <X className="h-4 w-4" />
@@ -334,183 +336,188 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
           </div>
         </div>
 
-        {expanded && (
-          <>
-            {/* PERSONA CHIPS - Horizontal, no selection border, functional +N more */}
-            <div className="flex gap-2 px-4 pt-3 pb-2">
-              {/* Show up to SHOW_PERSONA_CHIPS personas, skipping 'market_analyst' (Atlas) unless in modal */}
-              {(() => {
-                // Find Atlas index
-                const atlasIdx = PERSONAS.findIndex(p => p.id === 'market_analyst');
-                // Compose visible personas: first 2, then skip Atlas, then next 2 (excluding Atlas)
-                let visible = PERSONAS.filter((p, i) => i < 2 || (i > 2 && p.id !== 'market_analyst')).slice(0, SHOW_PERSONA_CHIPS);
-                // If Atlas is in the first SHOW_PERSONA_CHIPS, remove it and add the next persona after SHOW_PERSONA_CHIPS
-                if (visible.some(p => p.id === 'market_analyst')) {
-                  const withoutAtlas = visible.filter(p => p.id !== 'market_analyst');
-                  if (PERSONAS[SHOW_PERSONA_CHIPS]) withoutAtlas.push(PERSONAS[SHOW_PERSONA_CHIPS]);
-                  visible = withoutAtlas;
-                }
-                // Calculate the number of hidden personas for the '+N more' button
-                const numVisible = visible.length;
-                const numHidden = PERSONAS.length - numVisible;
-                return (
-                  <>
-                    {visible.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setActivePersonaId(p.id)}
-                        className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-[12px] font-semibold bg-white hover:bg-blue-50 hover:text-blue-900 transition"
-                        title={p.name}
-                      >
-                        <AiPersonaFace personaId={p.id} size="sm" animated active={p.id === activePersonaId} />
-                        <span className="truncate max-w-[80px] text-slate-900" title={p.name}>{p.name}</span>
-                      </button>
-                    ))}
-                    {numHidden > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setShowAllPersonas(true)}
-                        className="flex items-center justify-center rounded-full border border-dashed border-blue-300 px-3 py-1.5 text-[12px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition"
-                        title={`Show ${numHidden} more personas`}
-                      >
-                        +{numHidden} more
-                      </button>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-
-            {/* Modal/Popover for all personas */}
-            {showAllPersonas && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center rounded-2xl" style={{background: 'rgba(30,41,59,0.18)', backdropFilter: 'blur(2px)'}} onClick={() => setShowAllPersonas(false)}>
-                <div className="bg-white/90 rounded-2xl shadow-2xl p-6 min-w-[320px] max-w-[90vw]" onClick={e => e.stopPropagation()}>
-                  <div className="mb-3 text-lg font-bold text-slate-900">Select a Persona</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {PERSONAS.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => { setActivePersonaId(p.id); setShowAllPersonas(false); }}
-                        className="flex items-center gap-2 rounded-full border border-border px-3 py-2 text-[13px] font-semibold bg-white hover:bg-blue-50 hover:text-blue-900 transition"
-                        title={p.name}
-                      >
-                        <AiPersonaFace personaId={p.id} size="sm" animated active={p.id === activePersonaId} />
-                        <span className="truncate max-w-[100px] text-slate-900" title={p.name}>{p.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                  <button className="mt-4 w-full rounded-md bg-blue-100 text-blue-700 py-2 font-semibold hover:bg-blue-200 transition" onClick={() => setShowAllPersonas(false)}>Close</button>
-                </div>
-              </div>
-            )}
-
-            {/* MESSAGES */}
-            <div className="max-h-[300px] space-y-4 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed">
-              {messages.length === 0 ? (
-                <div className="rounded-xl bg-muted/60 px-3 py-3 text-[12px] text-muted-foreground">
-                  Ask {persona.name} anything about{' '}
-                  {persona.tagline.toLowerCase()} — or choose one of the starter prompts below. Echo, for example, can look at your CRM data and tell you exactly who to call first.
-                </div>
-              ) : (
-                messages.map((message) => {
-                  const isUser = message.role === 'user';
-                  return (
-                    <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                      {isUser ? (
-                        <div className="max-w-[80%] rounded-2xl bg-[#1F5FFF] px-3 py-2 text-[13px] leading-relaxed text-white">{message.content}</div>
-                      ) : (
-                        <div className="max-w-[90%] rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-[13px] leading-relaxed text-slate-900">
-                          {(() => {
-                            const msgPersonaId = (message as UIMsg).personaId ?? activePersonaId;
-                            const msgPersona = getPersonaConfigById(msgPersonaId) ?? persona;
-                            return (
-                              <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                                <AiPersonaFace personaId={msgPersona.id} size="sm" animated={false} />
-                                <span>{msgPersona.name}</span>
-                              </div>
-                            );
-                          })()}
-                          <div className="hatch-markdown text-[13px] leading-relaxed">
-                            <ReactMarkdown
-                              components={{
-                                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
-                                p: ({ children }) => <p className="mb-1 text-[13px] leading-relaxed last:mb-0">{children}</p>,
-                                li: ({ children }) => (
-                                  <li className="ml-5 list-disc text-[13px] leading-relaxed">{children}</li>
-                                ),
-                                ul: ({ children }) => <ul className="my-1 ml-1 space-y-1">{children}</ul>,
-                                ol: ({ children }) => <ol className="my-1 ml-1 list-decimal space-y-1">{children}</ol>,
-                                code: ({ children }) => (
-                                  <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
-                                )
-                              }}
-                            >
-                              {message.content}
-                            </ReactMarkdown>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-              <ThinkingIndicator isThinking={isSending} />
-            </div>
-
-            {/* QUICK SUGGESTIONS */}
-            <div className="flex flex-wrap gap-1 px-4 pb-2">
-              {persona.examples.map((example) => (
-                <button
-                  key={example}
-                  type="button"
-                  onClick={() => setInput(example)}
-                  className="rounded-full border border-dashed px-2.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
-
-            {/* INPUT */}
-            <div className="border-t bg-slate-50/60 px-4 py-3">
-              <div className="flex items-end gap-2">
-                <Textarea
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={persona.placeholder}
-                  rows={2}
-                  className="min-h-[46px] max-h-[110px] resize-none text-[13px]"
-                />
-                <Button 
-                  type="button" 
-                  size="sm" 
-                  disabled={!input.trim() || isSending} 
-                  onClick={handleSend}
-                  className="transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
-                  aria-busy={isSending}
-                  aria-live="polite"
-                >
-                  {isSending ? (
-                    <>
-                      <span className="flex items-center gap-0.5" aria-hidden="true">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s] [animation-duration:0.8s]" />
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.15s] [animation-duration:0.8s]" />
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-duration:0.8s]" />
-                      </span>
-                      <span className="sr-only">Sending…</span>
-                    </>
-                  ) : (
-                    'Send'
+        <div
+          style={{
+            maxHeight: expanded ? 1000 : 0,
+            opacity: expanded ? 1 : 0,
+            overflow: 'hidden',
+            transition: 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s cubic-bezier(0.4,0,0.2,1)'
+          }}
+        >
+          {/* PERSONA CHIPS - Horizontal, no selection border, functional +N more */}
+          <div className="flex gap-2 px-4 pt-3 pb-2">
+            {/* Show up to SHOW_PERSONA_CHIPS personas, skipping 'market_analyst' (Atlas) unless in modal */}
+            {(() => {
+              // Find Atlas index
+              const atlasIdx = PERSONAS.findIndex(p => p.id === 'market_analyst');
+              // Compose visible personas: first 2, then skip Atlas, then next 2 (excluding Atlas)
+              let visible = PERSONAS.filter((p, i) => i < 2 || (i > 2 && p.id !== 'market_analyst')).slice(0, SHOW_PERSONA_CHIPS);
+              // If Atlas is in the first SHOW_PERSONA_CHIPS, remove it and add the next persona after SHOW_PERSONA_CHIPS
+              if (visible.some(p => p.id === 'market_analyst')) {
+                const withoutAtlas = visible.filter(p => p.id !== 'market_analyst');
+                if (PERSONAS[SHOW_PERSONA_CHIPS]) withoutAtlas.push(PERSONAS[SHOW_PERSONA_CHIPS]);
+                visible = withoutAtlas;
+              }
+              // Calculate the number of hidden personas for the '+N more' button
+              const numVisible = visible.length;
+              const numHidden = PERSONAS.length - numVisible;
+              return (
+                <>
+                  {visible.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setActivePersonaId(p.id)}
+                      className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-[12px] font-semibold bg-white hover:bg-blue-50 hover:text-blue-900 transition"
+                      title={p.name}
+                    >
+                      <AiPersonaFace personaId={p.id} size="sm" animated active={p.id === activePersonaId} />
+                      <span className="truncate max-w-[80px] text-slate-900" title={p.name}>{p.name}</span>
+                    </button>
+                  ))}
+                  {numHidden > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllPersonas(true)}
+                      className="flex items-center justify-center rounded-full border border-dashed border-blue-300 px-3 py-1.5 text-[12px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 transition"
+                      title={`Show ${numHidden} more personas`}
+                    >
+                      +{numHidden} more
+                    </button>
                   )}
-                </Button>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Modal/Popover for all personas */}
+          {showAllPersonas && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center rounded-2xl" style={{background: 'rgba(30,41,59,0.18)', backdropFilter: 'blur(2px)'}} onClick={() => setShowAllPersonas(false)}>
+              <div className="bg-white/90 rounded-2xl shadow-2xl p-6 min-w-[320px] max-w-[90vw]" onClick={e => e.stopPropagation()}>
+                <div className="mb-3 text-lg font-bold text-slate-900">Select a Persona</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {PERSONAS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => { setActivePersonaId(p.id); setShowAllPersonas(false); }}
+                      className="flex items-center gap-2 rounded-full border border-border px-3 py-2 text-[13px] font-semibold bg-white hover:bg-blue-50 hover:text-blue-900 transition"
+                      title={p.name}
+                    >
+                      <AiPersonaFace personaId={p.id} size="sm" animated active={p.id === activePersonaId} />
+                      <span className="truncate max-w-[100px] text-slate-900" title={p.name}>{p.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <button className="mt-4 w-full rounded-md bg-blue-100 text-blue-700 py-2 font-semibold hover:bg-blue-200 transition" onClick={() => setShowAllPersonas(false)}>Close</button>
               </div>
-              <p className="mt-2 text-[10px] text-muted-foreground">Press Enter to send · Shift + Enter for a new line.</p>
             </div>
-          </>
-        )}
+          )}
+
+          {/* MESSAGES */}
+          <div className="max-h-[300px] space-y-4 overflow-y-auto px-4 py-3 text-[13px] leading-relaxed">
+            {messages.length === 0 ? (
+              <div className="rounded-xl bg-muted/60 px-3 py-3 text-[12px] text-muted-foreground">
+                Ask {persona.name} anything about{' '}
+                {persona.tagline.toLowerCase()} — or choose one of the starter prompts below. Echo, for example, can look at your CRM data and tell you exactly who to call first.
+              </div>
+            ) : (
+              messages.map((message) => {
+                const isUser = message.role === 'user';
+                return (
+                  <div key={message.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                    {isUser ? (
+                      <div className="max-w-[80%] rounded-2xl bg-[#1F5FFF] px-3 py-2 text-[13px] leading-relaxed text-white">{message.content}</div>
+                    ) : (
+                      <div className="max-w-[90%] rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2 text-[13px] leading-relaxed text-slate-900">
+                        {(() => {
+                          const msgPersonaId = (message as UIMsg).personaId ?? activePersonaId;
+                          const msgPersona = getPersonaConfigById(msgPersonaId) ?? persona;
+                          return (
+                            <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              <AiPersonaFace personaId={msgPersona.id} size="sm" animated={false} />
+                              <span>{msgPersona.name}</span>
+                            </div>
+                          );
+                        })()}
+                        <div className="hatch-markdown text-[13px] leading-relaxed">
+                          <ReactMarkdown
+                            components={{
+                              strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                              p: ({ children }) => <p className="mb-1 text-[13px] leading-relaxed last:mb-0">{children}</p>,
+                              li: ({ children }) => (
+                                <li className="ml-5 list-disc text-[13px] leading-relaxed">{children}</li>
+                              ),
+                              ul: ({ children }) => <ul className="my-1 ml-1 space-y-1">{children}</ul>,
+                              ol: ({ children }) => <ol className="my-1 ml-1 list-decimal space-y-1">{children}</ol>,
+                              code: ({ children }) => (
+                                <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
+                              )
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+            <ThinkingIndicator isThinking={isSending} />
+          </div>
+
+          {/* QUICK SUGGESTIONS */}
+          <div className="flex flex-wrap gap-1 px-4 pb-2">
+            {persona.examples.map((example) => (
+              <button
+                key={example}
+                type="button"
+                onClick={() => setInput(example)}
+                className="rounded-full border border-dashed px-2.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted"
+              >
+                {example}
+              </button>
+            ))}
+          </div>
+
+          {/* INPUT */}
+          <div className="border-t bg-slate-50/60 px-4 py-3">
+            <div className="flex items-end gap-2">
+              <Textarea
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={persona.placeholder}
+                rows={2}
+                className="min-h-[46px] max-h-[110px] resize-none text-[13px]"
+              />
+              <Button 
+                type="button" 
+                size="sm" 
+                disabled={!input.trim() || isSending} 
+                onClick={handleSend}
+                className="transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
+                aria-busy={isSending}
+                aria-live="polite"
+              >
+                {isSending ? (
+                  <>
+                    <span className="flex items-center gap-0.5" aria-hidden="true">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.3s] [animation-duration:0.8s]" />
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-delay:-0.15s] [animation-duration:0.8s]" />
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current animate-bounce [animation-duration:0.8s]" />
+                    </span>
+                    <span className="sr-only">Sending…</span>
+                  </>
+                ) : (
+                  'Send'
+                )}
+              </Button>
+            </div>
+            <p className="mt-2 text-[10px] text-muted-foreground">Press Enter to send · Shift + Enter for a new line.</p>
+          </div>
+        </div>
       </div>
     </div>
     <CopilotSendEmailDialog
@@ -522,6 +529,6 @@ export function HatchAIWidget({ onSend }: HatchAIWidgetProps) {
       defaultRecipients={dialogRecipients}
       defaultSenderName={resolveUserIdentity(session?.profile, user?.email).displayName}
     />
-    </>
+    </div>
   );
 }

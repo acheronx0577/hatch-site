@@ -5,11 +5,9 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill text-sm font-semibold tracking-tight transition-all duration-200 ease-linear ring-offset-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[color:var(--focus-ring)] focus-visible:ring-offset-[var(--focus-ring-offset)] disabled:pointer-events-none disabled:opacity-60 active:scale-[0.98] [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
-  {
-    variants: {
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill text-sm font-semibold tracking-tight transition-all duration-200 motion-safe:will-change-transform motion-safe:scale-100 motion-safe:hover:scale-105 motion-safe:active:scale-97 ease-linear ring-offset-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[color:var(--focus-ring)] focus-visible:ring-offset-[var(--focus-ring-offset)] disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 antialiased [text-rendering:geometricPrecision]',  {    variants: {
       variant: {
-        default: 'bg-brand-gradient text-ink-50 shadow-brand hover:shadow-brand-md hover:brightness-[1.05]',
+        default: 'bg-brand-gradient text-ink-50 shadow-brand hover:brightness-[1.05]',
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/85 shadow-brand',
         outline:
           'border-[1.5px] border-brand-blue-600 bg-background text-brand-blue-700 hover:bg-brand-blue-600/5 hover:text-brand-blue-700',

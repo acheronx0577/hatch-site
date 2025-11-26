@@ -136,7 +136,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
               <NotificationBell />
               <button
                 onClick={() => setChatOpen(true)}
-                className="inline-flex items-center gap-1 rounded border px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
+                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-blue-50 active:bg-blue-100 shadow-none hover:shadow-md active:shadow-lg transition-all duration-200 will-change-transform hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-blue-300"
               >
                 Ask Hatch
               </button>
