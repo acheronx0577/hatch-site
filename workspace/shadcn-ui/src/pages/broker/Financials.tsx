@@ -18,6 +18,7 @@ import {
 } from '@/lib/api/accounting';
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
+const ACCOUNTING_ENABLED = (import.meta.env.VITE_ACCOUNTING_ENABLED ?? 'false').toLowerCase() === 'true';
 
 type TransactionRecord = AccountingSyncStatusResponse['transactions'][number];
 type LeaseRecord = AccountingSyncStatusResponse['rentalLeases'][number];
@@ -38,6 +39,13 @@ export default function BrokerFinancials() {
   const { activeOrgId } = useAuth();
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
   if (!orgId) return <div className="p-6 text-sm text-slate-600">Select an organization to view financials.</div>;
+  if (!ACCOUNTING_ENABLED) {
+    return (
+      <div className="p-6 text-sm text-slate-600">
+        Accounting sync is disabled in this environment.
+      </div>
+    );
+  }
   return (
     <div className="space-y-6 p-6">
       <FinancialsView orgId={orgId} />

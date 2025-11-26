@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { fetchOfferIntents, OfferIntentRecord, updateOfferIntentStatus } from '@/lib/api/lois';
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
+const OFFER_INTENTS_ENABLED = (import.meta.env.VITE_OFFER_INTENTS_ENABLED ?? 'false').toLowerCase() === 'true';
 const statusOptions = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'ACCEPTED', 'DECLINED', 'WITHDRAWN'] as const;
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
 
@@ -15,6 +16,13 @@ export default function BrokerOfferIntents() {
   const { activeOrgId } = useAuth();
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
   if (!orgId) return <div className="p-6 text-sm text-slate-600">Select an organization to view LOIs.</div>;
+  if (!OFFER_INTENTS_ENABLED) {
+    return (
+      <div className="p-6 text-sm text-slate-600">
+        Offer intents are disabled in this environment.
+      </div>
+    );
+  }
   return (
     <div className="space-y-6 p-6">
       <OfferIntentsView orgId={orgId} />
