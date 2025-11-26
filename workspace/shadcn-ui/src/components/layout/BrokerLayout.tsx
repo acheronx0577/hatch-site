@@ -15,7 +15,6 @@ import { buildMemoryToastPayload } from '@/lib/ai/memoryToast'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
 import { usePresence } from '@/lib/realtime/presenceSocket'
 import { GlobalSearch } from '@/components/global-search/GlobalSearch'
-import { ChatWindow } from '@/components/chat/ChatWindow'
 
 interface BrokerLayoutProps {
   showBackButton?: boolean
@@ -27,7 +26,6 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
   const { session, user, isDemoSession, activeOrgId } = useAuth()
   const { sendLocation } = usePresence(activeOrgId, user?.id ?? null, location.pathname + location.search)
   const { toast } = useToast()
-  const [chatOpen, setChatOpen] = React.useState(false)
 
   const { displayName, initials } = useMemo(
     () => resolveUserIdentity(session?.profile, user?.email ?? null, 'Broker'),
@@ -134,12 +132,6 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
                 <span>View Public Site</span>
               </Button>
               <NotificationBell />
-              <button
-                onClick={() => setChatOpen(true)}
-                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-blue-50 active:bg-blue-100 shadow-none hover:shadow-md active:shadow-lg transition-all duration-200 will-change-transform hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-blue-300"
-              >
-                Ask Hatch
-              </button>
               
               <div className="flex items-center space-x-2 text-sm text-gray-500">
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
@@ -156,7 +148,6 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
           <Outlet />
         </main>
         <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
-        <ChatWindow open={chatOpen} onClose={() => setChatOpen(false)} />
         <CopilotDock debug={debug} />
         <HatchAIWidget onSend={handleWidgetSend} />
       </div>

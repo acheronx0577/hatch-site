@@ -35,7 +35,6 @@ import ComplianceCenter from './pages/broker/Compliance'
 import Messages from './pages/Messages'
 import BrokerMissionControl from './pages/broker/MissionControl'
 import BrokerTransactions from './pages/broker/Transactions'
-import BrokerAiEmployeesPage from './pages/broker/AiEmployees'
 import BrokerNotificationsPage from './pages/broker/Notifications'
 import BrokerAuditLogPage from './pages/broker/AuditLog'
 import PlaybooksList from './pages/broker/playbooks/PlaybooksList'
@@ -105,10 +104,10 @@ function App() {
                   <Route path="marketing/campaigns" element={<DripCampaignsPage />} />
                   <Route path="notifications" element={<BrokerNotificationsPage />} />
                   <Route path="audit-log" element={<BrokerAuditLogPage />} />
-                  <Route path="ai-employees" element={<BrokerAiEmployeesPage />} />
                   <Route path="commission-plans" element={<CommissionPlansPage />} />
                   <Route path="lead-routing" element={<LeadRoutingDesk />} />
                   <Route path="draft-listings" element={<DraftListingsPage />} />
+                  <Route path="ai-employees" element={<Navigate to="mission-control" replace />} />
                   <Route path="pricing" element={<Pricing />} />
                   <Route path="payment" element={<Payment />} />
                   <Route path="forms" element={<FormsLibrary />} />
