@@ -71,10 +71,10 @@ export default function BrokerSidebar() {
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
         <div
-          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity"
+          className="flex items-center cursor-pointer hover:opacity-80 transition-opacity overflow-hidden -mb-9 ml-[-8px]"
           onClick={() => navigate('/')}
         >
-          <HatchLogo className="h-20 md:h-28" />
+          <HatchLogo className="h-24 md:h-32" />
         </div>
         <p className="text-sm text-gray-500 mt-1">Broker Portal</p>
       </div>

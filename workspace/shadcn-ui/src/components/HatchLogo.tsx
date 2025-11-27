@@ -12,8 +12,7 @@ type HatchLogoProps = {
 }
 
 export function HatchLogo({ className, wordmark = true, alt = 'Hatch logo' }: HatchLogoProps) {
-  const logoSrc = hatchLogo
-
+  const logoSrc = hatchLogo;
   return (
     <img
       src={logoSrc}
@@ -21,7 +20,7 @@ export function HatchLogo({ className, wordmark = true, alt = 'Hatch logo' }: Ha
       className={cn('pointer-events-none select-none object-contain w-auto', className)}
       draggable={false}
     />
-  )
+  );
 }
 
 export default HatchLogo

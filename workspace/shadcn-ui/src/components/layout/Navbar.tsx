@@ -142,7 +142,7 @@ export function Navbar() {
   }
 
   const desktopNavClasses = 'hidden md:flex items-center space-x-6'
-  const logoWrapperClasses = 'flex items-center'
+  const logoWrapperClasses = 'flex items-center -mt-0.9'
   const desktopUserClasses = 'hidden md:flex items-center space-x-4'
 
   const navWrapperClasses = cn(
@@ -159,7 +159,7 @@ export function Navbar() {
           {/* Logo */}
           <div className={logoWrapperClasses}>
             <Link to="/" className="flex-shrink-0 flex items-center">
-              <HatchLogo className="h-12 md:h-16" />
+              <HatchLogo className="h-18 md:h-24" />
             </Link>
           </div>
 
