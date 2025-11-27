@@ -74,7 +74,7 @@ export default function BrokerSidebar() {
           className="flex items-center cursor-pointer hover:opacity-80 transition-opacity"
           onClick={() => navigate('/')}
         >
-          <HatchLogo className="h-12 md:h-16" />
+          <HatchLogo className="h-20 md:h-28" />
         </div>
         <p className="text-sm text-gray-500 mt-1">Broker Portal</p>
       </div>
