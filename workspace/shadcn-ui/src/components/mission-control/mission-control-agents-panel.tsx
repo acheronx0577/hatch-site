@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 
+import { MissionControlSectionCard } from './MissionControlSectionCard';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { fetchMissionControlAgents, MissionControlAgentRow } from '@/lib/api/mission-control';
@@ -29,12 +29,13 @@ export function MissionControlAgentsPanel({ orgId }: MissionControlAgentsPanelPr
   }, [data, riskFilter]);
 
   return (
-    <Card className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm" data-testid="mission-control-agents">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-lg font-semibold text-slate-900">Agents</h3>
-          <p className="text-sm text-slate-500">Risk and training snapshot</p>
-        </div>
+    <MissionControlSectionCard
+      title="Agents"
+      subtitle="People, momentum, and risk."
+      actionLabel="Open roster"
+      actionHref="/broker/agents"
+    >
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
         <Select value={riskFilter} onValueChange={(value) => setRiskFilter(value as typeof riskFilter)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by risk" />
@@ -70,7 +71,7 @@ export function MissionControlAgentsPanel({ orgId }: MissionControlAgentsPanelPr
             {isLoading ? (
               <tr>
                 <td colSpan={8} className="py-6 text-center text-sm text-slate-400">
-                  Loading agents…
+                  Loading agents...
                 </td>
               </tr>
             ) : null}
@@ -84,7 +85,7 @@ export function MissionControlAgentsPanel({ orgId }: MissionControlAgentsPanelPr
           </tbody>
         </table>
       </div>
-    </Card>
+    </MissionControlSectionCard>
   );
 }
 

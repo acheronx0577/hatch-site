@@ -1,2 +1,0 @@
--- rolled back migration placeholder
--- this migration was marked rolled back; file retained so Prisma deploy can proceed

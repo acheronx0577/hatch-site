@@ -2051,4 +2051,142 @@ export async function startVoiceCall(payload: { to: string; tenantId?: string })
   });
 }
 
+// Contracts
+export type ContractTemplate = {
+  id: string;
+  organizationId: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  jurisdiction?: string | null;
+  propertyType?: string | null;
+  side?: string | null;
+  s3Key: string;
+  version?: number;
+  isActive?: boolean;
+  editableKeys?: string[] | null;
+  tags: string[];
+};
+
+export type ContractInstance = {
+  id: string;
+  organizationId: string;
+  templateId: string | null;
+  orgListingId: string | null;
+  orgTransactionId: string | null;
+  title: string;
+  status: string;
+  fieldValues: Record<string, unknown>;
+  draftS3Key?: string | null;
+  signedS3Key?: string | null;
+  draftUrl?: string | null;
+  signedUrl?: string | null;
+  recommendationReason?: string | null;
+  template?: {
+    id: string;
+    name: string;
+    code: string;
+    version: number;
+    propertyType?: string | null;
+    side?: string | null;
+  } | null;
+  envelope?: {
+    id: string;
+    provider: string;
+    providerEnvelopeId: string;
+    status: string;
+    signers?: unknown;
+  } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const searchContractTemplates = async (
+  orgId: string,
+  params: {
+    query: string;
+    propertyType?: string;
+    side?: string;
+    jurisdiction?: string;
+    includeUrl?: boolean;
+  }
+) => {
+  const qs = new URLSearchParams();
+  qs.set('query', params.query);
+  if (params.propertyType) qs.set('propertyType', params.propertyType);
+  if (params.side) qs.set('side', params.side);
+  if (params.jurisdiction) qs.set('jurisdiction', params.jurisdiction);
+  if (params.includeUrl) qs.set('includeUrl', 'true');
+  return apiFetch<Array<ContractTemplate & { templateUrl?: string | null }>>(
+    `organizations/${orgId}/contracts/templates/search?${qs.toString()}`
+  );
+};
+
+export const listContractTemplates = async (
+  orgId: string,
+  params?: { propertyType?: string; side?: string; jurisdiction?: string }
+) => {
+  const qs = new URLSearchParams();
+  if (params?.propertyType) qs.set('propertyType', params.propertyType);
+  if (params?.side) qs.set('side', params.side);
+  if (params?.jurisdiction) qs.set('jurisdiction', params.jurisdiction);
+  return apiFetch<ContractTemplate[]>(`organizations/${orgId}/contracts/templates?${qs.toString()}`);
+};
+
+export const recommendContractTemplates = async (
+  orgId: string,
+  params?: { propertyType?: string; side?: string; jurisdiction?: string }
+) => {
+  const qs = new URLSearchParams();
+  if (params?.propertyType) qs.set('propertyType', params.propertyType);
+  if (params?.side) qs.set('side', params.side);
+  if (params?.jurisdiction) qs.set('jurisdiction', params.jurisdiction);
+  return apiFetch<Array<ContractTemplate & { recommendationReason?: string | null }>>(
+    `organizations/${orgId}/contracts/templates/recommendations?${qs.toString()}`
+  );
+};
+
+export const listContractInstances = async (
+  orgId: string,
+  params?: { propertyId?: string; transactionId?: string; status?: string }
+) => {
+  const qs = new URLSearchParams();
+  if (params?.propertyId) qs.set('propertyId', params.propertyId);
+  if (params?.transactionId) qs.set('transactionId', params.transactionId);
+  if (params?.status) qs.set('status', params.status);
+  return apiFetch<ContractInstance[]>(`organizations/${orgId}/contracts/instances?${qs.toString()}`);
+};
+
+export const getContractInstance = async (orgId: string, id: string) =>
+  apiFetch<ContractInstance>(`organizations/${orgId}/contracts/instances/${id}`);
+
+export const createContractInstance = async (
+  orgId: string,
+  payload: { templateId: string; propertyId?: string; transactionId?: string; title?: string }
+) =>
+  apiFetch<ContractInstance>(`organizations/${orgId}/contracts/instances`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+
+export const updateContractInstance = async (
+  orgId: string,
+  id: string,
+  payload: { title?: string; fieldValues?: Record<string, unknown> }
+) =>
+  apiFetch<ContractInstance>(`organizations/${orgId}/contracts/instances/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+
+export const sendContractForSignature = async (
+  orgId: string,
+  id: string,
+  payload: { signers?: Array<{ name: string; email: string; role?: string }>; returnUrl?: string }
+) =>
+  apiFetch<ContractInstance & { envelopeId?: string; recipientViewUrl?: string }>(
+    `organizations/${orgId}/contracts/instances/${id}/send-for-signature`,
+    { method: 'POST', body: JSON.stringify(payload) }
+  );
+
 export { apiFetch };

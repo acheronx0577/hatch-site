@@ -323,6 +323,28 @@ enum OrgTransactionDocumentType {
   OTHER
 }
 
+enum ContractInstanceStatus {
+  DRAFT
+  OUT_FOR_SIGNATURE
+  SIGNED
+  VOIDED
+}
+
+enum SignatureEnvelopeStatus {
+  CREATED
+  SENT
+  COMPLETED
+  VOIDED
+}
+
+enum ContractFieldSourceType {
+  PROPERTY
+  PARTY
+  BROKERAGE
+  ORG
+  STATIC
+}
+
 enum OrgConversationType {
   DIRECT
   CHANNEL
@@ -745,6 +767,8 @@ model Organization {
   trainingModules       AgentTrainingModule[]
   orgListings           OrgListing[]
   orgTransactions       OrgTransaction[]
+  contractTemplates     ContractTemplate[]
+  contractInstances     ContractInstance[]
   searchVectors         SearchVector[]
   playbooks             Playbook[]
   workflowTemplates     OrgWorkflowTemplate[]
@@ -757,6 +781,7 @@ model Organization {
   accountingConfig      AccountingIntegrationConfig?
   transactionAccounting TransactionAccountingRecord[]
   rentalLeaseAccounting RentalLeaseAccountingRecord[]
+  quickBooksConnection  QuickBooksConnection?
   mlsFeedConfig         MlsFeedConfig?
   mlsSyncRuns          MlsSyncRun[]
   dripCampaigns        DripCampaign[]
@@ -1274,6 +1299,7 @@ model User {
   delegatedAssistants         DelegatedAccess[]               @relation("AgentDelegations")
   delegatedAssignments        DelegatedAccess[]               @relation("AssistantDelegations")
   orgTransactionsCreated      OrgTransaction[]
+  contractInstances           ContractInstance[]
   agentWorkflowTasksCompleted AgentWorkflowTask[]             @relation("AgentWorkflowTaskCompletedBy")
   leadsAsConsumer             Lead[]                          @relation("Lead_Consumer")
   leadsCreated                Lead[]                          @relation("Lead_CreatedBy")
@@ -1322,6 +1348,7 @@ model OrgListing {
   documents                     OrgListingDocument[]
   files                         OrgFile[]
   transactions                  OrgTransaction[]
+  contractInstances             ContractInstance[]
   workflowTasks                 AgentWorkflowTask[]             @relation("AgentWorkflowTaskListing")
   leads                         Lead[]
   offerIntents                  OfferIntent[]
@@ -1371,6 +1398,7 @@ model OrgTransaction {
   createdByUser                 User                            @relation(fields: [createdByUserId], references: [id])
   documents                     OrgTransactionDocument[]
   files                         OrgFile[]
+  contractInstances             ContractInstance[]
   workflowTasks                 AgentWorkflowTask[]             @relation("AgentWorkflowTaskTransaction")
   offerIntents                  OfferIntent[]
   rentalLeases                  RentalLease[]
@@ -1391,6 +1419,90 @@ model OrgTransactionDocument {
   orgFile     OrgFile        @relation("OrgTransactionDocument_File", fields: [orgFileId], references: [id])
 
   @@index([transactionId])
+}
+
+model ContractTemplate {
+  id             String                  @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  description    String?
+  jurisdiction   String?
+  propertyType   String?
+  side           String?
+  s3Key          String
+  version        Int                     @default(1)
+  isActive       Boolean                 @default(true)
+  editableKeys   Json?
+  tags           String[]                @db.Text @default([])
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
+
+  organization   Organization            @relation(fields: [organizationId], references: [id])
+  fieldMappings  ContractFieldMapping[]
+  instances      ContractInstance[]
+
+  @@index([organizationId, isActive])
+  @@index([organizationId, propertyType, side, jurisdiction])
+}
+
+model ContractFieldMapping {
+  id               String                 @id @default(cuid())
+  templateId       String
+  templateFieldKey String
+  sourceType       ContractFieldSourceType
+  sourcePath       String
+  defaultValue     String?
+  required         Boolean                @default(false)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  template ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+model ContractInstance {
+  id                   String                  @id @default(cuid())
+  organizationId       String
+  templateId           String?
+  orgListingId         String?
+  orgTransactionId     String?
+  createdByUserId      String
+  title                String
+  status               ContractInstanceStatus  @default(DRAFT)
+  draftS3Key           String?
+  signedS3Key          String?
+  fieldValues          Json
+  recommendationReason String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  template     ContractTemplate?   @relation(fields: [templateId], references: [id])
+  listing      OrgListing?         @relation(fields: [orgListingId], references: [id])
+  transaction  OrgTransaction?     @relation(fields: [orgTransactionId], references: [id])
+  createdBy    User                @relation(fields: [createdByUserId], references: [id])
+  envelope     SignatureEnvelope?
+
+  @@index([organizationId, status])
+  @@index([organizationId, orgListingId])
+  @@index([organizationId, orgTransactionId])
+}
+
+model SignatureEnvelope {
+  id                 String                   @id @default(cuid())
+  contractInstanceId String                   @unique
+  provider           String
+  providerEnvelopeId String
+  status             SignatureEnvelopeStatus  @default(CREATED)
+  signers            Json?
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  contractInstance ContractInstance @relation(fields: [contractInstanceId], references: [id], onDelete: Cascade)
+
+  @@index([provider, providerEnvelopeId])
 }
 
 model OrgConversation {
@@ -1972,6 +2084,17 @@ model RentalLeaseAccountingRecord {
   lease        RentalLease  @relation(fields: [leaseId], references: [id])
 
   @@index([organizationId, provider, syncStatus])
+}
+
+model QuickBooksConnection {
+  id        String   @id @default(cuid())
+  orgId     String   @unique
+  realmId   String
+  tokensJson String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 }
 
 model Lead {

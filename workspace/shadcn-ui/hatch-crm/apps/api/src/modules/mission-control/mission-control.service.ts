@@ -174,7 +174,7 @@ export class MissionControlService {
   private isMissingSchemaError(error: unknown) {
     return (
       error instanceof Prisma.PrismaClientKnownRequestError &&
-      (error.code === 'P2021' || error.code === 'P2022')
+      (error.code === 'P2021' || error.code === 'P2022' || error.code === '42P01')
     );
   }
 

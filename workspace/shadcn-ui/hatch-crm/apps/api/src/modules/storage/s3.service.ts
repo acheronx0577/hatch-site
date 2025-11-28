@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable, Transform } from 'stream';
 import fetch from 'node-fetch';
 
@@ -90,6 +91,30 @@ export class S3Service {
       throw new Error(`No object body returned for key ${key}`);
     }
     return body instanceof Readable ? body : Readable.from(body as any);
+  }
+
+  async getObjectBuffer(key: string): Promise<Buffer> {
+    const stream = await this.getObjectStream(key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  async putObject(params: { key: string; body: Buffer | string | Readable; contentType: string }) {
+    return this.uploadObject(params.key, params.body, params.contentType);
+  }
+
+  async getPresignedUrl(key: string, expiresInSeconds = 900): Promise<string> {
+    if (!this.bucket) {
+      throw new Error('AWS_S3_BUCKET is not configured');
+    }
+    const cmd = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key
+    });
+    return getSignedUrl(this.client, cmd, { expiresIn: expiresInSeconds });
   }
 
   async searchKeys(params: { prefix?: string; contains: string[]; maxKeys?: number }): Promise<string[]> {

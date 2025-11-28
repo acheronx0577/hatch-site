@@ -19,6 +19,7 @@ import {
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
 const ACCOUNTING_ENABLED = (import.meta.env.VITE_ACCOUNTING_ENABLED ?? 'false').toLowerCase() === 'true';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '/api/v1').replace(/\/$/, '');
 
 type TransactionRecord = AccountingSyncStatusResponse['transactions'][number];
 type LeaseRecord = AccountingSyncStatusResponse['rentalLeases'][number];
@@ -97,6 +98,11 @@ function FinancialsView({ orgId }: { orgId: string }) {
     onSuccess: invalidateData
   });
 
+  const handleOAuthConnect = () => {
+    const authorizeUrl = `${API_BASE}/integrations/quickbooks/authorize?orgId=${encodeURIComponent(orgId)}`;
+    window.location.href = authorizeUrl;
+  };
+
   const summaryMetrics = useMemo(() => mapFinancialStatsToCards(overview?.financialStats), [overview?.financialStats]);
 
   const transactionsQueue: SyncRecord[] = (syncStatus?.transactions ?? [])
@@ -125,6 +131,7 @@ function FinancialsView({ orgId }: { orgId: string }) {
           config={syncStatus?.config}
           isLoading={isLoading}
           onConnect={() => connectMutation.mutate(realmInput)}
+          onOAuthConnect={handleOAuthConnect}
           disabled={!realmInput || connectMutation.isPending}
           isSubmitting={connectMutation.isPending}
         />
@@ -230,6 +237,7 @@ function ConnectionCard({
   config,
   isLoading,
   onConnect,
+  onOAuthConnect,
   disabled,
   isSubmitting
 }: {
@@ -238,6 +246,7 @@ function ConnectionCard({
   config?: AccountingSyncStatusResponse['config'] | null;
   isLoading: boolean;
   onConnect: () => void;
+  onOAuthConnect: () => void;
   disabled: boolean;
   isSubmitting: boolean;
 }) {
@@ -270,9 +279,14 @@ function ConnectionCard({
           placeholder="QuickBooks realm id"
           disabled={isSubmitting || isLoading}
         />
-        <Button variant="default" className="w-full" disabled={disabled} onClick={onConnect}>
-          {isSubmitting ? 'Saving...' : config?.realmId ? 'Update connection' : 'Connect QuickBooks'}
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button variant="default" className="w-full" disabled={disabled} onClick={onConnect}>
+            {isSubmitting ? 'Saving...' : config?.realmId ? 'Update realm ID' : 'Save realm ID'}
+          </Button>
+          <Button variant="outline" className="w-full sm:w-40" onClick={onOAuthConnect} disabled={isSubmitting || isLoading}>
+            Connect via OAuth
+          </Button>
+        </div>
       </div>
     </Card>
   );

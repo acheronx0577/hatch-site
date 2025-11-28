@@ -46,6 +46,7 @@ import FormsLibrary from './pages/broker/forms/FormsLibrary'
 import DocumentViewerPage from './pages/broker/DocumentViewer'
 import { AgentPerformanceList } from './pages/broker/agent-performance/AgentPerformanceList'
 import { AgentPerformanceDetail } from './pages/broker/agent-performance/AgentPerformanceDetail'
+import ContractsPage from './pages/broker/Contracts'
 
 // Customer Pages
 import CustomerDashboard from './pages/customer/Dashboard'
@@ -118,6 +119,7 @@ function App() {
                   <Route path="documents/:fileId" element={<DocumentViewerPage />} />
                   <Route path="agent-performance" element={<AgentPerformanceList />} />
                   <Route path="agent-performance/:agentProfileId" element={<AgentPerformanceDetail />} />
+                  <Route path="contracts" element={<ContractsPage />} />
                   {/* Default broker route */}
                   <Route index element={<Navigate to="dashboard" replace />} />
                 </Route>

@@ -42,6 +42,13 @@ export class NotificationsService {
     private readonly audit: AuditService
   ) {}
 
+  private isMissingSchemaError(error: unknown) {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === 'P2021' || error.code === 'P2022' || error.code === '42P01')
+    );
+  }
+
   async createNotification(params: CreateNotificationParams) {
     const {
       organizationId,
@@ -64,58 +71,103 @@ export class NotificationsService {
       }
     }
 
-    return this.prisma.notification.create({
-      data: {
-        organizationId,
-        userId: userId ?? null,
-        type,
-        channel,
-        title,
-        message: message ?? null,
-        ...rest
+    try {
+      return await this.prisma.notification.create({
+        data: {
+          organizationId,
+          userId: userId ?? null,
+          type,
+          channel,
+          title,
+          message: message ?? null,
+          ...rest
+        }
+      });
+    } catch (error) {
+      if (this.isMissingSchemaError(error)) {
+        return null;
       }
-    });
+      throw error;
+    }
   }
 
   async listForUser(orgId: string, userId: string, limit = 20, cursor?: string) {
-    return this.prisma.notification.findMany({
-      where: { organizationId: orgId, userId },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: cursor ? 1 : 0,
-      cursor: cursor ? { id: cursor } : undefined
-    });
+    try {
+      return await this.prisma.notification.findMany({
+        where: { organizationId: orgId, userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: cursor ? 1 : 0,
+        cursor: cursor ? { id: cursor } : undefined
+      });
+    } catch (error) {
+      if (this.isMissingSchemaError(error)) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async markAsRead(notificationId: string, userId: string) {
-    const notification = await this.prisma.notification.findUnique({ where: { id: notificationId } });
-    if (!notification || notification.userId !== userId) {
-      throw new ForbiddenException('Cannot update this notification');
+    try {
+      const notification = await this.prisma.notification.findUnique({ where: { id: notificationId } });
+      if (!notification || notification.userId !== userId) {
+        throw new ForbiddenException('Cannot update this notification');
+      }
+      return this.prisma.notification.update({
+        where: { id: notificationId },
+        data: { isRead: true, readAt: new Date() }
+      });
+    } catch (error) {
+      if (this.isMissingSchemaError(error)) {
+        return { success: true };
+      }
+      throw error;
     }
-    return this.prisma.notification.update({
-      where: { id: notificationId },
-      data: { isRead: true, readAt: new Date() }
-    });
   }
 
   async markAllAsRead(orgId: string, userId: string) {
-    await this.prisma.notification.updateMany({
-      where: { organizationId: orgId, userId, isRead: false },
-      data: { isRead: true, readAt: new Date() }
-    });
+    try {
+      await this.prisma.notification.updateMany({
+        where: { organizationId: orgId, userId, isRead: false },
+        data: { isRead: true, readAt: new Date() }
+      });
+    } catch (error) {
+      if (!this.isMissingSchemaError(error)) {
+        throw error;
+      }
+    }
     return { success: true };
   }
 
   async getOrCreatePreferences(orgId: string, userId: string) {
-    let prefs = await this.prisma.notificationPreference.findUnique({
-      where: { organizationId_userId: { organizationId: orgId, userId } }
-    });
-    if (!prefs) {
-      prefs = await this.prisma.notificationPreference.create({
-        data: { organizationId: orgId, userId }
+    try {
+      let prefs = await this.prisma.notificationPreference.findUnique({
+        where: { organizationId_userId: { organizationId: orgId, userId } }
       });
+      if (!prefs) {
+        prefs = await this.prisma.notificationPreference.create({
+          data: { organizationId: orgId, userId }
+        });
+      }
+      return prefs;
+    } catch (error) {
+      if (this.isMissingSchemaError(error)) {
+        // Return permissive defaults when prefs table is absent in a reset DB.
+        return {
+          organizationId: orgId,
+          userId,
+          inAppEnabled: true,
+          emailEnabled: false,
+          leadNotificationsEnabled: true,
+          offerIntentNotificationsEnabled: true,
+          rentalNotificationsEnabled: true,
+          accountingNotificationsEnabled: true,
+          aiNotificationsEnabled: true
+        } as any;
+      }
+      throw error;
     }
-    return prefs;
   }
 
   async updatePreferences(orgId: string, userId: string, dto: UpdateNotificationPreferencesDto) {

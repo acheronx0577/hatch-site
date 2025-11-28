@@ -1,0 +1,1 @@
+-- No-op migration: contracts schema already present in baseline.

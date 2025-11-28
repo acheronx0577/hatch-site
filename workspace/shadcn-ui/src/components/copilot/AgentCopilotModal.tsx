@@ -163,8 +163,6 @@ export function AgentCopilotModal({
     setInput('');
   };
 
-  if (!open) return null;
-
   const handleSendEmail = () => {
     const draft = lastDraft ?? (lastAssistantMessage ? extractEmailDraft(lastAssistantMessage.content) : null);
     if (!draft) return;
@@ -191,6 +189,8 @@ export function AgentCopilotModal({
   }, [emailDialogOpen, autoOpenedFromDraft, lastAssistantMessage, lastUserMessage]);
 
   const hasAssistantDraft = Boolean(lastDraft ?? lastAssistantMessage?.content?.trim());
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={onClose}>

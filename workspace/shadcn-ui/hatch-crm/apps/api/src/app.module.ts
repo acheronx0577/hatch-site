@@ -39,6 +39,7 @@ import { ConsumerPortalModule } from './modules/consumer-portal/consumer-portal.
 import { DraftsModule } from './modules/drafts/drafts.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
 import { FilesModule } from './modules/files/files.module';
+import { ContractsModule } from './modules/contracts/contracts.module';
 import { OffersModule } from './modules/re/offers/offers.module';
 import { TransactionsModule } from './modules/re/transactions/transactions.module';
 import { DealsModule } from './modules/deals/deals.module';
@@ -76,6 +77,8 @@ import { DripCampaignsModule } from './modules/drip-campaigns/drip-campaigns.mod
 import { LeadScoringModule } from './modules/lead-scoring/lead-scoring.module';
 import { RevenueForecastModule } from './modules/revenue-forecast/revenue-forecast.module';
 import { IngestionModule } from './modules/ingestion/ingestion.module';
+import { QuickBooksModule } from './modules/integrations/quickbooks/quickbooks.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
 
 const isProd = (process.env.NODE_ENV ?? 'development') === 'production';
 const throttlerEnabled =
@@ -173,6 +176,7 @@ const throttlerTtl = Number(process.env.THROTTLER_TTL_MS ?? 60_000);
     TransactionsModule,
     DealsModule,
     ReListingsModule,
+    ContractsModule,
     PipelinesModule,
     LeadsModule,
     SessionModule,
@@ -208,7 +212,9 @@ const throttlerTtl = Number(process.env.THROTTLER_TTL_MS ?? 60_000);
     OrgMlsModule,
     MissionControlModule,
     OrgListingsModule,
-    OrgTransactionsModule
+    OrgTransactionsModule,
+    QuickBooksModule,
+    AccountingModule
   ],
   controllers: [],
   providers: [

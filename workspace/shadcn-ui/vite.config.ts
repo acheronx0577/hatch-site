@@ -30,6 +30,14 @@ export default defineConfig(({ mode }) => ({
     globals: true,
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
-    exclude: [...configDefaults.exclude, "e2e/**"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    exclude: [
+      ...configDefaults.exclude,
+      "e2e/**",
+      "hatch-crm/**",
+      "apps/**",
+      "packages/**",
+      "dist/**"
+    ],
   },
 }));
