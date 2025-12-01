@@ -185,13 +185,55 @@ const FALLBACK_DEMO_USER_ID = 'demo_broker_1'
 const FALLBACK_DEMO_FIRM_ID = '550e8400-e29b-41d4-a716-446655440001'
 const FALLBACK_TENANT_ID = import.meta.env.VITE_TENANT_ID || 'tenant-hatch'
 
+const trimArrayForCache = <T,>(value: T[] | undefined, max = 50) =>
+  Array.isArray(value) ? value.slice(0, max) : value
+
+const compactMLSPropertyForCache = (property: MLSProperty): MLSProperty => {
+  const compacted: MLSProperty = {
+    ...property,
+    photos: Array.isArray(property.photos)
+      ? property.photos.slice(0, MAX_PROPERTY_PHOTOS)
+      : property.photos,
+    validationErrors: trimArrayForCache(property.validationErrors, 50),
+    validationWarnings: trimArrayForCache(property.validationWarnings, 50),
+    sourceExtractedFields: trimArrayForCache(property.sourceExtractedFields, 50),
+    sourceMatches: trimArrayForCache(property.sourceMatches, 50),
+  }
+
+  if (property.additionalFields) {
+    const limitedAdditional = Object.fromEntries(
+      Object.entries(property.additionalFields).slice(0, 50)
+    ) as Record<string, MLSPropertyAdditionalField>
+    compacted.additionalFields = limitedAdditional
+  }
+
+  return compacted
+}
+
+const CACHE_COMPACTORS: Partial<Record<string, (value: unknown) => unknown>> = {
+  [STORAGE_KEYS.properties]: (value) => compactMLSPropertyForCache(value as MLSProperty),
+  [STORAGE_KEYS.draftProperties]: (value) => compactMLSPropertyForCache(value as MLSProperty),
+}
+
 // Helper function to safely store data with size checks
 const safeSetItem = <T,>(key: string, data: T[], limit: number) => {
   try {
     const jsonString = JSON.stringify(data)
+    const compactor = Array.isArray(data) ? CACHE_COMPACTORS[key] : undefined
     
     // Check if data exceeds limit
     if (jsonString.length > limit) {
+      if (compactor && Array.isArray(data)) {
+        const compactedData = data.map((item) => compactor(item) as T)
+        const compactedString = JSON.stringify(compactedData)
+        
+        if (compactedString.length <= limit) {
+          localStorage.setItem(key, compactedString)
+          console.warn(`Data for ${key} exceeded size limit. Stored compacted cache.`)
+          return
+        }
+      }
+
       console.warn(`Data for ${key} exceeds size limit. Truncating...`)
       
       // If it's an array, keep only the most recent items

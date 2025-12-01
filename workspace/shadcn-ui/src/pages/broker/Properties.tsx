@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchOrgListings, type OrgListingRecord } from '@/lib/api/org-listings';
+import { deleteBrokerProperty, fetchBrokerProperties, type BrokerPropertyRow } from '@/lib/api/properties';
+import { Separator } from '@/components/ui/separator';
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
 
@@ -41,6 +49,8 @@ export default function BrokerProperties() {
 
 function PropertiesView({ orgId }: { orgId: string }) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const placeholderImg =
+    'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 120%22%3E%3Crect width=%22200%22 height=%22120%22 rx=%2212%22 fill=%22%23eef2f7%22/%3E%3Cpath d=%22M20 90h160L128 46 98 74 74 56z%22 fill=%22%23cbd5e1%22/%3E%3Ccircle cx=%2270%22 cy=%2246%22 r=%228%22 fill=%22%23cbd5e1%22/%3E%3C/svg%3E';
   const parseFilter = (value: string | null): PropertiesFilter => {
     if (!value) return 'ALL';
     const match = filters.find((filter) => filter.id === value.toUpperCase());
@@ -50,17 +60,27 @@ function PropertiesView({ orgId }: { orgId: string }) {
   const [filter, setFilter] = useState<PropertiesFilter>(() => parseFilter(searchParams.get('filter')));
   const { data, isLoading, error } = useQuery({
     queryKey: ['broker', 'properties', orgId],
-    queryFn: () => fetchOrgListings(orgId),
+    queryFn: () => fetchBrokerProperties(),
     staleTime: 30_000
+  });
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteBrokerProperty(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['broker', 'properties', orgId] });
+      setSelectedListing(null);
+    }
   });
 
   const listings = data ?? [];
+  const [selectedListing, setSelectedListing] = useState<BrokerPropertyRow | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const summary = useMemo(() => {
-    const active = listings.filter((listing) => listing.status === 'ACTIVE').length;
-    const pending = listings.filter((listing) => listing.status.startsWith('PENDING')).length;
-    const flagged = listings.filter((listing) => listing.status === 'PENDING_BROKER_APPROVAL').length;
-    const expiringSoon = listings.filter((listing) => isExpiringSoon(listing.expiresAt)).length;
+    const active = listings.filter((listing) => (listing.status ?? '').toLowerCase() === 'active').length;
+    const pending = listings.filter((listing) => (listing.status ?? '').toLowerCase() === 'pending').length;
+    const flagged = 0;
+    const expiringSoon = 0;
     return { total: listings.length, active, pending, flagged, expiringSoon };
   }, [listings]);
 
@@ -68,13 +88,13 @@ function PropertiesView({ orgId }: { orgId: string }) {
     return listings.filter((listing) => {
       switch (filter) {
         case 'ACTIVE':
-          return listing.status === 'ACTIVE';
+          return (listing.status ?? '').toLowerCase() === 'active';
         case 'PENDING':
-          return listing.status.startsWith('PENDING');
+          return (listing.status ?? '').toLowerCase().startsWith('pending');
         case 'FLAGGED':
-          return listing.status === 'PENDING_BROKER_APPROVAL';
+          return false;
         case 'EXPIRING':
-          return isExpiringSoon(listing.expiresAt);
+          return false;
         default:
           return true;
       }
@@ -158,6 +178,7 @@ function PropertiesView({ orgId }: { orgId: string }) {
                   <th className="px-4 py-2 text-left">MLS #</th>
                   <th className="px-4 py-2 text-left">Price</th>
                   <th className="px-4 py-2">Expires</th>
+                  <th className="px-4 py-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -189,23 +210,40 @@ function PropertiesView({ orgId }: { orgId: string }) {
                         <Badge className={getStatusTone(listing.status)}>{formatStatus(listing.status)}</Badge>
                       </td>
                       <td className="px-4 py-3">
-                        {listing.agentProfile?.user ? (
-                          <>
-                            <p className="font-medium text-slate-900">
-                              {listing.agentProfile.user.firstName} {listing.agentProfile.user.lastName}
-                            </p>
-                            <p className="text-xs text-slate-500">{listing.agentProfile.user.email}</p>
-                          </>
-                        ) : (
-                          <p className="text-xs text-slate-500">Unassigned</p>
-                        )}
+                        <p className="text-xs text-slate-500">Unassigned</p>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{listing.mlsNumber ?? '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">{listing.mls_number ?? '—'}</td>
                       <td className="px-4 py-3 font-medium text-slate-900">
-                        {listing.listPrice ? currencyFormatter.format(listing.listPrice) : '—'}
+                        {listing.list_price ? currencyFormatter.format(Number(listing.list_price)) : '—'}
                       </td>
                       <td className="px-4 py-3 text-slate-600">
-                        {listing.expiresAt ? new Date(listing.expiresAt).toLocaleDateString() : '—'}
+                        — 
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedListing(listing);
+                            setPreviewOpen(true);
+                          }}
+                        >
+                          Preview
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="ml-2"
+                          disabled={deleteMutation.isLoading}
+                          onClick={() => {
+                            const confirmDelete = window.confirm('Delete this listing?');
+                            if (confirmDelete) {
+                              deleteMutation.mutate(listing.id);
+                            }
+                          }}
+                        >
+                          Delete
+                        </Button>
                       </td>
                     </tr>
                   ))
@@ -215,19 +253,203 @@ function PropertiesView({ orgId }: { orgId: string }) {
           </div>
         )}
       </Card>
+
+      <Dialog
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open) setSelectedListing(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Property preview</DialogTitle>
+            <DialogDescription>Inline snapshot of the listing details.</DialogDescription>
+          </DialogHeader>
+
+          {selectedListing ? (
+            <div className="space-y-4">
+              {(() => {
+                const photos = (selectedListing.photos ?? []).filter(Boolean);
+                const cover = selectedListing.cover_photo_url || photos[0] || placeholderImg;
+                return (
+                  <div className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+                    <img
+                      src={cover}
+                      alt={selectedListing.address_line}
+                      className="h-56 w-full object-cover"
+                      loading="lazy"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (target.src !== placeholderImg) target.src = placeholderImg;
+                      }}
+                    />
+                  </div>
+                );
+              })()}
+
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-2xl font-semibold text-slate-900">
+                    {selectedListing.list_price ? currencyFormatter.format(Number(selectedListing.list_price)) : 'Price TBD'}
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    {[selectedListing.address_line, selectedListing.city, selectedListing.state_code, selectedListing.zip_code]
+                      .filter(Boolean)
+                      .join(', ')}
+                  </p>
+                  <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
+                    <Badge variant="outline">{formatStatus(selectedListing.status)}</Badge>
+                    {selectedListing.mls_number && <span>MLS #{selectedListing.mls_number}</span>}
+                  </div>
+                </div>
+                <div className="text-right text-sm text-slate-500">
+                  <p>Expires: {selectedListing.expiresAt ? new Date(selectedListing.expiresAt).toLocaleDateString() : '—'}</p>
+                  <p>
+                    Type:{' '}
+                    {[selectedListing.property_type, selectedListing.property_sub_type]
+                      .filter(Boolean)
+                      .join(' • ') || '—'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-slate-700">
+                <PreviewStat label="Bedrooms" value={selectedListing.bedrooms_total ?? '—'} />
+                <PreviewStat
+                  label="Bathrooms"
+                  value={
+                    selectedListing.bathrooms_total ??
+                    selectedListing.bathrooms_full ??
+                    selectedListing.bathrooms_half ??
+                    '—'
+                  }
+                />
+                <PreviewStat
+                  label="Square Feet"
+                  value={selectedListing.living_area_sq_ft ? selectedListing.living_area_sq_ft.toLocaleString() : '—'}
+                />
+                <PreviewStat
+                  label="Price / SqFt"
+                  value={
+                    selectedListing.list_price && selectedListing.living_area_sq_ft
+                      ? currencyFormatter.format(
+                          Number(selectedListing.list_price) / Math.max(Number(selectedListing.living_area_sq_ft), 1)
+                        )
+                      : '—'
+                  }
+                />
+                <PreviewStat
+                  label="Lot"
+                  value={
+                    selectedListing.lot_size_acres
+                      ? `${selectedListing.lot_size_acres} ac`
+                      : selectedListing.lot_size_sq_ft
+                        ? `${selectedListing.lot_size_sq_ft.toLocaleString()} sqft`
+                        : '—'
+                  }
+                />
+                <PreviewStat label="Year built" value={selectedListing.year_built ?? '—'} />
+                <PreviewStat label="County" value={selectedListing.county ?? '—'} />
+                <PreviewStat label="Parcel ID" value={selectedListing.parcel_id ?? '—'} />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700">
+                <PreviewStat label="Garage" value={selectedListing.garage_spaces ?? '—'} />
+                <PreviewStat label="View" value={selectedListing.property_view ?? '—'} />
+                <PreviewStat label="Water" value={selectedListing.water_source ?? '—'} />
+                <PreviewStat label="Sewer" value={selectedListing.sewer_system ?? '—'} />
+                <PreviewStat label="Cooling" value={selectedListing.cooling ?? '—'} />
+                <PreviewStat label="Heating" value={selectedListing.heating ?? '—'} />
+                <PreviewStat label="Parking" value={selectedListing.parking_features ?? '—'} />
+                <PreviewStat label="Exterior" value={selectedListing.exterior_features ?? '—'} />
+                <PreviewStat label="Interior" value={selectedListing.interior_features ?? '—'} />
+                <PreviewStat label="Appliances" value={selectedListing.appliances ?? '—'} />
+                <PreviewStat
+                  label="Taxes"
+                  value={
+                    selectedListing.taxes !== null && selectedListing.taxes !== undefined
+                      ? currencyFormatter.format(Number(selectedListing.taxes))
+                      : '—'
+                  }
+                />
+              </div>
+
+              {(selectedListing.public_remarks || selectedListing.private_remarks || selectedListing.showing_instructions) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {selectedListing.public_remarks && (
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Remarks</p>
+                      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                        {selectedListing.public_remarks}
+                      </p>
+                    </div>
+                  )}
+                  {selectedListing.private_remarks && (
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Private remarks</p>
+                      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                        {selectedListing.private_remarks}
+                      </p>
+                    </div>
+                  )}
+                  {selectedListing.showing_instructions && (
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Showing instructions</p>
+                      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                        {selectedListing.showing_instructions}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedListing.photos && selectedListing.photos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Photos</p>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {selectedListing.photos.filter(Boolean).slice(0, 8).map((photo, idx) => (
+                      <img
+                        key={photo + idx}
+                        src={photo}
+                        alt={`Photo ${idx + 1}`}
+                        className="h-24 w-36 flex-shrink-0 rounded-lg object-cover border border-slate-100 bg-slate-50"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          if (target.src !== placeholderImg) target.src = placeholderImg;
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedListing.agentProfile?.user && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <p className="font-medium text-slate-900">Agent</p>
+                  <p className="text-slate-700">
+                    {selectedListing.agentProfile.user.firstName} {selectedListing.agentProfile.user.lastName}
+                  </p>
+                  {selectedListing.agentProfile.user.email && (
+                    <p className="text-slate-500">{selectedListing.agentProfile.user.email}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">No listing selected.</p>
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
 
-function isExpiringSoon(date?: string | null) {
-  if (!date) return false;
-  const expires = new Date(date).getTime();
-  const now = Date.now();
-  const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
-  return expires - now <= THIRTY_DAYS;
-}
-
-function formatStatus(status: string) {
+function formatStatus(status?: string | null) {
+  if (!status) return 'Unknown';
   return status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
 }
 
@@ -245,5 +467,14 @@ function KpiCard({ label, value, helper }: { label: string; value: number; helpe
       <p className="text-3xl font-semibold text-slate-900">{value}</p>
       {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
     </Card>
+  );
+}
+
+function PreviewStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-base font-semibold text-slate-900 whitespace-pre-line">{value}</p>
+    </div>
   );
 }

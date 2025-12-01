@@ -2184,9 +2184,20 @@ export const sendContractForSignature = async (
   id: string,
   payload: { signers?: Array<{ name: string; email: string; role?: string }>; returnUrl?: string }
 ) =>
-  apiFetch<ContractInstance & { envelopeId?: string; recipientViewUrl?: string }>(
+  apiFetch<ContractInstance & { envelopeId?: string; senderViewUrl?: string }>(
     `organizations/${orgId}/contracts/instances/${id}/send-for-signature`,
     { method: 'POST', body: JSON.stringify(payload) }
   );
+
+export const deleteContractInstance = async (orgId: string, id: string) =>
+  apiFetch<{ deleted: number }>(`organizations/${orgId}/contracts/instances/${id}`, {
+    method: 'DELETE'
+  });
+
+export const deleteContractInstances = async (orgId: string, ids: string[]) =>
+  apiFetch<{ deleted: number }>(`organizations/${orgId}/contracts/instances/bulk-delete`, {
+    method: 'POST',
+    body: JSON.stringify({ ids })
+  });
 
 export { apiFetch };

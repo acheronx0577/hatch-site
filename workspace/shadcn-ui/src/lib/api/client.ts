@@ -8,12 +8,32 @@ const fallbackAnonKey =
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || fallbackSupabaseUrl
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || fallbackAnonKey
 
-const defaultFunctionsUrl = import.meta.env.DEV
-  ? 'http://localhost:4000'
-  : `${supabaseUrl.replace(/\/$/, '')}/functions/v1`
+const ensurePrefix = (prefix: string) => (prefix.startsWith('/') ? prefix : `/${prefix}`)
+const withApiPrefix = (base: string, prefix: string) => {
+  const normalizedBase = base.replace(/\/+$/, '')
+  const normalizedPrefix = ensurePrefix(prefix)
+  return normalizedBase.endsWith(normalizedPrefix)
+    ? normalizedBase
+    : `${normalizedBase}${normalizedPrefix}`
+}
+
+const apiPrefix = ensurePrefix(import.meta.env.VITE_API_PREFIX || '/api/v1')
+
+const baseApiUrl =
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:4000`
+    : 'http://localhost:4000')
+
+const defaultFunctionsUrl = withApiPrefix(baseApiUrl, apiPrefix)
 
 // Used by legacy fetch-based request helper
-const functionsBaseUrl = (import.meta.env.VITE_SUPABASE_FUNCTIONS_URL || defaultFunctionsUrl).replace(/\/$/, '')
+const functionsBaseUrl = (
+  import.meta.env.VITE_SUPABASE_FUNCTIONS_URL ||
+  import.meta.env.VITE_FUNCTIONS_URL ||
+  defaultFunctionsUrl
+).replace(/\/$/, '')
 
 export type RequestOptions = {
   method?: string
@@ -85,10 +105,14 @@ export const request = async <T>(path: string, options?: RequestOptions): Promis
 }
 
 // Axios client for direct API calls
-const defaultApiBase =
-  typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}:3000`
-    : 'http://localhost:3000'
+const defaultApiBase = withApiPrefix(
+  import.meta.env.VITE_API_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    (typeof window !== 'undefined'
+      ? `${window.location.protocol}//${window.location.hostname}:4000`
+      : 'http://localhost:4000'),
+  apiPrefix
+)
 
 export const apiClient = axios.create({
   baseURL: (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || defaultApiBase).replace(/\/$/, ''),

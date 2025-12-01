@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
@@ -12,6 +12,7 @@ import {
   SendForSignatureDto,
   UpdateContractInstanceDto
 } from './dto/contracts.dto';
+import { BulkDeleteInstancesDto } from './dto/contracts.dto';
 
 @ApiTags('contracts')
 @ApiBearerAuth()
@@ -74,5 +75,15 @@ export class ContractsController {
     @Body() dto: SendForSignatureDto
   ) {
     return this.contracts.sendForSignature(orgId, id, dto);
+  }
+
+  @Delete('instances/:id')
+  deleteInstance(@Param('orgId') orgId: string, @Param('id') id: string) {
+    return this.contracts.deleteInstance(orgId, id);
+  }
+
+  @Post('instances/bulk-delete')
+  bulkDeleteInstances(@Param('orgId') orgId: string, @Body() dto: BulkDeleteInstancesDto) {
+    return this.contracts.deleteInstances(orgId, dto.ids);
   }
 }

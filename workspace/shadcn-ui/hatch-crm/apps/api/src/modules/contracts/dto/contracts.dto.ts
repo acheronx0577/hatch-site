@@ -22,8 +22,9 @@ export class ListTemplatesQueryDto {
 }
 
 export class SearchTemplatesQueryDto extends ListTemplatesQueryDto {
+  @IsOptional()
   @IsString()
-  query!: string;
+  query?: string;
 
   @IsOptional()
   @IsString()
@@ -103,4 +104,10 @@ export class SendForSignatureDto {
   @IsOptional()
   @IsString()
   returnUrl?: string;
+}
+
+export class BulkDeleteInstancesDto {
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[];
 }

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Listing } from '@hatch/db';
 import { randomUUID } from 'crypto';
 
@@ -171,6 +171,82 @@ export class ListingsService {
 
     this.promoted.set(row.id, row);
     return row;
+  }
+
+  update(tenantId: string, id: string, payload: Partial<BrokerPropertyRow>): BrokerPropertyRow {
+    const existing = this.promoted.get(id);
+    if (!existing) {
+      throw new NotFoundException('not_found');
+    }
+
+    // Only allow updates within the same tenant/org
+    if (existing.org_id !== tenantId && existing.firm_id !== tenantId) {
+      throw new NotFoundException('not_found');
+    }
+
+    const now = new Date().toISOString();
+    const updated: BrokerPropertyRow = {
+      ...existing,
+      ...payload,
+      id: existing.id,
+      draft_id: existing.draft_id,
+      org_id: existing.org_id,
+      firm_id: existing.firm_id,
+      updated_at: now,
+      // Normalize photos to an array of strings
+      photos: Array.isArray(payload.photos)
+        ? payload.photos.filter((url): url is string => typeof url === 'string' && !!url.trim())
+        : existing.photos ?? [],
+    };
+
+    this.promoted.set(id, updated);
+    return updated;
+  }
+
+  publish(tenantId: string, id: string): BrokerPropertyRow {
+    const existing = this.promoted.get(id);
+    if (!existing) {
+      throw new NotFoundException('not_found');
+    }
+
+    if (existing.org_id !== tenantId && existing.firm_id !== tenantId) {
+      throw new NotFoundException('not_found');
+    }
+
+    const now = new Date().toISOString();
+    const updated: BrokerPropertyRow = {
+      ...existing,
+      status: 'active',
+      state: 'LIVE',
+      published_at: existing.published_at ?? now,
+      updated_at: now,
+    };
+
+    this.promoted.set(id, updated);
+    return updated;
+  }
+
+  unpublish(tenantId: string, id: string): BrokerPropertyRow {
+    const existing = this.promoted.get(id);
+    if (!existing) {
+      throw new NotFoundException('not_found');
+    }
+
+    if (existing.org_id !== tenantId && existing.firm_id !== tenantId) {
+      throw new NotFoundException('not_found');
+    }
+
+    const now = new Date().toISOString();
+    const updated: BrokerPropertyRow = {
+      ...existing,
+      status: 'draft',
+      state: 'PROPERTY_PENDING',
+      published_at: null,
+      updated_at: now,
+    };
+
+    this.promoted.set(id, updated);
+    return updated;
   }
 
   private normalizeStatus(value: string | null): BrokerPropertyRow['status'] {

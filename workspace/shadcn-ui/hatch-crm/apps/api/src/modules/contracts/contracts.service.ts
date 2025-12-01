@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ContractInstanceStatus, Prisma, SignatureEnvelopeStatus } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,6 +18,7 @@ import type {
   UpdateContractInstanceDto,
   SearchTemplatesQueryDto
 } from './dto/contracts.dto';
+import { BulkDeleteInstancesDto } from './dto/contracts.dto';
 import type { ContractTemplate } from '@hatch/db';
 
 type InstanceWithRelations = Prisma.ContractInstanceGetPayload<{
@@ -40,7 +42,8 @@ export class ContractsService {
     private readonly s3: S3Service,
     private readonly autofill: ContractsAutofillService,
     private readonly recommendations: ContractsRecommendationService,
-    private readonly docusign: ContractsDocuSignService
+    private readonly docusign: ContractsDocuSignService,
+    private readonly config: ConfigService
   ) {}
 
   async listTemplates(orgId: string, query: ListTemplatesQueryDto) {
@@ -64,10 +67,7 @@ export class ContractsService {
 
   async searchTemplates(orgId: string, query: SearchTemplatesQueryDto) {
     const text = query.query?.trim();
-    if (!text) {
-      return [];
-    }
-    const tokens = text
+    const tokens = (text ?? '')
       .split(/\s+/)
       .map((t) => t.trim())
       .filter(Boolean);
@@ -79,29 +79,43 @@ export class ContractsService {
         propertyType: query.propertyType ?? undefined,
         side: query.side ?? undefined,
         jurisdiction: query.jurisdiction ?? undefined,
-        OR: [
-          { name: { contains: text, mode: 'insensitive' } },
-          { code: { contains: text, mode: 'insensitive' } },
-          { description: { contains: text, mode: 'insensitive' } },
-          tokens.length
-            ? {
-                tags: {
-                  hasSome: tokens
-                }
-              }
+        OR:
+          text && text.length
+            ? [
+                { name: { contains: text, mode: Prisma.QueryMode.insensitive } },
+                { code: { contains: text, mode: Prisma.QueryMode.insensitive } },
+                { description: { contains: text, mode: Prisma.QueryMode.insensitive } },
+                tokens.length
+                  ? {
+                      tags: {
+                        hasSome: tokens
+                      }
+                    }
+                  : undefined
+              ].filter(Boolean)
             : undefined
-        ].filter(Boolean) as any[]
       },
       orderBy: { updatedAt: 'desc' }
     });
 
     const includeUrl = (query.includeUrl ?? '').toLowerCase() === 'true';
 
-    const s3Keys = await this.s3.searchKeys({
-      prefix: 'contracts/',
-      contains: tokens,
-      maxKeys: 50
-    });
+    const prefixes = ['contracts/', 'contracts/templates/', 'forms/contracts/', 'forms/', undefined];
+    const keySet = new Set<string>();
+
+    const maxKeys = 400;
+
+    for (const prefix of prefixes) {
+      const keys = await this.s3.searchKeys({
+        prefix,
+        contains: tokens,
+        maxKeys
+      });
+      keys.forEach((key) => keySet.add(key));
+      if (keySet.size >= maxKeys) break;
+    }
+
+    const s3Keys = Array.from(keySet).slice(0, maxKeys);
 
     const fromS3: Array<ContractTemplate & { templateUrl?: string | null }> = [];
     for (const key of s3Keys) {
@@ -183,9 +197,30 @@ export class ContractsService {
   }
 
   async createInstance(orgId: string, userId: string, dto: CreateContractInstanceDto) {
-    const template = await this.prisma.contractTemplate.findFirst({
+    let template = await this.prisma.contractTemplate.findFirst({
       where: { id: dto.templateId, organizationId: orgId }
     });
+
+    // If this is an S3-only template (id starts with s3:...), create a backing DB row on the fly.
+    if (!template && dto.templateId.startsWith('s3:')) {
+      const s3Key = dto.templateId.replace(/^s3:/, '');
+      template =
+        (await this.prisma.contractTemplate.findFirst({
+          where: { organizationId: orgId, s3Key }
+        })) ??
+        (await this.prisma.contractTemplate.create({
+          data: {
+            organizationId: orgId,
+            name: this.prettyNameFromKey(s3Key),
+            code: this.codeFromKey(s3Key),
+            description: 'Imported from S3',
+            s3Key,
+            isActive: true,
+            version: 1
+          }
+        }));
+    }
+
     if (!template) {
       throw new NotFoundException('Template not found for this organization');
     }
@@ -284,21 +319,21 @@ export class ContractsService {
       role: s.role ?? 'signer'
     }));
 
-    const { envelopeId, recipientViewUrl } = await this.docusign.createEnvelopeFromInstance({
+    const draftKey = instance.draftS3Key ?? '';
+    const templateKey = (instance.template as any)?.s3Key ?? '';
+    const draftIsPdf = draftKey.toLowerCase().endsWith('.pdf');
+    const templateIsPdf = templateKey.toLowerCase().endsWith('.pdf');
+    const pdfKey = draftIsPdf ? draftKey : templateIsPdf ? templateKey : null;
+
+    if (!pdfKey) {
+      throw new NotFoundException('No PDF available to send for signature');
+    }
+
+    const { envelopeId, senderViewUrl } = await this.docusign.createEnvelopeWithSenderView({
       contractInstanceId: instance.id,
-      draftS3Key: instance.draftS3Key,
-      signers
-    }).then(async ({ envelopeId }) => {
-      let recipientViewUrl: string | undefined;
-      if (dto.returnUrl && signers.length > 0) {
-        const view = await this.docusign.createRecipientView({
-          envelopeId,
-          returnUrl: dto.returnUrl,
-          signer: { name: signers[0].name, email: signers[0].email }
-        });
-        recipientViewUrl = view.url;
-      }
-      return { envelopeId, recipientViewUrl };
+      pdfS3Key: pdfKey,
+      signers,
+      returnUrl: dto.returnUrl ?? this.config.get<string>('DOCUSIGN_RETURN_URL', 'http://localhost:3000')
     });
 
     await this.prisma.signatureEnvelope.upsert({
@@ -328,8 +363,46 @@ export class ContractsService {
     return {
       ...view,
       envelopeId,
-      recipientViewUrl
+      senderViewUrl
     };
+  }
+
+  async deleteInstance(orgId: string, id: string) {
+    const existing = await this.prisma.contractInstance.findFirst({
+      where: { id, organizationId: orgId }
+    });
+    if (!existing) {
+      throw new NotFoundException('Contract not found');
+    }
+
+    await this.prisma.signatureEnvelope.deleteMany({
+      where: { contractInstanceId: id }
+    });
+    await this.prisma.contractInstance.delete({
+      where: { id }
+    });
+
+    return { deleted: 1 };
+  }
+
+  async deleteInstances(orgId: string, ids: string[]) {
+    const validIds = ids?.filter(Boolean) ?? [];
+    if (validIds.length === 0) return { deleted: 0 };
+
+    const existing = await this.prisma.contractInstance.findMany({
+      where: { id: { in: validIds }, organizationId: orgId },
+      select: { id: true }
+    });
+    const targetIds = existing.map((x) => x.id);
+    if (targetIds.length === 0) return { deleted: 0 };
+
+    await this.prisma.signatureEnvelope.deleteMany({
+      where: { contractInstanceId: { in: targetIds } }
+    });
+    const result = await this.prisma.contractInstance.deleteMany({
+      where: { id: { in: targetIds } }
+    });
+    return { deleted: result.count };
   }
 
   private async assertListing(orgId: string, listingId?: string | null) {

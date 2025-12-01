@@ -11,9 +11,9 @@ import {
   FileText,
   ExternalLink
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
 import { MIN_PROPERTY_PHOTOS, MAX_PROPERTY_PHOTOS } from '@/constants/photoRequirements'
 import { toast } from '@/components/ui/use-toast'
+import { apiClient } from '@/lib/api/client'
 
 interface PhotoUploadProps {
   photos: string[]
@@ -56,32 +56,34 @@ export default function PhotoUpload({
     setUploadError(null)
 
     try {
-      const paths = await Promise.all(
+      const urls = await Promise.all(
         files.map(async (file) => {
-          const extension = file.name.split('.').pop()?.toLowerCase() ?? 'bin'
-          const objectPath = `draft-media/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`
+          const contentType = file.type || 'application/octet-stream'
+          const { data } = await apiClient.post('/property-media/presign', {
+            fileName: file.name,
+            mimeType: contentType,
+          })
 
-          const { error } = await supabase.storage
-            .from('property-images')
-            .upload(objectPath, file, {
-              cacheControl: '3600',
-              upsert: true,
-              contentType: file.type || undefined,
-            })
+          const uploadUrl: string = data.uploadUrl
+          const publicUrl: string = data.publicUrl
 
-          if (error) {
-            throw error
+          const putRes = await fetch(uploadUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': contentType,
+            },
+            body: file,
+          })
+
+          if (!putRes.ok) {
+            throw new Error(`Upload failed with status ${putRes.status}`)
           }
 
-          const { data } = supabase.storage
-            .from('property-images')
-            .getPublicUrl(objectPath)
-
-          return data.publicUrl
+          return publicUrl
         })
       )
 
-      return paths
+      return urls
     } catch (error) {
       console.error('Media upload failed:', error)
       setUploadError('Failed to upload one or more files. Please try again.')

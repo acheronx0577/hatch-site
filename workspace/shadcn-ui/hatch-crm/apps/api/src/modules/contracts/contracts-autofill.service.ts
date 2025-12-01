@@ -106,18 +106,10 @@ export class ContractsAutofillService {
 
     const { fieldValues, missingRequired } = this.applyMappings(mappings, overrideFieldValues, context);
 
-    const payload = JSON.stringify(
-      {
-        templateId,
-        fieldValues,
-        generatedAt: new Date().toISOString()
-      },
-      null,
-      2
-    );
-
-    const draftS3Key = `contracts/instances/${orgId}/${templateId}/draft-${Date.now()}.json`;
-    await this.s3.uploadObject(draftS3Key, Buffer.from(payload), 'application/json');
+    // Use the template PDF already in S3 instead of generating a JSON “draft”.
+    // DocuSign requires a real document bytes payload, so we keep fieldValues in DB
+    // but point draftS3Key to the template PDF.
+    const draftS3Key = template.s3Key;
 
     return { fieldValues, draftS3Key, missingRequired };
   }

@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  GetObjectCommand,
+  ListObjectsV2Command,
+  PutObjectCommand,
+  S3Client
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Readable, Transform } from 'stream';
 import fetch from 'node-fetch';
@@ -18,6 +23,7 @@ export class S3Service {
   });
 
   private readonly bucket = process.env.AWS_S3_BUCKET ?? '';
+  private readonly region = process.env.AWS_REGION ?? 'us-east-2';
   private readonly maxDownloadBytes = Number(process.env.S3_MAX_DOWNLOAD_BYTES ?? 250 * 1024 * 1024); // 250MB limit by default
 
   async uploadObject(key: string, body: Buffer | string | Readable, contentType: string) {
@@ -115,6 +121,29 @@ export class S3Service {
       Key: key
     });
     return getSignedUrl(this.client, cmd, { expiresIn: expiresInSeconds });
+  }
+
+  async getPresignedUploadUrl(params: {
+    key: string;
+    contentType?: string;
+    expiresInSeconds?: number;
+  }): Promise<string> {
+    if (!this.bucket) {
+      throw new Error('AWS_S3_BUCKET is not configured');
+    }
+    const cmd = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: params.key,
+      ContentType: params.contentType ?? 'application/octet-stream'
+    });
+    return getSignedUrl(this.client, cmd, { expiresIn: params.expiresInSeconds ?? 900 });
+  }
+
+  buildPublicUrl(key: string): string {
+    const base =
+      process.env.S3_PUBLIC_BASE_URL ??
+      (this.bucket ? `https://${this.bucket}.s3.${this.region}.amazonaws.com` : '');
+    return `${base.replace(/\/+$/, '')}/${key.replace(/^\/+/, '')}`;
   }
 
   async searchKeys(params: { prefix?: string; contains: string[]; maxKeys?: number }): Promise<string[]> {

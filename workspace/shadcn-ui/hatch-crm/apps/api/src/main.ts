@@ -62,7 +62,17 @@ export async function createApp(): Promise<NestFastifyApplication> {
         : undefined
   });
 
-  const adapter = new FastifyAdapter({ logger });
+  const jsonBodyLimitMb = Number(process.env.API_JSON_BODY_LIMIT_MB ?? process.env.API_BODY_LIMIT_MB ?? 15);
+  const jsonBodyLimitBytes =
+    Number.isFinite(jsonBodyLimitMb) && jsonBodyLimitMb > 0
+      ? jsonBodyLimitMb * 1024 * 1024
+      : 15 * 1024 * 1024;
+
+  // Allow larger JSON payloads (photo-heavy draft promotions) without tripping 413
+  const adapter = new FastifyAdapter({
+    logger,
+    bodyLimit: jsonBodyLimitBytes,
+  });
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, adapter as any);
 
   if (process.env.NODE_ENV !== 'test') {
