@@ -37,7 +37,7 @@ export async function getCommissionPlan(id: string): Promise<CommissionPlan | nu
 export async function createCommissionPlan(payload: Partial<CommissionPlan>): Promise<CommissionPlan> {
   return apiFetch<CommissionPlan>('commission-plans', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body: payload
   });
 }
 
@@ -47,6 +47,6 @@ export async function updateCommissionPlan(
 ): Promise<CommissionPlan> {
   return apiFetch<CommissionPlan>(`commission-plans/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(payload)
+    body: payload
   });
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -8,11 +8,13 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   listContractInstances,
-  listContractTemplates,
   recommendContractTemplates,
   searchContractTemplates,
   createContractInstance,
   getContractInstance,
+  sendContractForSignature,
+  deleteContractInstance,
+  deleteContractInstances,
   type ContractInstance,
   type ContractTemplate
 } from '@/lib/api/hatch';
@@ -24,14 +26,14 @@ export default function ContractsPage() {
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
   const [search, setSearch] = useState('');
   const [propertyId, setPropertyId] = useState('');
+  const [templatePage, setTemplatePage] = useState(1);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const PAGE_SIZE = 16;
 
   const templatesQuery = useQuery({
     queryKey: ['contracts', 'templates', orgId, search],
-    queryFn: () =>
-      search.trim().length
-        ? searchContractTemplates(orgId, { query: search.trim(), includeUrl: true })
-        : listContractTemplates(orgId),
+    queryFn: () => searchContractTemplates(orgId, { query: search.trim(), includeUrl: true }),
     enabled: Boolean(orgId)
   });
 
@@ -50,21 +52,75 @@ export default function ContractsPage() {
   const createDraft = useMutation({
     mutationFn: (templateId: string) =>
       createContractInstance(orgId, { templateId, propertyId: propertyId || undefined }),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['contracts', 'instances', orgId, propertyId] });
+      setSelectedInstanceId(created.id);
     }
   });
 
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const instanceDetail = useQuery({
     queryKey: ['contracts', 'instance', selectedInstanceId],
     queryFn: () => getContractInstance(orgId, selectedInstanceId ?? ''),
     enabled: Boolean(selectedInstanceId)
   });
 
-  const templates = templatesQuery.data ?? [];
+  const templatesAll = templatesQuery.data ?? [];
+  const templates = templatesAll.filter((t) => {
+    const key = (t.s3Key || '').toLowerCase();
+    const url = (t.templateUrl || '').toLowerCase();
+    return key.endsWith('.pdf') || url.includes('.pdf');
+  });
+  const templateUrlMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    const addIfPdf = (t: any) => {
+      const key = (t?.s3Key || '').toLowerCase();
+      const url = (t?.templateUrl || '').toLowerCase();
+      if (key.endsWith('.pdf') || url.includes('.pdf')) {
+        if (t?.templateUrl) map[t.id] = t.templateUrl;
+      }
+    };
+    templatesAll.forEach(addIfPdf);
+    (recommendationsQuery.data ?? []).forEach(addIfPdf);
+    return map;
+  }, [templatesAll, recommendationsQuery.data]);
+  const totalPages = Math.max(1, Math.ceil((templates.length || 1) / PAGE_SIZE));
+  const pagedTemplates = templates.slice((templatePage - 1) * PAGE_SIZE, templatePage * PAGE_SIZE);
+
+  useEffect(() => {
+    setTemplatePage(1);
+  }, [search, orgId, templates.length]);
   const recommendations = recommendationsQuery.data ?? [];
   const instances = instancesQuery.data ?? [];
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(instances.map((i) => i.id)) : new Set());
+  };
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const deleteOneMutation = useMutation({
+    mutationFn: async (id: string) => deleteContractInstance(orgId, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts', 'instances', orgId, propertyId] });
+      setSelectedIds(new Set());
+    }
+  });
+
+  const deleteManyMutation = useMutation({
+    mutationFn: async (ids: string[]) => deleteContractInstances(orgId, ids),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts', 'instances', orgId, propertyId] });
+      setSelectedIds(new Set());
+    }
+  });
 
   return (
     <div className="space-y-6 p-6">
@@ -102,7 +158,7 @@ export default function ContractsPage() {
             <span className="text-xs text-slate-500">{templates.length} items</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            {templates.map((template) => (
+            {pagedTemplates.map((template) => (
               <TemplateCard
                 key={template.id}
                 template={template}
@@ -115,6 +171,35 @@ export default function ContractsPage() {
               </div>
             )}
           </div>
+          {templates.length > 0 && (
+            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <span>
+                Showing {(templatePage - 1) * PAGE_SIZE + 1}-
+                {Math.min(templatePage * PAGE_SIZE, templates.length)} of {templates.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTemplatePage((p) => Math.max(1, p - 1))}
+                  disabled={templatePage === 1}
+                >
+                  Prev
+                </Button>
+                <span className="text-xs text-slate-500">
+                  Page {templatePage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTemplatePage((p) => Math.min(totalPages, p + 1))}
+                  disabled={templatePage === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
 
         <Card className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -149,12 +234,29 @@ export default function ContractsPage() {
       <Card className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Instances</h2>
-          <span className="text-xs text-slate-500">{instances.length} items</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">{instances.length} items</span>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={selectedIds.size === 0 || deleteManyMutation.isLoading}
+              onClick={() => deleteManyMutation.mutate(Array.from(selectedIds))}
+            >
+              {deleteManyMutation.isLoading ? 'Deleting…' : `Delete (${selectedIds.size})`}
+            </Button>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100 text-sm text-slate-700">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
+                <th className="px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === instances.length && instances.length > 0}
+                    onChange={(e) => toggleAll(e.target.checked)}
+                  />
+                </th>
                 <th className="px-3 py-2 text-left">Title</th>
                 <th className="px-3 py-2 text-left">Template</th>
                 <th className="px-3 py-2 text-left">Status</th>
@@ -165,19 +267,26 @@ export default function ContractsPage() {
             <tbody className="divide-y divide-slate-100">
               {instancesQuery.isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-5 text-center text-slate-400">
+                  <td colSpan={6} className="px-3 py-5 text-center text-slate-400">
                     Loading instances…
                   </td>
                 </tr>
               ) : instances.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-5 text-center text-slate-400">
+                  <td colSpan={6} className="px-3 py-5 text-center text-slate-400">
                     No contract drafts yet.
                   </td>
                 </tr>
               ) : (
                 instances.map((instance) => (
                   <tr key={instance.id} className="hover:bg-slate-50">
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(instance.id)}
+                        onChange={() => toggleOne(instance.id)}
+                      />
+                    </td>
                     <td className="px-3 py-3">
                       <p className="font-medium text-slate-900">{instance.title}</p>
                       {instance.recommendationReason ? (
@@ -192,9 +301,19 @@ export default function ContractsPage() {
                       {new Date(instance.updatedAt).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <Button variant="outline" size="sm" onClick={() => setSelectedInstanceId(instance.id)}>
-                        Open
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setSelectedInstanceId(instance.id)}>
+                          Open
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deleteOneMutation.mutate(instance.id)}
+                          disabled={deleteOneMutation.isLoading}
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -207,6 +326,8 @@ export default function ContractsPage() {
       {selectedInstanceId && instanceDetail.data ? (
         <InstanceDetail
           instance={instanceDetail.data}
+          orgId={orgId}
+          templateUrlMap={templateUrlMap}
           onClose={() => setSelectedInstanceId(null)}
         />
       ) : null}
@@ -262,8 +383,51 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`rounded-full px-3 py-1 text-xs font-medium ${tone}`}>{status}</span>;
 }
 
-function InstanceDetail({ instance, onClose }: { instance: ContractInstance; onClose: () => void }) {
-  const hasPdf = instance.draftUrl || instance.signedUrl;
+function InstanceDetail({
+  instance,
+  orgId,
+  templateUrlMap,
+  onClose
+}: {
+  instance: ContractInstance;
+  orgId: string;
+  templateUrlMap: Record<string, string>;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [signerName, setSignerName] = useState('');
+  const [signerEmail, setSignerEmail] = useState('');
+  const [signerRole, setSignerRole] = useState('buyer');
+
+  const sendMutation = useMutation({
+    mutationFn: async () =>
+      sendContractForSignature(orgId, instance.id, {
+        signers:
+          signerName && signerEmail
+            ? [
+                {
+                  name: signerName,
+                  email: signerEmail,
+                  role: signerRole
+                }
+              ]
+            : [],
+        returnUrl: window.location.origin
+      }),
+    onSuccess: (data) => {
+      // Open embedded sender view in the same tab so the user returns to Hatch.
+      if (data?.senderViewUrl) {
+        window.location.href = data.senderViewUrl;
+      }
+      queryClient.invalidateQueries({ queryKey: ['contracts', 'instances', orgId] });
+      queryClient.invalidateQueries({ queryKey: ['contracts', 'instance', instance.id] });
+    }
+  });
+
+  const fallbackTemplateUrl = templateUrlMap[instance.templateId];
+  const draftIsPdf = Boolean(instance.draftUrl && instance.draftUrl.toLowerCase().includes('.pdf'));
+  const viewSrc = instance.signedUrl ?? (draftIsPdf ? instance.draftUrl : undefined) ?? fallbackTemplateUrl;
+  const hasPdf = Boolean(viewSrc);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
       <div
@@ -287,11 +451,7 @@ function InstanceDetail({ instance, onClose }: { instance: ContractInstance; onC
 
           {hasPdf ? (
             <div className="h-[480px] overflow-hidden rounded-xl border border-slate-200">
-              <iframe
-                title="Contract PDF"
-                src={instance.signedUrl ?? instance.draftUrl ?? undefined}
-                className="h-full w-full"
-              />
+              <iframe title="Contract PDF" src={viewSrc} className="h-full w-full" />
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
@@ -304,6 +464,55 @@ function InstanceDetail({ instance, onClose }: { instance: ContractInstance; onC
             <InfoRow label="Last updated" value={new Date(instance.updatedAt).toLocaleString()} />
             <InfoRow label="Listing" value={instance.orgListingId ?? 'Not linked'} />
             <InfoRow label="Transaction" value={instance.orgTransactionId ?? 'Not linked'} />
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Signature</p>
+                <h4 className="text-base font-semibold text-slate-900">Send for signature</h4>
+                <p className="text-xs text-slate-500">Enter a signer to start routing.</p>
+              </div>
+              <StatusBadge status={instance.status} />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Input
+                value={signerName}
+                onChange={(e) => setSignerName(e.target.value)}
+                placeholder="Signer name"
+              />
+              <Input
+                value={signerEmail}
+                onChange={(e) => setSignerEmail(e.target.value)}
+                placeholder="Signer email"
+                type="email"
+              />
+              <Input
+                value={signerRole}
+                onChange={(e) => setSignerRole(e.target.value)}
+                placeholder="Role (buyer/seller)"
+              />
+            </div>
+            <div className="mt-3 flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => sendMutation.mutate()}
+                disabled={
+                  instance.status !== 'DRAFT' || !signerName || !signerEmail || sendMutation.isLoading
+                }
+              >
+                {sendMutation.isLoading ? 'Sending…' : 'Send for signature'}
+              </Button>
+              {instance.status !== 'DRAFT' ? (
+                <p className="text-xs text-slate-500">Only draft contracts can be sent.</p>
+              ) : null}
+              {sendMutation.error ? (
+                <p className="text-xs text-rose-600">Failed to send. Try again.</p>
+              ) : null}
+              {sendMutation.isSuccess ? (
+                <p className="text-xs text-emerald-600">Sent. Watch for DocuSign email.</p>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

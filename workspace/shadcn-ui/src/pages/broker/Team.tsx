@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Users, Shield, Sparkles } from 'lucide-react';
+import { Users, Shield, Sparkles, Plus } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchMissionControlAgents, type MissionControlAgentRow } from '@/lib/api/mission-control';
+import { inviteAgent, type InviteAgentPayload } from '@/lib/api/agents';
+import { useToast } from '@/components/ui/use-toast';
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
 
@@ -51,6 +56,45 @@ function useTeamData(orgId: string) {
 }
 
 function TeamOverviewPanel({ orgId }: { orgId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [form, setForm] = useState<InviteAgentPayload>({
+    email: '',
+    name: '',
+    licenseNumber: '',
+    licenseState: '',
+    licenseExpiresAt: ''
+  });
+
+  const sendInvite = useMutation({
+    mutationFn: (payload: InviteAgentPayload) => inviteAgent(orgId, payload),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['mission-control', 'team', orgId] });
+      setIsDialogOpen(false);
+      setForm({
+        email: '',
+        name: '',
+        licenseNumber: '',
+        licenseState: '',
+        licenseExpiresAt: ''
+      });
+      toast({
+        title: result?.sent ? 'Invite sent' : 'Invite not sent',
+        description: result?.sent
+          ? 'We emailed the agent with a signup link.'
+          : result?.reason ?? 'Email send skipped; copy link and share manually.'
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Failed to send invite',
+        description: error instanceof Error ? error.message : 'Unexpected error',
+        variant: 'destructive'
+      });
+    }
+  });
+
   const { agents, isLoading } = useTeamData(orgId);
   const metrics = useMemo(() => {
     const onboarding = agents.filter((agent) => agent.lifecycleStage === 'ONBOARDING').length;
@@ -72,6 +116,10 @@ function TeamOverviewPanel({ orgId }: { orgId: string }) {
           </p>
         </div>
         <div className="flex gap-3">
+          <Button variant="outline" onClick={() => setIsDialogOpen(true)} className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Add agent
+          </Button>
           <Button variant="outline" asChild>
             <Link to="/broker/team-advanced">Advanced manager</Link>
           </Button>
@@ -87,6 +135,86 @@ function TeamOverviewPanel({ orgId }: { orgId: string }) {
         <KpiCard label="High risk" value={numberFormatter.format(metrics.highRisk)} helper={`${metrics.requiresAction} need action`} />
         <KpiCard label="Offboarding" value={numberFormatter.format(metrics.offboarding)} />
       </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add agent</DialogTitle>
+            <DialogDescription>
+              Invite an agent by email. They’ll receive a signup link and be linked to your brokerage.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label htmlFor="agentName">Name</Label>
+              <Input
+                id="agentName"
+                value={form.name}
+                onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                placeholder="Alex Agent"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="agentEmail">Email</Label>
+              <Input
+                id="agentEmail"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="agent@hatch.test"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="licenseNumber">License number</Label>
+                <Input
+                  id="licenseNumber"
+                  value={form.licenseNumber}
+                  onChange={(e) => setForm((prev) => ({ ...prev, licenseNumber: e.target.value }))}
+                  placeholder="SL1234567"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="licenseState">License state</Label>
+                <Input
+                  id="licenseState"
+                  value={form.licenseState}
+                  onChange={(e) => setForm((prev) => ({ ...prev, licenseState: e.target.value }))}
+                  placeholder="FL"
+                />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="licenseExpiresAt">License expiry (ISO date)</Label>
+              <Input
+                id="licenseExpiresAt"
+                type="date"
+                value={form.licenseExpiresAt}
+                onChange={(e) => setForm((prev) => ({ ...prev, licenseExpiresAt: e.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() =>
+                sendInvite.mutate({
+                  email: form.email.trim(),
+                  name: form.name.trim(),
+                  licenseNumber: form.licenseNumber.trim() || undefined,
+                  licenseState: form.licenseState.trim() || undefined,
+                  licenseExpiresAt: form.licenseExpiresAt ? form.licenseExpiresAt : undefined
+                })
+              }
+              disabled={sendInvite.isLoading || !form.email.trim() || !form.name.trim()}
+            >
+              {sendInvite.isLoading ? 'Sending…' : 'Send invite'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

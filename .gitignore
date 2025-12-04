@@ -1,2 +1,11 @@
 .vercel
 .DS_Store
+node_modules
+pnpm-debug.log
+npm-debug.log
+yarn-error.log
+# turbo cache/logs
+workspace/shadcn-ui/hatch-crm/.turbo/
+
+# local tokens/utility scripts
+ds-token.js

@@ -1397,15 +1397,19 @@ export async function fetchRoutingEvents(params: { tenantId: string; limit?: num
 
 export type CommissionPlan = {
   id: string;
-  tenantId: string;
+  tenantId?: string;
+  orgId?: string;
   name: string;
+  brokerSplit: number;
+  agentSplit: number;
+  tiers?: Array<Record<string, unknown>> | null;
   type: 'FLAT' | 'TIERED' | 'CAP';
   description?: string | null;
   definition: unknown;
   postCapFee?: unknown | null;
   bonusRules?: unknown | null;
-  isArchived: boolean;
-  version: number;
+  isArchived?: boolean;
+  version?: number;
   createdById?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1461,21 +1465,118 @@ export type AssignCommissionPlanPayload = {
 };
 
 export async function fetchCommissionPlans() {
-  return apiFetch<CommissionPlan[]>('/commission-plans');
+  const response = await apiFetch<
+    | Array<{
+        id: string;
+        orgId?: string;
+        name: string;
+        brokerSplit: number;
+        agentSplit: number;
+        tiers?: Array<Record<string, unknown>> | null;
+        createdAt: string;
+        updatedAt?: string;
+      }>
+    | {
+        items: Array<{
+          id: string;
+          orgId?: string;
+          name: string;
+          brokerSplit: number;
+          agentSplit: number;
+          tiers?: Array<Record<string, unknown>> | null;
+          createdAt: string;
+          updatedAt?: string;
+        }>;
+      }
+  >('/commission-plans');
+
+  const plans = Array.isArray(response) ? response : (response as any)?.items;
+  if (!Array.isArray(plans)) {
+    return [];
+  }
+
+  return plans.map(normalizeCommissionPlan);
 }
 
 export async function createCommissionPlan(payload: CreateCommissionPlanPayload) {
-  return apiFetch<CommissionPlan>('/commission-plans', {
+  const brokerSplit =
+    typeof (payload as any)?.definition?.split?.brokerage === 'number'
+      ? (payload as any).definition.split.brokerage
+      : 0.3;
+  const agentSplit =
+    typeof (payload as any)?.definition?.split?.agent === 'number'
+      ? (payload as any).definition.split.agent
+      : 0.7;
+
+  const body: Record<string, unknown> = {
+    name: payload.name,
+    brokerSplit,
+    agentSplit
+  };
+
+  const tiersCandidate = (payload as any)?.definition?.tiers ?? (payload as any)?.tiers;
+  if (Array.isArray(tiersCandidate)) {
+    body.tiers = tiersCandidate;
+  }
+
+  const plan = await apiFetch<{
+    id: string;
+    orgId?: string;
+    name: string;
+    brokerSplit: number;
+    agentSplit: number;
+    tiers?: Array<Record<string, unknown>> | null;
+    createdAt: string;
+    updatedAt?: string;
+  }>('/commission-plans', {
     method: 'POST',
-    body: JSON.stringify(payload)
+    body
   });
+
+  return normalizeCommissionPlan(plan);
 }
 
 export async function updateCommissionPlan(id: string, payload: UpdateCommissionPlanPayload) {
-  return apiFetch<CommissionPlan>(`/commission-plans/${id}`, {
+  const body: Record<string, unknown> = {};
+
+  if (payload.name !== undefined) {
+    body.name = payload.name;
+  }
+
+  const brokerSplit = (payload as any)?.definition?.split?.brokerage;
+  if (typeof brokerSplit === 'number') {
+    body.brokerSplit = brokerSplit;
+  } else if (typeof (payload as any)?.brokerSplit === 'number') {
+    body.brokerSplit = (payload as any).brokerSplit;
+  }
+
+  const agentSplit = (payload as any)?.definition?.split?.agent;
+  if (typeof agentSplit === 'number') {
+    body.agentSplit = agentSplit;
+  } else if (typeof (payload as any)?.agentSplit === 'number') {
+    body.agentSplit = (payload as any).agentSplit;
+  }
+
+  const tiersCandidate = (payload as any)?.definition?.tiers ?? (payload as any)?.tiers;
+  if (Array.isArray(tiersCandidate)) {
+    body.tiers = tiersCandidate;
+  }
+
+  const plan = await apiFetch<{
+    id: string;
+    orgId?: string;
+    name: string;
+    brokerSplit: number;
+    agentSplit: number;
+    tiers?: Array<Record<string, unknown>> | null;
+    createdAt: string;
+    updatedAt?: string;
+  }>(`/commission-plans/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify(payload)
+    body
   });
+
+  return normalizeCommissionPlan(plan);
 }
 
 export async function archiveCommissionPlan(id: string) {
@@ -1485,7 +1586,61 @@ export async function archiveCommissionPlan(id: string) {
 }
 
 export async function fetchCommissionPlan(id: string) {
-  return apiFetch<CommissionPlan>(`/commission-plans/${id}`);
+  const plan = await apiFetch<{
+    id: string;
+    orgId?: string;
+    name: string;
+    brokerSplit: number;
+    agentSplit: number;
+    tiers?: Array<Record<string, unknown>> | null;
+    createdAt: string;
+    updatedAt?: string;
+  }>(`/commission-plans/${id}`);
+  return normalizeCommissionPlan(plan);
+}
+
+function normalizeCommissionPlan(plan: {
+  id: string;
+  orgId?: string;
+  name: string;
+  brokerSplit: number | string;
+  agentSplit: number | string;
+  tiers?: Array<Record<string, unknown>> | null;
+  createdAt: string;
+  updatedAt?: string;
+}): CommissionPlan {
+  const toNumber = (value: number | string | undefined, fallback: number) => {
+    if (typeof value === 'number') return value;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const brokerSplit = toNumber(plan.brokerSplit, 0.3);
+  const agentSplit = toNumber(plan.agentSplit, 0.7);
+
+  return {
+    id: plan.id,
+    tenantId: plan.orgId,
+    orgId: plan.orgId,
+    name: plan.name,
+    brokerSplit,
+    agentSplit,
+    tiers: plan.tiers ?? null,
+    type: 'FLAT',
+    description: null,
+    definition: {
+      type: 'FLAT',
+      split: { brokerage: brokerSplit, agent: agentSplit },
+      tiers: plan.tiers ?? []
+    },
+    postCapFee: null,
+    bonusRules: null,
+    isArchived: false,
+    version: 1,
+    createdById: null,
+    createdAt: plan.createdAt,
+    updatedAt: plan.updatedAt ?? plan.createdAt
+  };
 }
 
 export async function fetchCommissionPlanAssignments(planId: string) {

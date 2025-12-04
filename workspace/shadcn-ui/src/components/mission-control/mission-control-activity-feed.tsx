@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { fetchMissionControlActivity, MissionControlEvent } from '@/lib/api/mission-control';
-import { DebugLinkHint } from '@/components/mission-control/debug-link-hint';
 
 type MissionControlActivityFeedProps = {
   orgId: string;
@@ -67,8 +66,7 @@ function ActivityItem({ event }: { event: MissionControlEvent }) {
   const label = readableLabel[event.type] ?? event.type.replace(/_/g, ' ');
   const href = eventLinkMap[event.type];
   const content = (
-    <div className="relative rounded-xl border border-slate-100 p-3">
-      <DebugLinkHint href={href} className="right-2 top-2" />
+    <div className="rounded-xl border border-slate-100 p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-900">{label}</p>

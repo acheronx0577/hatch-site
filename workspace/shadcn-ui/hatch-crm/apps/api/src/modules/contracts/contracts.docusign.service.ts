@@ -37,13 +37,13 @@ export class ContractsDocuSignService {
     this.integratorKey = this.config.get<string>('DOCUSIGN_INTEGRATOR_KEY', '') ?? '';
     this.userId = this.config.get<string>('DOCUSIGN_USER_ID', '') ?? '';
     this.authServer = this.config.get<string>('DOCUSIGN_AUTH_SERVER', 'https://account-d.docusign.com') ?? '';
-    this.privateKey = this.config.get<string>('DOCUSIGN_PRIVATE_KEY', '') ?? '';
+    const rawKey = this.config.get<string>('DOCUSIGN_PRIVATE_KEY', '') ?? '';
+    // Allow \n escaped keys in .env and trim accidental whitespace.
+    this.privateKey = rawKey.replace(/\\n/g, '\n').trim();
   }
 
   private async getAccessToken(): Promise<string> {
     if (this.mode === 'stub') return 'stub-token';
-    const manual = this.config.get<string>('DOCUSIGN_ACCESS_TOKEN');
-    if (manual) return manual;
 
     if (this.cachedToken && Date.now() < this.cachedToken.expiresAt) {
       return this.cachedToken.token;
@@ -51,6 +51,10 @@ export class ContractsDocuSignService {
 
     if (!this.integratorKey || !this.userId || !this.privateKey) {
       throw new Error('DocuSign credentials missing: set DOCUSIGN_INTEGRATOR_KEY, DOCUSIGN_USER_ID, and DOCUSIGN_PRIVATE_KEY');
+    }
+
+    if (!this.privateKey.includes('BEGIN') || !this.privateKey.includes('END')) {
+      throw new Error('DOCUSIGN_PRIVATE_KEY is not a valid RSA key (missing BEGIN/END lines)');
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -69,11 +73,19 @@ export class ContractsDocuSignService {
       assertion
     });
 
-    const response = await axios.post(
-      `${this.authServer.replace(/\/$/, '')}/oauth/token`,
-      body.toString(),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
+    let response;
+    try {
+      response = await axios.post(
+        `${this.authServer.replace(/\/$/, '')}/oauth/token`,
+        body.toString(),
+        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+      );
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+      this.logger.error(`DocuSign JWT auth failed${status ? ` (status ${status})` : ''}`, data ?? err);
+      throw err;
+    }
 
     const accessToken = response.data.access_token as string;
     const expiresIn = (response.data.expires_in as number | undefined) ?? 3600;

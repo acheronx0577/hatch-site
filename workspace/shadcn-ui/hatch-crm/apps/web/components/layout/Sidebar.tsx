@@ -11,10 +11,13 @@ import {
   Map,
   Radar,
   Route,
+  Bell,
+  FileSignature,
   Settings,
   ShieldCheck,
   TrendingUp,
   UserCircle2,
+  UserCog,
   Users,
   Wallet
 } from 'lucide-react';
@@ -40,16 +43,19 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/mission-control', label: 'Mission Control', icon: Radar, roles: ['BROKER', 'AGENT', 'ADMIN'] },
-  { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['BROKER', 'ADMIN'] },
-  { href: '/dashboard/compliance', label: 'Compliance', icon: ShieldCheck, roles: ['BROKER', 'ADMIN'] },
   { href: '/dashboard/properties', label: 'Properties', icon: Building2, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/transactions', label: 'Transactions', icon: Handshake, roles: ['BROKER', 'AGENT', 'ADMIN'] },
-  { href: '/dashboard/leads', label: 'Leads', icon: UserCircle2, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/offer-intents', label: 'Offer Intents', icon: Route, roles: ['BROKER', 'AGENT', 'ADMIN'] },
+  { href: '/dashboard/contracts', label: 'Contracts', icon: FileSignature, roles: ['BROKER', 'AGENT', 'ADMIN'] },
+  { href: '/dashboard/leads', label: 'Leads & CRM', icon: UserCircle2, roles: ['BROKER', 'AGENT', 'ADMIN'] },
+  { href: '/dashboard/compliance', label: 'Risk & Compliance', icon: ShieldCheck, roles: ['BROKER', 'ADMIN'] },
+  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell, roles: ['BROKER', 'AGENT', 'ADMIN'] },
+  { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['BROKER', 'ADMIN'] },
   { href: '/dashboard/rentals', label: 'Rentals / PM', icon: Map, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/financials', label: 'Financials', icon: Wallet, roles: ['BROKER', 'ADMIN'] },
   { href: '/dashboard/marketing', label: 'Marketing', icon: TrendingUp, roles: ['BROKER', 'ADMIN'] },
   { href: '/dashboard/reporting', label: 'Reporting', icon: BarChart3, roles: ['BROKER', 'ADMIN'] },
+  { href: '/dashboard/admin', label: 'Admin', icon: UserCog, roles: ['BROKER', 'ADMIN'] },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings, roles: ['BROKER', 'ADMIN'] }
 ];
 

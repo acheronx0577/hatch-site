@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="hatch-grad" x1="14" y1="6" x2="52" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#hatch-grad)"/>
+  <path d="M22 19h8.5c5.4 0 9.5 3.5 9.5 9 0 5.7-4.2 9.2-9.7 9.2H26v7.8h-4V19Zm4 4v10.3h4.2c3.4 0 5.5-1.9 5.5-5.2 0-3.3-2.1-5.1-5.5-5.1H26Z" fill="white"/>
+</svg>

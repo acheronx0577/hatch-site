@@ -1,10 +1,12 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
 import { AgentRiskLevel, UserRole, WorkflowTaskTrigger } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { OnboardingService } from '../onboarding/onboarding.service';
 import { UpsertAgentProfileDto } from './dto/upsert-agent-profile.dto';
 import { UpdateAgentComplianceDto } from './dto/update-agent-compliance.dto';
+import { InviteAgentDto } from './dto/invite-agent.dto';
+import sgMail from '@sendgrid/mail';
 
 @Injectable()
 export class AgentProfilesService {
@@ -13,6 +15,10 @@ export class AgentProfilesService {
     @Inject(forwardRef(() => OnboardingService))
     private readonly onboarding: OnboardingService
   ) {}
+
+  private get sendgridConfigured(): boolean {
+    return Boolean(process.env.SENDGRID_API_KEY);
+  }
 
   private async assertUserInOrg(userId: string, orgId: string) {
     const member = await this.prisma.userOrgMembership.findUnique({
@@ -25,10 +31,85 @@ export class AgentProfilesService {
   }
 
   private async assertBrokerInOrg(userId: string, orgId: string) {
+    const permissionsDisabled =
+      (process.env.DISABLE_PERMISSIONS_GUARD ?? 'true').toLowerCase() === 'true' &&
+      process.env.NODE_ENV !== 'production';
+    if (permissionsDisabled) {
+      return;
+    }
     await this.assertUserInOrg(userId, orgId);
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
     if (!user || user.role !== UserRole.BROKER) {
       throw new ForbiddenException('Only brokers can manage agent profiles');
+    }
+  }
+
+  async inviteAgent(orgId: string, brokerUserId: string, dto: InviteAgentDto) {
+    await this.assertBrokerInOrg(brokerUserId, orgId);
+
+    const domain =
+      process.env.COGNITO_DOMAIN ??
+      process.env.VITE_COGNITO_DOMAIN ??
+      process.env.NEXT_PUBLIC_COGNITO_DOMAIN ??
+      null;
+    const clientId =
+      process.env.COGNITO_CLIENT_ID ??
+      process.env.VITE_COGNITO_CLIENT_ID ??
+      process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID ??
+      null;
+    const redirectUri =
+      process.env.COGNITO_REDIRECT_URI ??
+      process.env.VITE_COGNITO_REDIRECT_URI ??
+      process.env.NEXT_PUBLIC_COGNITO_REDIRECT_URI ??
+      'http://localhost:5173';
+
+    if (!domain || !clientId) {
+      throw new BadRequestException(
+        `Cognito configuration missing: domain=${Boolean(domain)}, clientId=${Boolean(clientId)}`
+      );
+    }
+
+    const inviteLink = `${domain}/login?client_id=${clientId}&response_type=code&scope=email+openid+phone&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}`;
+
+    if (!this.sendgridConfigured) {
+      return {
+        sent: false,
+        reason: 'SENDGRID_API_KEY missing; skipping email send',
+        inviteLink
+      };
+    }
+
+    sgMail.setApiKey(process.env.SENDGRID_API_KEY!);
+
+    const fromDomain = process.env.EMAIL_SENDER_DOMAIN ?? 'hatch.test';
+    const fromEmail = `invites@${fromDomain}`;
+
+    const body = `
+      <p>Hello ${dto.name},</p>
+      <p>You have been invited to join Hatch as an agent. Click the link below to sign up and connect your account:</p>
+      <p><a href="${inviteLink}">Join Hatch</a></p>
+      <p>If you have a license, please have it ready:</p>
+      <ul>
+        <li>License number: ${dto.licenseNumber ?? '—'}</li>
+        <li>License state: ${dto.licenseState ?? '—'}</li>
+        <li>License expiry: ${dto.licenseExpiresAt ?? '—'}</li>
+      </ul>
+      <p>See you inside.</p>
+    `;
+
+    try {
+      await sgMail.send({
+        to: dto.email,
+        from: { email: fromEmail, name: 'Hatch Invites' },
+        subject: 'You’re invited to join Hatch',
+        html: body
+      });
+      return { sent: true, inviteLink };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'SendGrid error';
+      throw new BadRequestException(`Failed to send invite email: ${message}`);
     }
   }
 

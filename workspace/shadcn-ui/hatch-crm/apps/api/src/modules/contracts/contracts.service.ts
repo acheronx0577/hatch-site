@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ContractInstanceStatus, Prisma, SignatureEnvelopeStatus } from '@hatch/db';
 
@@ -37,6 +37,8 @@ const DEFAULT_EDITABLE_KEYS = new Set<string>([
 
 @Injectable()
 export class ContractsService {
+  private readonly logger = new Logger(ContractsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
@@ -106,11 +108,7 @@ export class ContractsService {
     const maxKeys = 400;
 
     for (const prefix of prefixes) {
-      const keys = await this.s3.searchKeys({
-        prefix,
-        contains: tokens,
-        maxKeys
-      });
+      const keys = await this.safeSearchS3Keys(prefix, tokens, maxKeys);
       keys.forEach((key) => keySet.add(key));
       if (keySet.size >= maxKeys) break;
     }
@@ -133,7 +131,7 @@ export class ContractsService {
         s3Key: key,
         editableKeys: null,
         tags: [],
-        templateUrl: includeUrl ? await this.s3.getPresignedUrl(key) : null,
+        templateUrl: includeUrl ? await this.safePresignUrl(key) : null,
         isActive: true,
         version: 1,
         createdAt: new Date(),
@@ -146,7 +144,7 @@ export class ContractsService {
     const withUrls = await Promise.all(
       matches.map(async (template) => ({
         ...template,
-        templateUrl: template.s3Key ? await this.s3.getPresignedUrl(template.s3Key) : null
+        templateUrl: template.s3Key ? await this.safePresignUrl(template.s3Key) : null
       }))
     );
 
@@ -165,6 +163,33 @@ export class ContractsService {
   private codeFromKey(key: string): string {
     const base = key.split('/').pop() ?? key;
     return base.replace(/\.pdf$/i, '').toUpperCase();
+  }
+
+  private async safeSearchS3Keys(prefix: string | undefined, tokens: string[], maxKeys: number) {
+    try {
+      return await this.s3.searchKeys({
+        prefix,
+        contains: tokens,
+        maxKeys
+      });
+    } catch (error) {
+      this.logger.warn(`Skipping S3 contract template search for prefix "${prefix ?? '(none)'}": ${this.formatError(error)}`);
+      return [];
+    }
+  }
+
+  private async safePresignUrl(key: string): Promise<string | null> {
+    try {
+      return await this.s3.getPresignedUrl(key);
+    } catch (error) {
+      this.logger.warn(`Failed to presign S3 key "${key}": ${this.formatError(error)}`);
+      return null;
+    }
+  }
+
+  private formatError(error: unknown) {
+    if (error instanceof Error) return error.message;
+    return String(error);
   }
 
   async listInstances(orgId: string, query: ListInstancesQueryDto) {

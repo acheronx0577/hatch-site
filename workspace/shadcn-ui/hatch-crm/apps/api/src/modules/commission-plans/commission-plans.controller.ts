@@ -8,6 +8,7 @@ import { ApiModule, ApiStandardErrors, resolveRequestContext } from '../common';
 import { CommissionPlansService } from './commission-plans.service';
 import { CapLedgerService } from './cap-ledger.service';
 import { CapProgressQueryDto } from './dto/cap-progress.dto';
+import { PlanAssignmentService } from './plan-assignment.service';
 import {
   CommissionPlanListQueryDto,
   CommissionPlanListResponseDto,
@@ -15,6 +16,7 @@ import {
   CreateCommissionPlanDto,
   UpdateCommissionPlanDto
 } from './dto';
+import { AssignCommissionPlanDto } from './dto/assign-plan.dto';
 
 @ApiModule('Commission Plans')
 @ApiStandardErrors()
@@ -23,7 +25,8 @@ import {
 export class CommissionPlansController {
   constructor(
     private readonly service: CommissionPlansService,
-    private readonly capLedger: CapLedgerService
+    private readonly capLedger: CapLedgerService,
+    private readonly assignments: PlanAssignmentService
   ) {}
 
   @Get()
@@ -50,6 +53,14 @@ export class CommissionPlansController {
     return this.service.get(ctx, id);
   }
 
+  @Get(':id/assignments')
+  @Permit('commission_plans', 'read')
+  @ApiParam({ name: 'id', description: 'Commission plan identifier' })
+  async listAssignments(@Req() req: FastifyRequest, @Param('id') id: string) {
+    const ctx = resolveRequestContext(req);
+    return this.assignments.listAssignments(id, ctx);
+  }
+
   @Post()
   @Permit('commission_plans', 'create')
   @ApiBody({ type: CreateCommissionPlanDto })
@@ -57,6 +68,20 @@ export class CommissionPlansController {
   async create(@Req() req: FastifyRequest, @Body() dto: CreateCommissionPlanDto) {
     const ctx = resolveRequestContext(req);
     return this.service.create(ctx, dto);
+  }
+
+  @Post(':id/assignments')
+  @Permit('commission_plans', 'update')
+  @ApiParam({ name: 'id', description: 'Commission plan identifier' })
+  @ApiBody({ type: AssignCommissionPlanDto })
+  async assign(
+    @Req() req: FastifyRequest,
+    @Param('id') id: string,
+    @Body() dto: AssignCommissionPlanDto
+  ) {
+    const ctx = resolveRequestContext(req);
+    // Trust the path parameter over body to avoid mismatches
+    return this.assignments.assignPlan(id, { ...dto, planId: id }, ctx);
   }
 
   @Patch(':id')
@@ -71,6 +96,19 @@ export class CommissionPlansController {
   ) {
     const ctx = resolveRequestContext(req);
     return this.service.update(ctx, id, dto);
+  }
+
+  @Post('assignments/:assignmentId/end')
+  @Permit('commission_plans', 'update')
+  @ApiParam({ name: 'assignmentId', description: 'Assignment identifier' })
+  async endAssignment(
+    @Req() req: FastifyRequest,
+    @Param('assignmentId') assignmentId: string,
+    @Body() body: { effectiveTo?: string | null }
+  ) {
+    const ctx = resolveRequestContext(req);
+    const effectiveTo = body?.effectiveTo ? new Date(body.effectiveTo) : null;
+    return this.assignments.endAssignment(assignmentId, effectiveTo, ctx);
   }
 
   @Get('cap-progress')

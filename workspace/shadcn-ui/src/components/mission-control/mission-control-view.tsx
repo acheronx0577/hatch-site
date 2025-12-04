@@ -9,7 +9,6 @@ import { MissionControlSidebar } from './MissionControlSidebar';
 import { SecurityAuditCard } from './SecurityAuditCard';
 import { MissionControlHero } from './MissionControlHero';
 import { MissionControlActivityFeed } from './mission-control-activity-feed';
-import { MissionControlAiAssistantPanel } from './mission-control-ai-assistant-panel';
 import { MissionControlAgentsPanel } from './mission-control-agents-panel';
 import { MissionControlCompliancePanel } from './mission-control-compliance-panel';
 import { fetchMissionControlOverview } from '@/lib/api/mission-control';
@@ -298,7 +297,7 @@ export function MissionControlView({ orgId }: MissionControlViewProps) {
             title="Agents"
             subtitle="People, momentum, and risk."
             actionLabel="Open roster"
-            actionHref="/broker/agents"
+            actionHref="/broker/team"
           >
             {overviewLoading ? (
               <div className="grid gap-3 md:grid-cols-3">
@@ -474,7 +473,6 @@ export function MissionControlView({ orgId }: MissionControlViewProps) {
         <MissionControlSidebar
           securityAudit={<SecurityAuditCard orgId={orgId} />}
           activityFeed={<MissionControlActivityFeed orgId={orgId} />}
-          aiAssistant={<MissionControlAiAssistantPanel orgId={orgId} />}
         />
       }
     />

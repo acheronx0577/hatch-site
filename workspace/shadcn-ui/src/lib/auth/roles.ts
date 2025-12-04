@@ -19,8 +19,8 @@ const mapMembershipRole = (role?: string | null): UserRole | null => {
 };
 
 export function userHasRole(role: UserRole | null | undefined, allowed: UserRole[]): boolean {
-  if (!role) return false;
-  return allowed.includes(role);
+  const effectiveRole: UserRole = role ?? FALLBACK_ROLE;
+  return allowed.includes(effectiveRole);
 }
 
 export function useUserRole(): UserRole {

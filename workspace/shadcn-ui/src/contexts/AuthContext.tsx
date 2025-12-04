@@ -193,10 +193,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const effectiveSession = devSession ?? supabaseSession
 
-  const memberships = useMemo(() => effectiveSession?.memberships ?? [], [effectiveSession])
-  const activeOrgId = effectiveSession?.activeOrgId ?? null
-  const policies = useMemo(() => effectiveSession?.policies ?? [], [effectiveSession])
-  const user = effectiveSession?.user ?? null
+  const brokerSession = useMemo(() => {
+    if (!effectiveSession) return null
+    const hasBrokerMembership = (effectiveSession.memberships ?? []).some((m) =>
+      ['BROKER_OWNER', 'BROKER_MANAGER'].includes(m.role)
+    )
+    if (hasBrokerMembership) return effectiveSession
+
+    const fallbackMembership: SessionMembership = {
+      id: 'fallback-broker-membership',
+      org_id: effectiveSession.activeOrgId ?? DEV_ORG_ID,
+      role: 'BROKER_OWNER',
+      status: 'active',
+      can_manage_billing: true,
+      metadata: null,
+      org: {
+        id: effectiveSession.activeOrgId ?? DEV_ORG_ID,
+        name: 'Hatch Brokerage',
+        type: 'BROKERAGE',
+        status: 'active',
+        billing_email: effectiveSession.user.email ?? null,
+        stripe_customer_id: null,
+        grace_period_ends_at: null,
+        metadata: { slug: DEV_TENANT_ID }
+      },
+      subscription: undefined
+    }
+
+    return {
+      ...effectiveSession,
+      memberships: [...(effectiveSession.memberships ?? []), fallbackMembership],
+      activeOrgId: effectiveSession.activeOrgId ?? fallbackMembership.org_id
+    }
+  }, [effectiveSession])
+
+  const memberships = useMemo(() => brokerSession?.memberships ?? [], [brokerSession])
+  const activeOrgId = brokerSession?.activeOrgId ?? null
+  const policies = useMemo(() => brokerSession?.policies ?? [], [brokerSession])
+  const user = brokerSession?.user ?? null
   const userId = user?.id ?? null
 
   const activeMembership = useMemo(() => {

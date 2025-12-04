@@ -33,7 +33,7 @@ export function MissionControlAgentsPanel({ orgId }: MissionControlAgentsPanelPr
       title="Agents"
       subtitle="People, momentum, and risk."
       actionLabel="Open roster"
-      actionHref="/broker/agents"
+      actionHref="/broker/team"
     >
       <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
         <Select value={riskFilter} onValueChange={(value) => setRiskFilter(value as typeof riskFilter)}>

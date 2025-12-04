@@ -114,12 +114,37 @@ function FinancialsView({ orgId }: { orgId: string }) {
 
   return (
     <section className="space-y-6">
-      <header className="space-y-1">
-        <p className="text-sm uppercase tracking-wide text-slate-500">Brokerage Financials</p>
-        <h1 className="text-2xl font-semibold text-slate-900">Accounting & QuickBooks integration</h1>
-        <p className="text-sm text-slate-500">
-          Connect QuickBooks, monitor sync queues, and track portfolio financial metrics without leaving Hatch.
-        </p>
+      <header className="overflow-hidden rounded-3xl border border-white/60 bg-gradient-to-r from-sky-50 via-white to-emerald-50 p-6 shadow-xl shadow-sky-100">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600">Brokerage Financials</p>
+            <h1 className="text-3xl font-semibold text-slate-900">Accounting & QuickBooks</h1>
+            <p className="text-sm text-slate-600">
+              Connect QuickBooks, monitor sync queues, and track portfolio metrics without leaving Hatch.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2 rounded-2xl bg-white/70 px-4 py-3 backdrop-blur">
+            <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+              <span>Sync status</span>
+              <Badge
+                className={cn(
+                  'bg-emerald-50 text-emerald-700',
+                  !syncStatus?.config?.realmId && 'bg-slate-100 text-slate-700'
+                )}
+              >
+                {syncStatus?.config?.realmId ? 'Connected' : 'Not connected'}
+              </Badge>
+            </div>
+            <p className="text-sm font-medium text-slate-900">
+              {syncStatus?.config?.realmId ? 'QuickBooks linked' : 'Awaiting QuickBooks connection'}
+            </p>
+            <p className="text-xs text-slate-500">
+              {syncStatus?.config?.connectedAt
+                ? `Connected ${new Date(syncStatus.config.connectedAt).toLocaleString()}`
+                : 'Connect to start syncing transactions & leases.'}
+            </p>
+          </div>
+        </div>
       </header>
 
       {summaryMetrics.length > 0 ? <SummaryCards metrics={summaryMetrics} /> : null}
@@ -179,8 +204,11 @@ function SummaryCards({ metrics }: { metrics: MetricCard[] }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
       {metrics.map((metric) => (
-        <Card key={metric.label} className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{metric.label}</p>
+        <Card
+          key={metric.label}
+          className="rounded-2xl border border-slate-100/70 bg-white/80 px-4 py-3 shadow-lg shadow-slate-100 transition hover:-translate-y-0.5"
+        >
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">{metric.label}</p>
           <p className="text-2xl font-semibold text-slate-900">{metric.value}</p>
           <p className="text-xs text-slate-500">{metric.caption}</p>
         </Card>
@@ -251,17 +279,17 @@ function ConnectionCard({
   isSubmitting: boolean;
 }) {
   return (
-    <Card className="space-y-3 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <div className="flex items-center justify-between">
+    <Card className="space-y-3 rounded-2xl border border-slate-100/80 bg-white/80 p-4 shadow-lg shadow-slate-100">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">QuickBooks connection</p>
-          <p className="text-sm text-slate-500">Realm + provider stored per org.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">QuickBooks connection</p>
+          <p className="text-sm text-slate-600">Realm + provider stored per org.</p>
         </div>
-        <Badge className="bg-emerald-50 text-emerald-700">
+        <Badge className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
           {config?.realmId ? 'Connected' : 'Not connected'}
         </Badge>
       </div>
-      <div className="space-y-1 text-sm text-slate-600">
+      <div className="space-y-1 rounded-xl bg-slate-50/60 px-3 py-2 text-sm text-slate-700">
         <p>
           Provider: <span className="font-medium">{config?.provider ?? 'QUICKBOOKS'}</span>
         </p>
@@ -283,7 +311,12 @@ function ConnectionCard({
           <Button variant="default" className="w-full" disabled={disabled} onClick={onConnect}>
             {isSubmitting ? 'Saving...' : config?.realmId ? 'Update realm ID' : 'Save realm ID'}
           </Button>
-          <Button variant="outline" className="w-full sm:w-40" onClick={onOAuthConnect} disabled={isSubmitting || isLoading}>
+          <Button
+            variant="outline"
+            className="w-full border-slate-200 bg-white sm:w-40"
+            onClick={onOAuthConnect}
+            disabled={isSubmitting || isLoading}
+          >
             Connect via OAuth
           </Button>
         </div>
@@ -304,9 +337,9 @@ function StatusCallout({
   total: number;
 }) {
   return (
-    <Card className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <div className="mt-3 flex items-end gap-4">
+    <Card className="rounded-2xl border border-slate-100/70 bg-white/80 p-4 shadow-lg shadow-slate-100">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{title}</p>
+      <div className="mt-3 flex items-end gap-6">
         <div>
           <p className="text-2xl font-semibold text-slate-900">{formatNumber.format(synced)}</p>
           <p className="text-xs text-slate-500">Synced</p>
@@ -338,8 +371,8 @@ function SyncQueueTable({
   onRefresh: () => void;
 }) {
   return (
-    <Card className="overflow-hidden rounded-2xl border border-slate-100 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+    <Card className="overflow-hidden rounded-2xl border border-slate-100/70 bg-white/85 shadow-lg shadow-slate-100">
+      <div className="flex items-center justify-between border-b border-slate-100/80 px-4 py-3">
         <div>
           <p className="text-sm font-semibold text-slate-900">{title}</p>
           <p className="text-xs text-slate-500">Focus on pending + failed items</p>
@@ -350,7 +383,7 @@ function SyncQueueTable({
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-100 text-sm">
-          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="bg-slate-50 text-xs uppercase tracking-[0.15em] text-slate-500">
             <tr>
               <th className="px-4 py-3 text-left">Record</th>
               <th className="px-4 py-3 text-left">Status</th>
@@ -373,7 +406,7 @@ function SyncQueueTable({
                 </td>
               </tr>
             ) : (
-              records.map((record) => {
+              records.map((record, index) => {
                 const displayId =
                   record.kind === 'transaction'
                     ? record.transaction?.id ?? record.transactionId
@@ -384,7 +417,14 @@ function SyncQueueTable({
                     : record.lease?.unit?.property?.addressLine1;
                 const retryId = record.kind === 'transaction' ? record.transactionId : record.leaseId;
                 return (
-                  <tr key={record.id} className="border-t border-slate-100">
+                  <tr
+                    key={record.id}
+                    className={cn(
+                      'border-t border-slate-100',
+                      index % 2 === 0 && 'bg-slate-50/40',
+                      'hover:bg-slate-50'
+                    )}
+                  >
                     <td className="px-4 py-3">
                       <p className="font-medium text-slate-900">{displayId}</p>
                       <p className="text-xs text-slate-500">{address ?? '—'}</p>
@@ -392,8 +432,9 @@ function SyncQueueTable({
                     <td className="px-4 py-3">
                       <Badge
                         className={cn(
-                          'bg-slate-100 text-slate-700',
-                          record.syncStatus === 'FAILED' && 'bg-rose-50 text-rose-600'
+                          'rounded-full bg-slate-100 text-slate-700',
+                          record.syncStatus === 'FAILED' && 'bg-rose-50 text-rose-600',
+                          record.syncStatus === 'PENDING' && 'bg-amber-50 text-amber-700'
                         )}
                       >
                         {record.syncStatus}

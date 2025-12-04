@@ -74,9 +74,9 @@ const NAV_SECTIONS: NavSection[] = [
         key: 'people',
         label: 'People',
         icon: Users,
-        roles: ['BROKER', 'ADMIN'],
+        roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
-          { icon: UserCheck, label: 'Agents & Teams', path: '/broker/team', roles: ['BROKER', 'ADMIN'] }
+          { icon: UserCheck, label: 'Agents & Teams', path: '/broker/team', roles: ['BROKER', 'AGENT', 'ADMIN'] }
         ]
       },
       {
@@ -89,9 +89,9 @@ const NAV_SECTIONS: NavSection[] = [
           { icon: Shuffle, label: 'Transactions', path: '/broker/transactions', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Handshake, label: 'Offer Intents', path: '/broker/offer-intents', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: FileText, label: 'Contracts', path: '/broker/contracts', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: Wallet, label: 'Financials', path: '/broker/financials', roles: ['BROKER', 'ADMIN'] },
-          { icon: FileText, label: 'Draft Listings', path: '/broker/draft-listings', roles: ['BROKER', 'ADMIN'] },
-          { icon: Percent, label: 'Commission Plans', path: '/broker/commission-plans', roles: ['BROKER', 'ADMIN'] }
+          { icon: Wallet, label: 'Financials', path: '/broker/financials', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: FileText, label: 'Draft Listings', path: '/broker/draft-listings', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Percent, label: 'Commission Plans', path: '/broker/commission-plans', roles: ['BROKER', 'AGENT', 'ADMIN'] }
         ]
       }
     ]
@@ -121,11 +121,10 @@ const NAV_SECTIONS: NavSection[] = [
         key: 'risk',
         label: 'Risk & Compliance',
         icon: ShieldCheck,
-        roles: ['BROKER', 'ADMIN'],
+        roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
-          { icon: ShieldCheck, label: 'Compliance', path: '/broker/compliance', roles: ['BROKER', 'ADMIN'] },
-          { icon: Lock, label: 'Audit Log', path: '/broker/audit-log', roles: ['BROKER', 'ADMIN'] },
-          { icon: Bell, label: 'Notifications', path: '/broker/notifications', roles: ['BROKER', 'AGENT', 'ADMIN'] }
+          { icon: ShieldCheck, label: 'Compliance Hub', path: '/broker/compliance', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Lock, label: 'Audit Log', path: '/broker/audit-log', roles: ['BROKER', 'ADMIN'] }
         ]
       }
     ]
@@ -139,7 +138,8 @@ const NAV_SECTIONS: NavSection[] = [
         icon: Settings,
         roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
-          { icon: Settings, label: 'Settings', path: '/broker/dashboard', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Settings, label: 'Settings', path: '/broker/settings', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Bell, label: 'Notifications', path: '/broker/notifications', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Globe, label: 'View Public Site', path: '/', roles: ['BROKER', 'AGENT', 'ADMIN'] }
         ]
       }

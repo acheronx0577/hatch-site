@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button'
 import { ExternalLink } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { resolveUserIdentity } from '@/lib/utils'
-import { HatchLogo } from '@/components/HatchLogo'
 import { CopilotDock } from '@/components/copilot/CopilotDock'
 import { HatchAIWidget, type HatchAIMessage } from '@/components/copilot/HatchAIWidget'
 import { chatAiPersona, type PersonaChatMessage } from '@/lib/api/hatch'
@@ -15,6 +14,7 @@ import { buildMemoryToastPayload } from '@/lib/ai/memoryToast'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
 import { usePresence } from '@/lib/realtime/presenceSocket'
 import { GlobalSearch } from '@/components/global-search/GlobalSearch'
+import CognitoAuthControls from '@/components/auth/CognitoAuthControls'
 
 interface BrokerLayoutProps {
   showBackButton?: boolean
@@ -113,10 +113,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
         {/* Header */}
         <header className="bg-white shadow-sm border-b px-6 py-4">
           <div className="flex justify-between items-center">
-            <div className="flex items-center">
-              <HatchLogo className="h-12 md:h-16" />
-              <span className="ml-3 text-xl font-semibold text-gray-900">Broker Portal</span>
-            </div>
+            <div className="flex items-center" aria-hidden="true" />
             
             {/* Public Site Navigation */}
             <div className="flex items-center space-x-4">
@@ -132,13 +129,13 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
                 <span>View Public Site</span>
               </Button>
               <NotificationBell />
-              
               <div className="flex items-center space-x-2 text-sm text-gray-500">
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                   <span className="text-blue-600 font-medium">{initials}</span>
                 </div>
                 <span className="text-gray-700 font-medium">{displayName}</span>
               </div>
+              <CognitoAuthControls className="ml-2" />
             </div>
           </div>
         </header>

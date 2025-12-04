@@ -53,7 +53,7 @@ export class AccountingService {
           WHERE "orgId" = ${orgId}
           LIMIT 1
         `) as any[];
-        if (qbConn) {
+        if (qbConn?.length) {
           const first = qbConn[0];
           config = {
             id: first.id,

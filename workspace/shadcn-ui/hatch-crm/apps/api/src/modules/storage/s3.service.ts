@@ -22,17 +22,33 @@ export class S3Service {
         : undefined
   });
 
-  private readonly bucket = process.env.AWS_S3_BUCKET ?? '';
+  private readonly docsBucket =
+    process.env.AWS_S3_BUCKET_DOCS ??
+    process.env.AWS_S3_BUCKET_CONTRACTS ??
+    process.env.AWS_S3_BUCKET ??
+    '';
+
+  private readonly mediaBucket =
+    process.env.AWS_S3_BUCKET_MEDIA ?? process.env.AWS_S3_BUCKET_PROPERTY ?? '';
+
+  private readonly defaultBucket = this.docsBucket || this.mediaBucket;
+
   private readonly region = process.env.AWS_REGION ?? 'us-east-2';
   private readonly maxDownloadBytes = Number(process.env.S3_MAX_DOWNLOAD_BYTES ?? 250 * 1024 * 1024); // 250MB limit by default
+  private readonly docsPublicBase =
+    process.env.S3_PUBLIC_BASE_URL_DOCS ??
+    process.env.S3_PUBLIC_BASE_URL_CONTRACTS ??
+    process.env.S3_PUBLIC_BASE_URL;
+  private readonly mediaPublicBase =
+    process.env.S3_PUBLIC_BASE_URL_MEDIA ??
+    process.env.S3_PUBLIC_BASE_URL_PROPERTY ??
+    process.env.S3_PUBLIC_BASE_URL;
 
   async uploadObject(key: string, body: Buffer | string | Readable, contentType: string) {
-    if (!this.bucket) {
-      throw new Error('AWS_S3_BUCKET is not configured');
-    }
+    const bucket = this.resolveBucket({ key });
 
     const cmd = new PutObjectCommand({
-      Bucket: this.bucket,
+      Bucket: bucket,
       Key: key,
       Body: body,
       ContentType: contentType
@@ -84,11 +100,9 @@ export class S3Service {
   }
 
   async getObjectStream(key: string): Promise<Readable> {
-    if (!this.bucket) {
-      throw new Error('AWS_S3_BUCKET is not configured');
-    }
+    const bucket = this.resolveBucket({ key });
     const cmd = new GetObjectCommand({
-      Bucket: this.bucket,
+      Bucket: bucket,
       Key: key
     });
     const res = await this.client.send(cmd);
@@ -113,11 +127,9 @@ export class S3Service {
   }
 
   async getPresignedUrl(key: string, expiresInSeconds = 900): Promise<string> {
-    if (!this.bucket) {
-      throw new Error('AWS_S3_BUCKET is not configured');
-    }
+    const bucket = this.resolveBucket({ key });
     const cmd = new GetObjectCommand({
-      Bucket: this.bucket,
+      Bucket: bucket,
       Key: key
     });
     return getSignedUrl(this.client, cmd, { expiresIn: expiresInSeconds });
@@ -128,11 +140,9 @@ export class S3Service {
     contentType?: string;
     expiresInSeconds?: number;
   }): Promise<string> {
-    if (!this.bucket) {
-      throw new Error('AWS_S3_BUCKET is not configured');
-    }
+    const bucket = this.resolveBucket({ key: params.key });
     const cmd = new PutObjectCommand({
-      Bucket: this.bucket,
+      Bucket: bucket,
       Key: params.key,
       ContentType: params.contentType ?? 'application/octet-stream'
     });
@@ -140,16 +150,14 @@ export class S3Service {
   }
 
   buildPublicUrl(key: string): string {
+    const bucket = this.resolveBucket({ key });
     const base =
-      process.env.S3_PUBLIC_BASE_URL ??
-      (this.bucket ? `https://${this.bucket}.s3.${this.region}.amazonaws.com` : '');
+      this.publicBaseForBucket(bucket) || `https://${bucket}.s3.${this.region}.amazonaws.com`;
     return `${base.replace(/\/+$/, '')}/${key.replace(/^\/+/, '')}`;
   }
 
   async searchKeys(params: { prefix?: string; contains: string[]; maxKeys?: number }): Promise<string[]> {
-    if (!this.bucket) {
-      return [];
-    }
+    const bucket = this.resolveBucket({ prefix: params.prefix });
 
     const prefix = params.prefix;
     const contains = params.contains.map((value) => value.toLowerCase()).filter(Boolean);
@@ -160,7 +168,7 @@ export class S3Service {
     while (results.length < maxKeys) {
       const res = await this.client.send(
         new ListObjectsV2Command({
-          Bucket: this.bucket,
+          Bucket: bucket,
           Prefix: prefix,
           ContinuationToken: token,
           MaxKeys: 200
@@ -184,5 +192,40 @@ export class S3Service {
     }
 
     return results;
+  }
+
+  private resolveBucket(input: { key?: string; prefix?: string }): string {
+    const target = input.key ?? input.prefix ?? '';
+    const isPropertyMedia = target.startsWith('property-images/');
+
+    if (isPropertyMedia && this.mediaBucket) {
+      return this.mediaBucket;
+    }
+
+    if (!isPropertyMedia && this.docsBucket) {
+      return this.docsBucket;
+    }
+
+    if (this.docsBucket) {
+      return this.docsBucket;
+    }
+    if (this.mediaBucket) {
+      return this.mediaBucket;
+    }
+    if (this.defaultBucket) {
+      return this.defaultBucket;
+    }
+
+    throw new Error('AWS_S3_BUCKET is not configured');
+  }
+
+  private publicBaseForBucket(bucket: string): string | undefined {
+    if (this.mediaBucket && bucket === this.mediaBucket) {
+      return this.mediaPublicBase;
+    }
+    if (this.docsBucket && bucket === this.docsBucket) {
+      return this.docsPublicBase;
+    }
+    return this.docsPublicBase ?? this.mediaPublicBase;
   }
 }

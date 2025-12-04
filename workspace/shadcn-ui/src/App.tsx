@@ -31,6 +31,7 @@ import BrokerMarketingPage from './pages/broker/Marketing'
 import DripCampaignsPage from './pages/broker/DripCampaigns'
 import Pricing from './pages/broker/Pricing'
 import Payment from './pages/broker/Payment'
+import BrokerSettingsPage from './pages/broker/Settings'
 import ComplianceCenter from './pages/broker/Compliance'
 import Messages from './pages/Messages'
 import BrokerMissionControl from './pages/broker/MissionControl'
@@ -88,7 +89,7 @@ function App() {
 
                 {/* Broker Routes with Layout */}
                 <Route path="/broker" element={<BrokerLayout />}>
-                  <Route path="dashboard" element={<BrokerDashboard />} />
+                  <Route path="dashboard" element={<Navigate to="/broker/mission-control" replace />} />
                   <Route path="mission-control" element={<BrokerMissionControl />} />
                   <Route path="crm" element={<CRM />} />
                   <Route path="crm/leads/:id" element={<LeadDetailPage />} />
@@ -120,8 +121,9 @@ function App() {
                   <Route path="agent-performance" element={<AgentPerformanceList />} />
                   <Route path="agent-performance/:agentProfileId" element={<AgentPerformanceDetail />} />
                   <Route path="contracts" element={<ContractsPage />} />
+                  <Route path="settings" element={<BrokerSettingsPage />} />
                   {/* Default broker route */}
-                  <Route index element={<Navigate to="dashboard" replace />} />
+                  <Route index element={<Navigate to="mission-control" replace />} />
                 </Route>
 
                 <Route path="/dashboard/forms" element={<Navigate to="/broker/forms" replace />} />

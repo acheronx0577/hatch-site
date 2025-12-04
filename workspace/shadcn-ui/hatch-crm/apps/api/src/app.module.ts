@@ -79,6 +79,8 @@ import { RevenueForecastModule } from './modules/revenue-forecast/revenue-foreca
 import { IngestionModule } from './modules/ingestion/ingestion.module';
 import { QuickBooksModule } from './modules/integrations/quickbooks/quickbooks.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
+import { OrgLoisModule } from './modules/org-lois/org-lois.module';
+import { AgentProfilesModule } from './modules/agent-profiles/agent-profiles.module';
 
 const isProd = (process.env.NODE_ENV ?? 'development') === 'production';
 const throttlerEnabled =
@@ -210,11 +212,13 @@ const throttlerTtl = Number(process.env.THROTTLER_TTL_MS ?? 60_000);
     IngestionModule,
     NotificationsModule,
     OrgMlsModule,
+    OrgLoisModule,
     MissionControlModule,
     OrgListingsModule,
     OrgTransactionsModule,
     QuickBooksModule,
-    AccountingModule
+    AccountingModule,
+    AgentProfilesModule
   ],
   controllers: [],
   providers: [
