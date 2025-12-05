@@ -29,11 +29,9 @@ export class BatchClient {
 
   constructor(private readonly configService: ConfigService) {
     const token = this.configService.get<string>('BATCH_API_TOKEN') ?? process.env.BATCH_API_TOKEN;
-
     if (!token) {
-      throw new Error('BATCH_API_TOKEN is not configured');
+      throw new Error('BATCH_API_TOKEN is not configured - Batch integration cannot start');
     }
-
     this.http = axios.create({
       baseURL: 'https://api.batchdata.com/v1',
       headers: {
