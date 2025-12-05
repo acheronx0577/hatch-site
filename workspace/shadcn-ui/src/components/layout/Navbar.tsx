@@ -159,7 +159,7 @@ export function Navbar() {
           {/* Logo */}
           <div className={logoWrapperClasses}>
             <Link to="/" className="flex-shrink-0 flex items-center">
-              <HatchLogo className="h-12 md:h-16" />
+              <HatchLogo className="h-6 md:h-8" />
             </Link>
           </div>
 
