@@ -1,9 +1,53 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://rdakjayhdvewbpguyuiv.supabase.co'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkYWtqYXloZHZld2JwZ3V5dWl2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkwMTAxODAsImV4cCI6MjA3NDU4NjE4MH0.Fhy_UCtPfNcIvRYTt6BdSQLos5snjW56l6HPm97HU28'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+export const supabaseEnabled = Boolean(supabaseUrl && supabaseAnonKey)
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const disabledError = new Error('Supabase disabled (no env configured)')
+const disabledPromise = async () => ({ data: null, error: disabledError })
+const disabledFrom = () => ({
+  select: disabledPromise,
+  insert: disabledPromise,
+  update: disabledPromise,
+  delete: disabledPromise,
+  upsert: disabledPromise,
+  eq: () => disabledFrom(),
+  single: disabledPromise,
+})
+const disabledStorage = {
+  from: () => ({
+    upload: disabledPromise,
+    remove: disabledPromise,
+    getPublicUrl: () => ({ data: null, error: disabledError }),
+    createSignedUrl: disabledPromise,
+  }),
+}
+const disabledAuth = {
+  signInWithPassword: disabledPromise,
+  signUp: disabledPromise,
+  signOut: disabledPromise,
+  setSession: disabledPromise,
+  updateUser: disabledPromise,
+  getSession: async () => ({ data: { session: null }, error: null }),
+  getUser: async () => ({ data: { user: null }, error: null }),
+  onAuthStateChange: () => ({
+    data: { subscription: { unsubscribe() {} } },
+    error: null,
+  }),
+}
+
+export const supabase =
+  supabaseEnabled && supabaseUrl && supabaseAnonKey
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : ({
+        auth: disabledAuth,
+        from: disabledFrom,
+        storage: disabledStorage,
+        rpc: disabledPromise,
+      } as any)
+
+export const supabaseAnonKey = supabaseEnabled && supabaseAnonKey ? supabaseAnonKey : ''
 
 // Auth helpers
 export const getUser = async () => {
