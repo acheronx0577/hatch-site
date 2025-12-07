@@ -1,4 +1,7 @@
 [build]
-  base = "workspace/shadcn-ui"
-  command = "npm run build"
-  publish = "dist"
+  base = "workspace/shadcn-ui/hatch-crm/apps/web"
+  command = "npm install -g pnpm@8.10.0 && pnpm install --frozen-lockfile && pnpm build"
+  publish = ".next"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
