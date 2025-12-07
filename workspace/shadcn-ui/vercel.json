@@ -32,6 +32,10 @@
       "dest": "favicon.png"
     },
     {
+      "src": "/apple-touch-icon.png",
+      "dest": "apple-touch-icon.png"
+    },
+    {
       "src": "/robots.txt",
       "dest": "robots.txt"
     },
