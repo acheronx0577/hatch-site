@@ -3,12 +3,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { CheckCircle, ArrowRight, Loader2 } from 'lucide-react'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function SubscriptionSuccess() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [isVerifying, setIsVerifying] = useState(true)
   const [verificationComplete, setVerificationComplete] = useState(false)
+  const { user, status } = useAuth()
   
   const sessionId = searchParams.get('session_id')
 
@@ -23,6 +25,10 @@ export default function SubscriptionSuccess() {
   }, [])
 
   const handleContinue = () => {
+    if (status !== 'authenticated' || !user) {
+      navigate('/login', { state: { from: '/broker/dashboard' } })
+      return
+    }
     navigate('/broker/dashboard')
   }
 

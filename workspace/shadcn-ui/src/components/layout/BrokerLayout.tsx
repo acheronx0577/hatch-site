@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from 'react'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import BrokerSidebar from './BrokerSidebar'
 import { Button } from '@/components/ui/button'
 import { ExternalLink } from 'lucide-react'
@@ -23,7 +23,7 @@ interface BrokerLayoutProps {
 export default function BrokerLayout({ showBackButton = false }: BrokerLayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { session, user, isDemoSession, activeOrgId } = useAuth()
+  const { session, user, isDemoSession, activeOrgId, status } = useAuth()
   const { sendLocation } = usePresence(activeOrgId, user?.id ?? null, location.pathname + location.search)
   const { toast } = useToast()
 
@@ -31,6 +31,11 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
     () => resolveUserIdentity(session?.profile, user?.email ?? null, 'Broker'),
     [session?.profile, user?.email]
   )
+  const redirectPath = useMemo(
+    () => `${location.pathname}${location.search}${location.hash}`,
+    [location.hash, location.pathname, location.search]
+  )
+  const isAuthenticated = status === 'authenticated' && !!user
 
   const debug = useMemo(() => {
     const params = new URLSearchParams(location.search)
@@ -100,6 +105,20 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
   React.useEffect(() => {
     sendLocation(`path:${location.pathname}${location.search}`)
   }, [location.pathname, location.search, sendLocation])
+
+  if (status === 'loading') {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="rounded-lg border border-slate-200 bg-white px-6 py-4 text-sm text-slate-600 shadow-sm">
+          Checking your session…
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace state={{ from: redirectPath }} />
+  }
 
   return (
     <div className="flex h-screen bg-gray-100">

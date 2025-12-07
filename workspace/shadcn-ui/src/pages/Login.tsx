@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Loader2, Lock, Mail } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function Login() {
@@ -14,15 +14,20 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const { signIn, user, loading } = useAuth()
+  const redirectState = location.state as { from?: string } | null
+  const redirectTo = redirectState?.from && typeof redirectState.from === 'string'
+    ? redirectState.from
+    : '/broker/dashboard'
 
   useEffect(() => {
     if (user) {
-      navigate('/broker/dashboard', { replace: true })
+      navigate(redirectTo, { replace: true })
     } else if (!loading) {
       setSubmitting(false)
     }
-  }, [loading, navigate, user])
+  }, [loading, navigate, redirectTo, user])
 
   const handleSubmit = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()

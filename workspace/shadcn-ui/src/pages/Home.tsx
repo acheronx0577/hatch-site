@@ -1,11 +1,12 @@
-import React, { useEffect, useState, useLayoutEffect, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, type NavigateOptions } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Navbar } from '@/components/layout/Navbar'
 import { Search, MapPin, TrendingUp, Clock, Flame, CheckCircle, Shield, Star, Users, Home as HomeIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/contexts/AuthContext'
 
 // Performance monitoring will be done in useLayoutEffect
 
@@ -109,10 +110,23 @@ const professionalProofPoints = [
 export default function Home() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { user, status } = useAuth()
   const [persona, setPersona] = useState<Persona>('buyer')
   const [searchLocation, setSearchLocation] = useState('')
   const [activePrice, setActivePrice] = useState(priceOptions[0].value)
   const [activePropertyTypes, setActivePropertyTypes] = useState<string[]>([])
+  const requireAuthForBroker = useCallback(
+    (target: string, options?: NavigateOptions) => {
+      const destination = target || '/broker/dashboard'
+      const isAuthed = status === 'authenticated' && !!user
+      if (!isAuthed) {
+        navigate('/login', { state: { from: destination } })
+        return
+      }
+      navigate(destination, options)
+    },
+    [navigate, status, user]
+  )
 
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -166,10 +180,10 @@ export default function Home() {
       return
     }
     if (persona === 'seller') {
-      navigate('/broker/pricing', { state: { intent: 'seller' } })
+      requireAuthForBroker('/broker/pricing', { state: { intent: 'seller' } })
       return
     }
-    navigate('/broker/dashboard')
+    requireAuthForBroker('/broker/dashboard')
   }
 
   const handleSecondaryCta = () => {
@@ -594,7 +608,7 @@ export default function Home() {
                   and compliance without the busywork.
                 </p>
                 <div className="flex flex-wrap gap-3 fade-in">
-                  <Button size="lg" onClick={() => navigate('/broker/dashboard')} className="transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
+                  <Button size="lg" onClick={() => requireAuthForBroker('/broker/dashboard')} className="transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
                     <TrendingUp className="h-5 w-5" />
                     Open Broker Dashboard
                   </Button>
@@ -726,7 +740,7 @@ export default function Home() {
                   <Button
                     variant="link"
                     className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
-                    onClick={() => navigate('/broker/dashboard')}
+                    onClick={() => requireAuthForBroker('/broker/dashboard')}
                   >
                     Broker dashboard
                   </Button>
