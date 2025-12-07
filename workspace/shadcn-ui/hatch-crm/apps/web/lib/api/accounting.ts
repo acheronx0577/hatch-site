@@ -71,7 +71,7 @@ export async function connectAccounting(
 ): Promise<AccountingIntegrationConfig> {
   return apiFetch<AccountingIntegrationConfig>(`organizations/${orgId}/accounting/connect`, {
     method: 'POST',
-    body: payload
+    body: JSON.stringify(payload)
   });
 }
 
