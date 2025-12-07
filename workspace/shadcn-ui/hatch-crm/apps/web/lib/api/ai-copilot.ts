@@ -26,7 +26,7 @@ export interface CopilotAction {
 export async function fetchDailyBriefing(orgId: string, date?: string) {
   return apiFetch<CopilotInsightResponse>(`organizations/${orgId}/ai-copilot/daily-briefing`, {
     method: 'POST',
-    body: date ? { date } : {}
+    body: JSON.stringify(date ? { date } : {})
   });
 }
 
@@ -37,6 +37,6 @@ export async function fetchCopilotActions(orgId: string) {
 export async function updateCopilotActionStatus(orgId: string, actionId: string, status: string) {
   return apiFetch<CopilotAction>(`organizations/${orgId}/ai-copilot/actions/${actionId}/status`, {
     method: 'PATCH',
-    body: { status }
+    body: JSON.stringify({ status })
   });
 }
