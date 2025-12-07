@@ -21,7 +21,7 @@ interface ListParams {
   cursor?: string;
 }
 
-const buildQuery = (params?: Record<string, string | number | undefined>) => {
+const buildQuery = (params?: Partial<ListParams>) => {
   const search = new URLSearchParams();
   Object.entries(params ?? {}).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return;
