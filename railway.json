@@ -1,0 +1,35 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "nixpacksPlan": {
+      "phases": {
+        "setup": {
+          "nixPkgs": ["nodejs_22", "pnpm"]
+        },
+        "install": {
+          "cmds": ["cd workspace/shadcn-ui/hatch-crm && pnpm install"]
+        },
+        "build": {
+          "cmds": ["cd workspace/shadcn-ui/hatch-crm && pnpm run build"]
+        }
+      },
+      "start": {
+        "cmd": "cd workspace/shadcn-ui/hatch-crm && pnpm run dev"
+      }
+    }
+  },
+  "deploy": {
+    "runtime": "V2",
+    "numReplicas": 1,
+    "sleepApplication": false,
+    "useLegacyStacker": false,
+    "multiRegionConfig": {
+      "us-east4-eqdc4a": {
+        "numReplicas": 1
+      }
+    },
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
