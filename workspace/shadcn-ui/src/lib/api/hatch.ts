@@ -36,7 +36,7 @@ const resolveApiBaseUrl = (value?: string) => {
   }
 };
 
-const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const API_TOKEN = import.meta.env.VITE_API_TOKEN;
 const CHAOS_MODE = (import.meta.env.VITE_CHAOS_MODE ?? 'false').toLowerCase() === 'true';
 interface FetchOptions extends RequestInit {

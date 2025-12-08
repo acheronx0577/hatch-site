@@ -1161,7 +1161,7 @@ async function seedMissionControlData({
         create: {
           id: 'search-index-ocean',
           organizationId: organization.id,
-          listingId: listingOcean.id,
+          listingId: null,
           mlsNumber: 'MC-1001',
           addressLine1: listingOcean.addressLine1,
           city: listingOcean.city,
@@ -1183,7 +1183,7 @@ async function seedMissionControlData({
         create: {
           id: 'search-index-expiring',
           organizationId: organization.id,
-          listingId: listingExpiring.id,
+          listingId: null,
           mlsNumber: 'MC-3003',
           addressLine1: listingExpiring.addressLine1,
           city: listingExpiring.city,
@@ -1207,7 +1207,7 @@ async function seedMissionControlData({
         create: {
           id: 'search-index-rental',
           organizationId: organization.id,
-          listingId: listingPending.id,
+          listingId: null,
           mlsNumber: 'MC-2002',
           addressLine1: listingPending.addressLine1,
           city: listingPending.city,
@@ -1992,6 +1992,221 @@ async function main() {
       lastDealId: 'deal-sample'
     }
   });
+
+  // Seed Accounts
+  const account1 = await prisma.account.upsert({
+    where: { id: 'account-acme-corp' },
+    update: {
+      ownerId: agent.id,
+      name: 'Acme Corporation',
+      industry: 'Technology',
+      phone: '+13055551000',
+      website: 'https://acmecorp.example.com',
+      annualRevenue: new Prisma.Decimal(5000000)
+    },
+    create: {
+      id: 'account-acme-corp',
+      orgId: organization.id,
+      ownerId: agent.id,
+      name: 'Acme Corporation',
+      industry: 'Technology',
+      phone: '+13055551000',
+      website: 'https://acmecorp.example.com',
+      annualRevenue: new Prisma.Decimal(5000000)
+    }
+  });
+
+  const account2 = await prisma.account.upsert({
+    where: { id: 'account-sunshine-realty' },
+    update: {
+      ownerId: broker.id,
+      name: 'Sunshine Realty Group',
+      industry: 'Real Estate',
+      phone: '+13055551001',
+      website: 'https://sunshinerealtygroup.com',
+      annualRevenue: new Prisma.Decimal(3200000)
+    },
+    create: {
+      id: 'account-sunshine-realty',
+      orgId: organization.id,
+      ownerId: broker.id,
+      name: 'Sunshine Realty Group',
+      industry: 'Real Estate',
+      phone: '+13055551001',
+      website: 'https://sunshinerealtygroup.com',
+      annualRevenue: new Prisma.Decimal(3200000)
+    }
+  });
+
+  const account3 = await prisma.account.upsert({
+    where: { id: 'account-johnson-family' },
+    update: {
+      ownerId: agent.id,
+      name: 'Johnson Family Trust',
+      phone: '+13055551002',
+      billingAddress: {
+        street: '77 Biscayne Blvd',
+        city: 'Miami',
+        state: 'FL'
+      } as Prisma.JsonObject
+    },
+    create: {
+      id: 'account-johnson-family',
+      orgId: organization.id,
+      ownerId: agent.id,
+      name: 'Johnson Family Trust',
+      phone: '+13055551002',
+      billingAddress: {
+        street: '77 Biscayne Blvd',
+        city: 'Miami',
+        state: 'FL'
+      } as Prisma.JsonObject
+    }
+  });
+
+  // Seed Opportunities
+  const opportunity1 = await prisma.opportunity.upsert({
+    where: { id: 'opp-acme-office-space' },
+    update: {
+      ownerId: agent.id,
+      accountId: account1.id,
+      name: 'Acme Office Space Expansion',
+      stage: 'Qualification',
+      amount: new Prisma.Decimal(2500000),
+      currency: 'USD',
+      closeDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000) // 45 days from now
+    },
+    create: {
+      id: 'opp-acme-office-space',
+      orgId: organization.id,
+      ownerId: agent.id,
+      accountId: account1.id,
+      name: 'Acme Office Space Expansion',
+      stage: 'Qualification',
+      amount: new Prisma.Decimal(2500000),
+      currency: 'USD',
+      closeDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000) // 45 days from now
+    }
+  });
+
+  const opportunity2 = await prisma.opportunity.upsert({
+    where: { id: 'opp-sunshine-partnership' },
+    update: {
+      ownerId: broker.id,
+      accountId: account2.id,
+      name: 'Sunshine Strategic Partnership',
+      stage: 'Proposal',
+      amount: new Prisma.Decimal(1800000),
+      currency: 'USD',
+      closeDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+    },
+    create: {
+      id: 'opp-sunshine-partnership',
+      orgId: organization.id,
+      ownerId: broker.id,
+      accountId: account2.id,
+      name: 'Sunshine Strategic Partnership',
+      stage: 'Proposal',
+      amount: new Prisma.Decimal(1800000),
+      currency: 'USD',
+      closeDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) // 30 days from now
+    }
+  });
+
+  const opportunity3 = await prisma.opportunity.upsert({
+    where: { id: 'opp-johnson-vacation-home' },
+    update: {
+      ownerId: agent.id,
+      accountId: account3.id,
+      name: 'Johnson Vacation Home Purchase',
+      stage: 'Negotiation',
+      amount: new Prisma.Decimal(950000),
+      currency: 'USD',
+      closeDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000) // 60 days from now
+    },
+    create: {
+      id: 'opp-johnson-vacation-home',
+      orgId: organization.id,
+      ownerId: agent.id,
+      accountId: account3.id,
+      name: 'Johnson Vacation Home Purchase',
+      stage: 'Negotiation',
+      amount: new Prisma.Decimal(950000),
+      currency: 'USD',
+      closeDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000) // 60 days from now
+    }
+  });
+
+  const [accountBriefFile, opportunityDeckFile] = await Promise.all([
+    prisma.fileObject.upsert({
+      where: { id: 'file-account-acme-brief' },
+      update: {
+        fileName: 'Acme Expansion Brief.pdf',
+        storageKey: 'org-hatch/accounts/acme-expansion-brief.pdf'
+      },
+      create: {
+        id: 'file-account-acme-brief',
+        orgId: organization.id,
+        ownerId: agent.id,
+        fileName: 'Acme Expansion Brief.pdf',
+        mimeType: 'application/pdf',
+        byteSize: 480000,
+        storageKey: 'org-hatch/accounts/acme-expansion-brief.pdf'
+      }
+    }),
+    prisma.fileObject.upsert({
+      where: { id: 'file-opp-sunshine-deck' },
+      update: {
+        fileName: 'Partnership Pitch Deck.pdf',
+        storageKey: 'org-hatch/opportunities/sunshine-pitch-deck.pdf'
+      },
+      create: {
+        id: 'file-opp-sunshine-deck',
+        orgId: organization.id,
+        ownerId: broker.id,
+        fileName: 'Partnership Pitch Deck.pdf',
+        mimeType: 'application/pdf',
+        byteSize: 820000,
+        storageKey: 'org-hatch/opportunities/sunshine-pitch-deck.pdf'
+      }
+    })
+  ]);
+
+  await Promise.all([
+    prisma.fileLink.upsert({
+      where: { id: 'filelink-account-acme-brief' },
+      update: {},
+      create: {
+        id: 'filelink-account-acme-brief',
+        orgId: organization.id,
+        fileId: accountBriefFile.id,
+        object: 'accounts',
+        recordId: account1.id
+      }
+    }),
+    prisma.fileLink.upsert({
+      where: { id: 'filelink-opp-sunshine-deck' },
+      update: {},
+      create: {
+        id: 'filelink-opp-sunshine-deck',
+        orgId: organization.id,
+        fileId: opportunityDeckFile.id,
+        object: 'opportunities',
+        recordId: opportunity2.id
+      }
+    }),
+    prisma.fileLink.upsert({
+      where: { id: 'filelink-opp-johnson-brief' },
+      update: {},
+      create: {
+        id: 'filelink-opp-johnson-brief',
+        orgId: organization.id,
+        fileId: accountBriefFile.id,
+        object: 'opportunities',
+        recordId: opportunity3.id
+      }
+    })
+  ]);
 
   await seedMissionControlData({
     organization,

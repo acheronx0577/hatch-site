@@ -3584,8 +3584,7 @@ model Deal {
   tenantId           String
   personId           String
   companyId          String?
-  /// TODO(migrate): enforce NOT NULL + ON DELETE CASCADE
-  listingId          String?
+  listingId          String
   agreementId        String?
   opportunityId      String?
   /// TODO(migrate): ensure stage remains NOT NULL with default 'OFFER'
@@ -3602,8 +3601,7 @@ model Deal {
   tenant             Tenant             @relation(fields: [tenantId], references: [id])
   person             Person             @relation(fields: [personId], references: [id])
   company            Company?           @relation(fields: [companyId], references: [id])
-  /// TODO(migrate): re_transactions.listingId ON DELETE CASCADE
-  listing            Listing?           @relation(fields: [listingId], references: [id])
+  listing            Listing?           @relation(fields: [listingId], references: [id], onDelete: Cascade)
   agreement          Agreement?         @relation(fields: [agreementId], references: [id])
   offers             Offer[]
   activities         Activity[]
@@ -3619,21 +3617,18 @@ model Deal {
 model Offer {
   id        String      @id @default(cuid())
   tenantId  String
-  /// TODO(migrate): enforce NOT NULL + ON DELETE CASCADE
   listingId String
   personId  String
   dealId    String?
-  /// TODO(migrate): ensure NOT NULL default 'SUBMITTED'
   status    OfferStatus @default(SUBMITTED)
-  /// TODO(migrate): persist scalar amount column (NOT NULL) alongside terms JSON
   terms     Json
+  amount    Decimal     @db.Decimal(18, 2) @default(0)
   version   Int         @default(1)
   metadata  Json?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   tenant    Tenant      @relation(fields: [tenantId], references: [id])
-  /// TODO(migrate): re_offers.listingId ON DELETE CASCADE
-  listing   Listing     @relation(fields: [listingId], references: [id])
+  listing   Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
   person    Person      @relation(fields: [personId], references: [id])
   deal      Deal?       @relation(fields: [dealId], references: [id])
   /// TODO(migrate): partial unique index enforcing a single ACCEPTED offer per listing

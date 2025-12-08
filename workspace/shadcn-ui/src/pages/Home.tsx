@@ -785,7 +785,11 @@ export default function Home() {
                   </Button>
                 </li>
                 <li>
-                  <Button variant="link" className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform">
+                  <Button
+                    variant="link"
+                    className="p-0 text-ink-300 hover:text-ink-50 transition-all duration-200 hover:scale-105 active:scale-95 will-change-transform"
+                    onClick={() => navigate('/terms')}
+                  >
                     Terms of service
                   </Button>
                 </li>

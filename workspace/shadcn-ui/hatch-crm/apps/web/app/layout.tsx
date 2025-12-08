@@ -19,8 +19,8 @@ const plusJakarta = Plus_Jakarta_Sans({
   variable: '--font-satoshi'
 });
 
-const faviconPng = '/favicon.png';
-const appleTouch = '/apple-touch-icon.png';
+const faviconPng = '/Hatch Icon.jpg';
+const appleTouch = '/Hatch Icon.jpg';
 
 export const metadata: Metadata = {
   title: 'Hatch',

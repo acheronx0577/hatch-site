@@ -1,0 +1,7 @@
+# Force Railway to build from the monorepo’s API Dockerfile
+[build]
+builder = "dockerfile"
+dockerfilePath = "workspace/shadcn-ui/hatch-crm/Dockerfile"
+
+# The Dockerfile already defines the start command
+[deploy]

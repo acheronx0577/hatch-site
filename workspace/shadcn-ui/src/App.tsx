@@ -12,6 +12,7 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import DemoLanding from './pages/DemoLanding'
 import PerfBenchPage from './pages/dev/PerfBench'
+import TermsPage from './pages/Terms'
 
 // Layout Components
 import BrokerLayout from './components/layout/BrokerLayout'
@@ -48,6 +49,8 @@ import DocumentViewerPage from './pages/broker/DocumentViewer'
 import { AgentPerformanceList } from './pages/broker/agent-performance/AgentPerformanceList'
 import { AgentPerformanceDetail } from './pages/broker/agent-performance/AgentPerformanceDetail'
 import ContractsPage from './pages/broker/Contracts'
+import BrokerAccountsPage from './pages/broker/Accounts'
+import BrokerOpportunitiesPage from './pages/broker/Opportunities'
 
 // Customer Pages
 import CustomerDashboard from './pages/customer/Dashboard'
@@ -85,6 +88,7 @@ function App() {
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/demo" element={<DemoLanding />} />
+                <Route path="/terms" element={<TermsPage />} />
                 <Route path="/dev/perf" element={<PerfBenchPage />} />
 
                 {/* Broker Routes with Layout */}
@@ -101,9 +105,11 @@ function App() {
                   <Route path="team-advanced" element={<BrokerTeamAdvanced />} />
                   <Route path="calendar" element={<BrokerCalendar />} />
                   <Route path="analytics" element={<BrokerAnalytics />} />
+                  <Route path="accounts" element={<BrokerAccountsPage />} />
                   <Route path="marketing" element={<BrokerMarketingPage />} />
                   <Route path="marketing/campaigns" element={<DripCampaignsPage />} />
                   <Route path="notifications" element={<BrokerNotificationsPage />} />
+                  <Route path="opportunities" element={<BrokerOpportunitiesPage />} />
                   <Route path="audit-log" element={<BrokerAuditLogPage />} />
                   <Route path="commission-plans" element={<CommissionPlansPage />} />
                   <Route path="lead-routing" element={<LeadRoutingDesk />} />

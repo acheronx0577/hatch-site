@@ -87,6 +87,8 @@ const NAV_SECTIONS: NavSection[] = [
         children: [
           { icon: HomeIcon, label: 'Properties', path: '/broker/properties', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Shuffle, label: 'Transactions', path: '/broker/transactions', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Building2, label: 'Accounts', path: '/broker/accounts', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: TrendingUp, label: 'Opportunities', path: '/broker/opportunities', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Handshake, label: 'Offer Intents', path: '/broker/offer-intents', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: FileText, label: 'Contracts', path: '/broker/contracts', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Wallet, label: 'Financials', path: '/broker/financials', roles: ['BROKER', 'AGENT', 'ADMIN'] },

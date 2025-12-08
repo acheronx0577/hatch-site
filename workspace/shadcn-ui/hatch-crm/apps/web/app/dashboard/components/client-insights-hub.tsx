@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
-import { emitCopilotContext } from '@/lib/copilot/events';
+import { emitPersonaContext } from '@/lib/personas/events';
 
 type ClientInsightsHubProps = {
   tenantId: string;
@@ -179,7 +179,7 @@ export function ClientInsightsHub({ tenantId }: ClientInsightsHubProps) {
   };
 
   useEffect(() => {
-    emitCopilotContext({
+    emitPersonaContext({
       surface: 'dashboard',
       summary: `Client insights · ${filters.period}`,
       metadata: {
@@ -249,7 +249,7 @@ export function ClientInsightsHub({ tenantId }: ClientInsightsHubProps) {
 
       <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <AttentionPanel entries={liveFeed} />
-        <CopilotPanel insights={payload?.copilotInsights ?? []} />
+        <InsightsPanel insights={payload?.copilotInsights ?? []} />
       </div>
 
       <EngagementHeatmap
@@ -442,13 +442,13 @@ function TrendCards({
   );
 }
 
-function CopilotPanel({ insights }: { insights: InsightCopilotMessage[] }) {
+function InsightsPanel({ insights }: { insights: InsightCopilotMessage[] }) {
   return (
     <Card className="flex flex-col gap-3 border border-emerald-100 bg-emerald-50/60 p-6 shadow-sm">
       <div className="flex items-center gap-3">
         <Sparkles className="h-5 w-5 text-emerald-600" />
         <div>
-          <p className="text-sm font-semibold text-emerald-900">Copilot Insights</p>
+          <p className="text-sm font-semibold text-emerald-900">AI Insights</p>
           <p className="text-xs text-emerald-600/80">Narrative takeaways generated from live analytics.</p>
         </div>
       </div>
@@ -456,7 +456,7 @@ function CopilotPanel({ insights }: { insights: InsightCopilotMessage[] }) {
         {insights.length === 0 ? (
           <li className="flex items-center gap-2 text-xs text-emerald-700">
             <AlertTriangle className="h-4 w-4" />
-            No insights yet—log activity to train the copilot.
+            No insights yet—log activity to train the AI.
           </li>
         ) : (
           insights.map((insight, index) => (

@@ -80,7 +80,7 @@ export default function ReportingPage() {
                   <th className="py-1 pr-2">Closed Volume</th>
                   <th className="py-1 pr-2">Active Leases</th>
                   <th className="py-1 pr-2">PM Income</th>
-                  <th className="py-1 pr-2">Copilot (Completed/Total)</th>
+                  <th className="py-1 pr-2">AI Actions (Completed/Total)</th>
                 </tr>
               </thead>
               <tbody>

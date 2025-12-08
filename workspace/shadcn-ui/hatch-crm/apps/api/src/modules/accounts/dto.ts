@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/mapped-types';
 import { IsOptional, IsString, IsNumber, IsUrl } from 'class-validator';
 
 export class CreateAccountDto {
@@ -49,7 +50,15 @@ export class CreateAccountDto {
   shippingAddress?: Record<string, unknown>;
 }
 
-export class UpdateAccountDto extends CreateAccountDto {}
+export class UpdateAccountDto extends PartialType(CreateAccountDto) {}
+
+export class AccountOwnerSummaryDto {
+  @ApiProperty({ description: 'Owner user identifier' })
+  id!: string;
+
+  @ApiPropertyOptional({ description: 'Owner display name' })
+  name?: string | null;
+}
 
 export class AccountResponseDto {
   @ApiProperty({ description: 'Account identifier' })
@@ -84,4 +93,15 @@ export class AccountResponseDto {
 
   @ApiPropertyOptional()
   updatedAt?: string;
+
+  @ApiPropertyOptional({ type: () => AccountOwnerSummaryDto })
+  owner?: AccountOwnerSummaryDto | null;
+}
+
+export class AccountListResponseDto {
+  @ApiProperty({ type: () => AccountResponseDto, isArray: true })
+  items!: AccountResponseDto[];
+
+  @ApiPropertyOptional({ description: 'Cursor for pagination', nullable: true })
+  nextCursor!: string | null;
 }

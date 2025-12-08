@@ -2,7 +2,20 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { HATCH_AUTH_COOKIE } from './lib/auth/session';
 
-const PUBLIC_PATHS = ['/login', '/auth', '/magic-link', '/api', '/_next', '/favicon', '/icon', '/apple-touch-icon', '/manifest'];
+const PUBLIC_PATHS = [
+  '/login',
+  '/auth',
+  '/magic-link',
+  '/api',
+  '/_next',
+  '/favicon',
+  '/icon',
+  '/favicon.png',
+  '/apple-touch-icon',
+  '/apple-touch-icon.png',
+  '/Hatch Icon.jpg',
+  '/manifest'
+];
 const PROTECTED_PATHS = [
   '/dashboard',
   '/payouts',
