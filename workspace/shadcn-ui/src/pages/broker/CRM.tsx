@@ -269,7 +269,7 @@ export default function BrokerCRMPage() {
 
   const conversionRate =
     leads.length > 0
-      ? `${Math.round((leads.filter((lead) => lead.stage === 'QUALIFIED' || lead.stage === 'CLOSED').length / leads.length) * 100)}%`
+      ? `${Math.round((leads.filter((lead) => lead.stageId === 'QUALIFIED' || lead.stageId === 'CLOSED').length / leads.length) * 100)}%`
       : '0%';
 
   const heroNavItems = useMemo<HeroNavItem[]>(
@@ -365,7 +365,7 @@ export default function BrokerCRMPage() {
 
   return (
     <>
-      <div className="space-y-8">
+      <div className="max-w-full space-y-8">
         <PipelineHero
           pipelineName={primaryPipeline?.name ?? 'Pipeline'}
           stageCount={stageCount}
@@ -380,7 +380,7 @@ export default function BrokerCRMPage() {
           <div className="space-y-8">
             <QuickMetrics cards={quickCards} onRefresh={handleQuickMetricsRefresh} />
             {pipelines.length > 0 ? (
-              <section id="pipeline">
+              <section id="pipeline" className="max-w-full overflow-hidden">
                 <PipelineBoard
                   pipelines={pipelines}
                   initialLeads={leads}
@@ -433,7 +433,7 @@ export default function BrokerCRMPage() {
             await createLeadNote(lead.id, notes.trim());
           }
           const fallbackName = [lead.firstName, lead.lastName].filter(Boolean).join(' ');
-          const description = lead.displayName ?? (fallbackName || lead.email || 'Lead added to pipeline.');
+          const description = fallbackName || lead.email || 'Lead added to pipeline.';
           toast({
             title: 'Lead added',
             description

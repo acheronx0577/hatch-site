@@ -160,7 +160,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
           <Outlet />
         </main>
         <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
@@ -170,3 +170,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
     </div>
   )
 }
+function setChatOpen(arg0: boolean) {
+  throw new Error('Function not implemented.')
+}
+
