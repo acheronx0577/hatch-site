@@ -1809,11 +1809,6 @@ export default function DraftListings() {
             if (value) mappedProperty.foundationDetails = value
             break
           }
-          case 'foundation': {
-            const value = toTrimmedString(rawValue)
-            if (value) mappedProperty.foundationDetails = value
-            break
-          }
           case 'exteriorfeatures':
           case 'exteriorfeature': {
             const value = toTrimmedString(rawValue)
@@ -1860,23 +1855,6 @@ export default function DraftListings() {
             if (value) mappedProperty.primaryBathFeatures = value
             break
           }
-          case 'parkingfeatures':
-          case 'parkingdescription': {
-            const value = toTrimmedString(rawValue)
-            if (value) mappedProperty.parkingFeatures = value
-            break
-          }
-          case 'buyeragentcompensation':
-          case 'buyerbrokercompensation':
-          case 'buyeragentcompensationpercent': {
-            const value = toNumericValue(rawValue)
-            if (value !== undefined) mappedProperty.buyerAgentCompensation = value
-            else {
-              const text = toTrimmedString(rawValue)
-              if (text) mappedProperty.buyerAgentCompensation = toNumericValue(text)
-            }
-            break
-          }
           case 'builderproduct':
           case 'builderproductyn': {
             const parsed = toBooleanValue(rawValue)
@@ -1887,12 +1865,6 @@ export default function DraftListings() {
           case 'newconstructionyn': {
             const parsed = toBooleanValue(rawValue)
             if (parsed !== undefined) mappedProperty.newConstructionYN = parsed
-            break
-          }
-          case 'listingdate':
-          case 'listdate': {
-            const value = extractDateFromSources(mapping.inputField)
-            if (value) mappedProperty.listingDate = value
             break
           }
           case 'buildername': {
@@ -1916,22 +1888,6 @@ export default function DraftListings() {
           case 'listingbroker': {
             const value = toTrimmedString(rawValue)
             if (value) mappedProperty.listingBroker = value
-            break
-          }
-          case 'listingagentname':
-          case 'listagentfull': {
-            const value = toTrimmedString(rawValue)
-            if (value) mappedProperty.listingAgentName = value
-            break
-          }
-          case 'listingagentphone': {
-            const value = toTrimmedString(rawValue)
-            if (value) mappedProperty.listingAgentPhone = value
-            break
-          }
-          case 'listingagentemail': {
-            const value = toTrimmedString(rawValue)
-            if (value) mappedProperty.listingAgentEmail = value
             break
           }
           default:
