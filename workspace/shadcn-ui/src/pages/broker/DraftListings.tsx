@@ -1575,12 +1575,6 @@ export default function DraftListings() {
             if (value !== undefined) mappedProperty.lotSize = value
             break
           }
-          case 'lotsizeacres':
-          case 'acres': {
-            const value = toNumericValue(rawValue)
-            if (value !== undefined) mappedProperty.lotSizeAcres = value
-            break
-          }
           case 'garagespaces':
           case 'garage': {
             const value = toNumericValue(rawValue)
