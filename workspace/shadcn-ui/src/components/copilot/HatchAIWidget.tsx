@@ -276,8 +276,6 @@ export function HatchAIWidget({ onSend, isOpen, onClose }: HatchAIWidgetProps) {
 
 
   // Handle mounting/unmounting for animation
-  // Animation state for transitions
-  const [show, setShow] = React.useState(isOpen);
   React.useEffect(() => {
     if (isOpen && !show) {
       setShow(true);

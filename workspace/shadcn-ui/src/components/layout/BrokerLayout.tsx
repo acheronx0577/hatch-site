@@ -135,7 +135,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
           <div className="flex justify-between items-center">
             <div className="flex items-center" aria-hidden="true" />
             
-            {/* Public Site Navigation */}
+            {/* Public Site Navigation. */}
             <div className="flex items-center space-x-4">
               <Button variant="outline" onClick={() => setSearchOpen(true)}>
                 Search ⌘K
