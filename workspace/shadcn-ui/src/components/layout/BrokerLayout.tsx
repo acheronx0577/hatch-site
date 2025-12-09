@@ -85,6 +85,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
   )
 
   const [searchOpen, setSearchOpen] = React.useState(false)
+  const [chatOpen, setChatOpen] = React.useState(false)
 
   React.useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -95,7 +96,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
       }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'h') {
         event.preventDefault()
-        setChatOpen(true)
+        setChatOpen((prev) => !prev)
       }
     }
     window.addEventListener('keydown', handler)
@@ -165,12 +166,12 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
         </main>
         <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
         <CopilotDock debug={debug} />
-        <HatchAIWidget onSend={handleWidgetSend} />
+        {chatOpen && (
+          <HatchAIWidget onSend={handleWidgetSend} />
+        )}
       </div>
     </div>
   )
 }
-function setChatOpen(arg0: boolean) {
-  throw new Error('Function not implemented.')
-}
+
 
