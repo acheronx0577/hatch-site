@@ -341,7 +341,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await refresh()
     } catch (error) {
       console.warn('Backend login failed', error)
-      const shouldFallback = (options?.allowDevFallback ?? true) && (import.meta.env.DEV || DEMO_MODE_ENABLED)
+      const shouldFallback = (options?.allowDevFallback ?? true) && import.meta.env.DEV
       if (shouldFallback) {
         const session = DEMO_MODE_ENABLED ? buildDemoSession(DEMO_ORG_ID) : buildDevSession(email)
         setDevAuth(session)
