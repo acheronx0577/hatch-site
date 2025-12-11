@@ -379,6 +379,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initialise = async () => {
       listenerRef.current?.subscription?.unsubscribe()
 
+      if (devSession) {
+        return
+      }
+
       // Restore dev/demo session if cached
       const cachedDev = readDevAuth()
       if (cachedDev) {

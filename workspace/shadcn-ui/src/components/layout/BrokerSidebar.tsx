@@ -124,7 +124,8 @@ const NAV_SECTIONS: NavSection[] = [
         roles: ['BROKER', 'ADMIN'],
         children: [
           { icon: UserCheck, label: 'Agents & Teams', path: '/broker/team', roles: ['BROKER', 'ADMIN'] },
-          { icon: GitBranch, label: 'Lead Routing', path: '/broker/lead-routing', roles: ['BROKER', 'ADMIN'] }
+          { icon: GitBranch, label: 'Lead Routing', path: '/broker/lead-routing', roles: ['BROKER', 'ADMIN'] },
+          { icon: ShieldCheck, label: 'Compliance Hub', path: '/broker/compliance', roles: ['BROKER', 'AGENT', 'ADMIN'] }
         ]
       }
     ]
@@ -155,7 +156,6 @@ const NAV_SECTIONS: NavSection[] = [
         roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
           { icon: Settings, label: 'Preferences', path: '/broker/settings', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: ShieldCheck, label: 'Compliance Hub', path: '/broker/compliance', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Lock, label: 'Audit Log', path: '/broker/audit-log', roles: ['BROKER', 'ADMIN'] },
           { icon: Bell, label: 'Notifications', path: '/broker/notifications', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Globe, label: 'View Public Site', path: '/', roles: ['BROKER', 'AGENT', 'ADMIN'] }
