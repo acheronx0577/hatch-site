@@ -112,24 +112,12 @@ export const apiClient = axios.create({
   withCredentials: true,
 })
 
-const DEFAULT_TOKEN = import.meta.env.VITE_API_TOKEN
-const DEFAULT_ORG = import.meta.env.VITE_ORG_ID || 'org-hatch'
-const DEFAULT_TENANT = import.meta.env.VITE_TENANT_ID || 'tenant-hatch'
-const DEFAULT_USER = import.meta.env.VITE_USER_ID || 'user-broker'
-const DEV_HEADER_INJECTION_ENABLED = import.meta.env.DEV && Boolean(DEFAULT_TOKEN || DEFAULT_USER)
+// NOTE: All authentication headers must come from real user sessions
+// No default headers are injected to prevent unauthorized access
 
 apiClient.interceptors.request.use((config) => {
   config.headers = config.headers ?? {}
-  // Only inject dev/test headers when explicitly running in dev. In prod we rely on real auth.
-  if (DEV_HEADER_INJECTION_ENABLED) {
-    if (DEFAULT_TOKEN && !config.headers['Authorization']) {
-      config.headers['Authorization'] = `Bearer ${DEFAULT_TOKEN}`
-    }
-    if (!config.headers['x-user-id'] && DEFAULT_USER) config.headers['x-user-id'] = DEFAULT_USER
-    if (!config.headers['x-tenant-id']) config.headers['x-tenant-id'] = DEFAULT_TENANT
-    if (!config.headers['x-org-id']) config.headers['x-org-id'] = DEFAULT_ORG
-    if (!config.headers['x-user-role']) config.headers['x-user-role'] = 'BROKER'
-  }
+  // Headers must be provided by the application's auth system
   return config
 })
 

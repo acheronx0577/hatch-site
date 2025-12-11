@@ -283,21 +283,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await withRetry(fetchSession, { retries: 1, baseDelayMs: 500 })
       applySupabaseSession(response)
     } catch (error) {
-      console.warn('Failed to refresh session', error)
-      if (import.meta.env.DEV) {
-        const cached = readDevAuth()
-        if (cached) {
-          setDevAuth(cached)
-          return
-        }
-        const email = lastSignInEmailRef.current ?? 'dev@local.dev'
-        const fallbackSession = buildDevSession(email)
-        setDevAuth(fallbackSession)
-        return
-      }
+      // Silently handle auth errors - user must authenticate manually
       applySupabaseSession(null)
     }
-  }, [applySupabaseSession, devSession, setDevAuth])
+  }, [applySupabaseSession, devSession])
 
   const setActiveOrg = useCallback(async (orgId: string | null) => {
     if (devSession) {
@@ -325,22 +314,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [setDevAuth])
 
   const signIn = useCallback(async (email: string, password: string, options?: { allowDevFallback?: boolean }) => {
-    const allowDevFallback = options?.allowDevFallback ?? true
     setStatus('loading')
     lastSignInEmailRef.current = email || lastSignInEmailRef.current
 
-    const fallback = () => {
-      if (import.meta.env.DEV && allowDevFallback) {
-        const session = buildDevSession(email)
-        setDevAuth(session)
-      } else {
-        setStatus('unauthenticated')
-      }
-    }
-
     clearDevSession()
 
-    // Try backend API login first (uses AWS Cognito)
+    // Try backend API login (uses AWS Cognito)
     try {
       const response = await backendLogin({ email, password })
 
@@ -353,12 +332,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await refresh()
     } catch (error) {
       console.warn('Backend login failed', error)
-      // Fall back to dev mode in development, or throw in production
-      if (import.meta.env.DEV && allowDevFallback) {
-        fallback()
-      } else {
-        throw error
-      }
+      setStatus('unauthenticated')
+      throw error
     }
   }, [refresh, setDevAuth, clearDevSession])
 
@@ -386,20 +361,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initialise = async () => {
       listenerRef.current?.subscription?.unsubscribe()
 
-      if (import.meta.env.DEV) {
-        const cachedDev = readDevAuth()
-        if (cachedDev) {
-          setDevSession((prev) => prev ?? cachedDev)
-          setStatus('authenticated')
-          return
-        }
-      }
+      // No auto-login - user must authenticate manually
 
       try {
         const response = await fetchSession()
         applySupabaseSession(response)
       } catch (error) {
-        console.warn('Initial session fetch failed', error)
+        // Silently handle auth errors - user is not logged in
         applySupabaseSession(null)
       }
 

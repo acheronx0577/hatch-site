@@ -39,7 +39,6 @@ const resolveApiBaseUrl = (value?: string) => {
 export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const API_TOKEN = import.meta.env.VITE_API_TOKEN;
 const CHAOS_MODE = (import.meta.env.VITE_CHAOS_MODE ?? 'false').toLowerCase() === 'true';
-const IS_DEV = import.meta.env.DEV;
 interface FetchOptions extends RequestInit {
   token?: string;
 }
@@ -57,22 +56,8 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   const isFormData =
     typeof FormData !== 'undefined' && options.body instanceof FormData;
 
-  // Only set default auth headers in development mode
-  // In production, these MUST come from authenticated session
-  if (IS_DEV) {
-    if (!headers.has('x-user-role')) {
-      headers.set('x-user-role', 'BROKER');
-    }
-    if (!headers.has('x-user-id')) {
-      headers.set('x-user-id', 'user-broker');
-    }
-    if (!headers.has('x-tenant-id')) {
-      headers.set('x-tenant-id', import.meta.env.VITE_TENANT_ID || 'tenant-hatch');
-    }
-    if (!headers.has('x-org-id')) {
-      headers.set('x-org-id', import.meta.env.VITE_ORG_ID || 'org-hatch');
-    }
-  }
+  // NOTE: Authentication headers must be provided by the application
+  // No default headers are set here to prevent unauthorized access
 
   if (!headers.has('Content-Type') && options.body && !isFormData) {
     headers.set('Content-Type', 'application/json');

@@ -15,7 +15,7 @@ export interface RequestContext {
   } | null;
 }
 
-const DEFAULT_USER_ID = 'user-agent';
+// No default user - authentication required
 const DEFAULT_ROLE = UserRole.AGENT;
 const DEFAULT_TENANT_ID = process.env.DEFAULT_TENANT_ID ?? 'tenant-hatch';
 const DEFAULT_ORG_ID = process.env.DEFAULT_ORG_ID ?? 'org-hatch';
@@ -33,7 +33,7 @@ const toTeamIds = (value?: string | string[]): string[] => {
 
 export function resolveRequestContext(req: FastifyRequest): RequestContext {
   const headers = req.headers;
-  const userId = (headers['x-user-id'] as string | undefined)?.trim() || DEFAULT_USER_ID;
+  const userId = (headers['x-user-id'] as string | undefined)?.trim() || '';
   const tenantHeader = (headers['x-tenant-id'] as string | undefined)?.trim();
   const tenantId = tenantHeader && tenantHeader.length > 0 ? tenantHeader : DEFAULT_TENANT_ID;
   const orgHeader = (headers['x-org-id'] as string | undefined)?.trim();
