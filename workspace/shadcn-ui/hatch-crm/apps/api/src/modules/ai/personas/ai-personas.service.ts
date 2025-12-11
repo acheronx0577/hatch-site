@@ -343,7 +343,7 @@ export class AiPersonasService {
       });
 
       if (results.length) {
-        const bullets = results.map((result) => {
+        const bullets = results.map((result, idx) => {
           const meta = result.meta ?? {};
           const title =
             (meta as Record<string, unknown>).title ??
@@ -351,17 +351,22 @@ export class AiPersonasService {
             (meta as Record<string, unknown>).formName ??
             (meta as Record<string, unknown>).s3Key ??
             result.entityId;
-          const s3Key = (meta as Record<string, unknown>).s3Key ?? '';
-          return `- ${title}${s3Key ? ` (${s3Key})` : ''}`;
+          return `${idx + 1}. **${title}**`;
         });
 
-        return [
-          'Here are the form contracts I found:',
-          ...bullets,
-          ...(guardrail ? ['', guardrail] : []),
-          '',
-          'Please consult your broker or attorney before using these forms.'
-        ].join('\n');
+        const parts = ['**Recommended Contracts:**\n', ...bullets];
+
+        if (guardrail) {
+          const primaryMatch = guardrail.match(/Primary: ([^\n]+)/);
+          if (primaryMatch) {
+            parts.push('\n\n**Primary Contract:**');
+            parts.push(primaryMatch[1]);
+          }
+        }
+
+        parts.push('\n\n⚠️ *Please consult your broker or attorney before using these forms.*');
+
+        return parts.join('\n');
       }
     } catch (error) {
       this.log.warn(`Failed semantic lookup: ${this.formatError(error)}`);
@@ -485,17 +490,24 @@ export class AiPersonasService {
   }
 
   private formatFormResults(entries: FormEntry[], guardrail?: string): string {
-    const lines = entries.map((entry) => {
+    const lines = entries.map((entry, idx) => {
       const jurisdiction = entry.jurisdiction ? ` [${entry.jurisdiction}]` : '';
-      return `- ${entry.title}${jurisdiction}`;
+      return `${idx + 1}. **${entry.title}**${jurisdiction}`;
     });
-    return [
-      'Here are the form contracts I found:',
-      ...lines,
-      ...(guardrail ? ['', guardrail] : []),
-      '',
-      'Please consult your broker or attorney before using these forms.'
-    ].join('\n');
+
+    const parts = ['**Recommended Contracts:**\n', ...lines];
+
+    if (guardrail) {
+      const primaryMatch = guardrail.match(/Primary: ([^\n]+)/);
+      if (primaryMatch) {
+        parts.push('\n\n**Primary Contract:**');
+        parts.push(primaryMatch[1]);
+      }
+    }
+
+    parts.push('\n\n⚠️ *Please consult your broker or attorney before using these forms.*');
+
+    return parts.join('\n');
   }
 
   private async searchFormsS3(

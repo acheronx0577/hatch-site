@@ -1355,6 +1355,8 @@ model OrgListing {
   AiCopilotActionRecommendation AiCopilotActionRecommendation[]
 
   @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, status, expiresAt])
 }
 
 model OrgListingDocument {
@@ -1405,6 +1407,8 @@ model OrgTransaction {
   AiCopilotActionRecommendation AiCopilotActionRecommendation[]
 
   @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, closingDate])
 }
 
 model OrgTransactionDocument {
@@ -1554,6 +1558,7 @@ model OrgMessage {
   attachments  OrgMessageAttachment[]
 
   @@index([organizationId, conversationId, createdAt])
+  @@index([organizationId, createdAt])
 }
 
 model OrgMessageAttachment {
@@ -1752,6 +1757,7 @@ model AgentWorkflowTask {
   transaction     OrgTransaction?          @relation("AgentWorkflowTaskTransaction", fields: [transactionId], references: [id])
 
   @@index([organizationId, agentProfileId, type])
+  @@index([organizationId, type, status])
 }
 
 model OfferIntent {
@@ -1780,6 +1786,7 @@ model OfferIntent {
 
   @@index([organizationId, listingId])
   @@index([organizationId, consumerId])
+  @@index([organizationId, status])
 }
 
 model RentalProperty {
@@ -1851,6 +1858,7 @@ model RentalLease {
   AiCopilotActionRecommendation AiCopilotActionRecommendation[]
 
   @@index([organizationId, unitId])
+  @@index([organizationId, endDate])
 }
 
 model RentalTaxSchedule {
@@ -1934,6 +1942,7 @@ model ListingSearchIndex {
 
   @@unique([organizationId, mlsNumber])
   @@index([organizationId, isActive])
+  @@index([organizationId, isActive, isRental])
   @@index([organizationId, city])
   @@index([organizationId, state])
   @@index([organizationId, postalCode])
@@ -1972,6 +1981,7 @@ model SavedSearch {
   alertEvents  SavedSearchAlertEvent[]
 
   @@index([organizationId, consumerId])
+  @@index([organizationId, frequency, alertsEnabled])
 }
 
 model SavedSearchAlertEvent {
@@ -2326,6 +2336,7 @@ model OrgFile {
 
   @@index([orgId, folderId])
   @@index([orgId, category])
+  @@index([orgId, complianceStatus])
   @@index([listingId])
   @@index([transactionId])
   @@index([leaseId])

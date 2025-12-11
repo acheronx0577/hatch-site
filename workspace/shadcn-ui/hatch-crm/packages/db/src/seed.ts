@@ -68,49 +68,58 @@ interface AiInstanceSeed {
 
 const AI_INSTANCE_DEFINITIONS: AiInstanceSeed[] = [
   {
-    id: 'ai-instance-luna',
-    templateKey: 'lead_nurse',
-    nameOverride: 'Luna (Lead Nurse)',
+    id: 'ai-instance-hatch',
+    templateKey: 'hatch_assistant',
+    nameOverride: 'Hatch',
     status: 'active',
-    autoMode: 'requires-approval',
-    userKey: 'isa',
-    settings: { idleLeadThresholdDays: 3, escalateOwner: true }
-  },
-  {
-    id: 'ai-instance-marlo',
-    templateKey: 'listing_concierge',
-    nameOverride: 'Marlo (Listing Concierge)',
-    status: 'active',
-    autoMode: 'suggest-only',
+    autoMode: 'auto-run',
     userKey: 'broker',
-    settings: { preferredChannels: ['email', 'social'] }
-  },
-  {
-    id: 'ai-instance-taryn',
-    templateKey: 'transaction_coordinator',
-    nameOverride: 'Taryn (Transaction Coordinator)',
-    status: 'active',
-    autoMode: 'requires-approval',
-    userKey: 'broker',
-    settings: { alertBeforeDeadlineHours: 24 }
-  },
-  {
-    id: 'ai-instance-atlas',
-    templateKey: 'market_analyst',
-    nameOverride: 'Atlas (Market Analyst)',
-    status: 'active',
-    autoMode: 'suggest-only',
-    userKey: 'none',
-    settings: { includeBenchmarks: true }
+    settings: { orchestrateWorkflows: true }
   },
   {
     id: 'ai-instance-echo',
     templateKey: 'agent_copilot',
-    nameOverride: 'Echo (Agent Copilot)',
+    nameOverride: 'Echo',
     status: 'active',
-    autoMode: 'requires-approval',
+    autoMode: 'auto-run',
     userKey: 'agent',
     settings: { includeFollowUps: true }
+  },
+  {
+    id: 'ai-instance-lumen',
+    templateKey: 'lead_nurse',
+    nameOverride: 'Lumen',
+    status: 'active',
+    autoMode: 'auto-run',
+    userKey: 'isa',
+    settings: { warmOutreach: true, nurtureSequences: true }
+  },
+  {
+    id: 'ai-instance-haven',
+    templateKey: 'listing_concierge',
+    nameOverride: 'Haven',
+    status: 'active',
+    autoMode: 'auto-run',
+    userKey: 'broker',
+    settings: { listingDescriptions: true, marketingCopy: true }
+  },
+  {
+    id: 'ai-instance-atlas',
+    templateKey: 'market_analyst',
+    nameOverride: 'Atlas',
+    status: 'active',
+    autoMode: 'auto-run',
+    userKey: 'none',
+    settings: { includeBenchmarks: true }
+  },
+  {
+    id: 'ai-instance-nova',
+    templateKey: 'transaction_coordinator',
+    nameOverride: 'Nova',
+    status: 'active',
+    autoMode: 'auto-run',
+    userKey: 'broker',
+    settings: { trackMilestones: true, alertBeforeDeadlineHours: 24 }
   }
 ];
 

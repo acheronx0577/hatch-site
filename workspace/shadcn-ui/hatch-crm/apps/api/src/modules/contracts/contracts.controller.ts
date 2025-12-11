@@ -10,9 +10,9 @@ import {
   ListTemplatesQueryDto,
   SearchTemplatesQueryDto,
   SendForSignatureDto,
-  UpdateContractInstanceDto
+  UpdateContractInstanceDto,
+  BulkDeleteInstancesDto
 } from './dto/contracts.dto';
-import { BulkDeleteInstancesDto } from './dto/contracts.dto';
 
 @ApiTags('contracts')
 @ApiBearerAuth()

@@ -253,4 +253,35 @@ export class ContactsController {
     }
     return this.contacts.assignOwner(id, tenantId, dto.ownerId, { notify: dto.notify ?? false, reason: dto.reason }, ctx);
   }
+
+  @Post(':id/convert-to-opportunity')
+  @Permit('contacts', 'update')
+  @ApiParam({ name: 'id', description: 'Contact identifier' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        opportunityName: { type: 'string' },
+        accountName: { type: 'string' }
+      }
+    }
+  })
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      properties: {
+        opportunity: { type: 'object' },
+        account: { type: 'object' },
+        message: { type: 'string' }
+      }
+    }
+  })
+  async convertToOpportunity(
+    @Param('id') id: string,
+    @Body() dto: { opportunityName?: string; accountName?: string },
+    @Req() req: FastifyRequest
+  ) {
+    const ctx = resolveRequestContext(req);
+    return this.contacts.convertToOpportunity(id, ctx, dto);
+  }
 }

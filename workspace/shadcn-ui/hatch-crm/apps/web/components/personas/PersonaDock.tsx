@@ -19,6 +19,7 @@ import {
 } from '@/lib/api/ai-employees';
 import type { PersonaContext } from '@/lib/personas/events';
 import type { PersonaCitation, PersonaSnippet } from '@/lib/personas/types';
+import { PersonaFace, templateToPersonaId } from './PersonaFace';
 
 type PersonaDockProps = {
   debug?: boolean;
@@ -381,6 +382,7 @@ function PersonaCard({
   onSelect: () => void;
 }) {
   const meta = getPersonaMeta(persona.template);
+  const personaId = templateToPersonaId(persona.template);
   return (
     <button
       type="button"
@@ -389,12 +391,16 @@ function PersonaCard({
         active ? 'border-slate-900 shadow-md' : 'border-slate-200 hover:border-slate-300'
       }`}
     >
-      <span
-        className={`${meta.shapeClass} inline-flex items-center justify-center text-[11px] font-semibold uppercase text-white`}
-        style={meta.shapeStyle}
-      >
-        {meta.initials}
-      </span>
+      {personaId ? (
+        <PersonaFace personaId={personaId} size="sm" animated active={active} />
+      ) : (
+        <span
+          className={`${meta.shapeClass} inline-flex items-center justify-center text-[11px] font-semibold uppercase text-white`}
+          style={meta.shapeStyle}
+        >
+          {meta.initials}
+        </span>
+      )}
       <div>
         <p className="text-sm font-semibold text-slate-900">{persona.template.displayName}</p>
         <p className="text-[11px] text-slate-500">Tone: {meta.tone ?? 'balanced'}</p>
@@ -644,7 +650,9 @@ function getPersonaMeta(template?: AiEmployeeTemplate): PersonaMeta {
   const settings = (template?.defaultSettings ?? {}) as Record<string, unknown>;
   const getString = (key: string): string | undefined => {
     const value = settings[key];
-    return typeof value === 'string' ? value : undefined;
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   };
 
   const shape = getString('avatarShape');

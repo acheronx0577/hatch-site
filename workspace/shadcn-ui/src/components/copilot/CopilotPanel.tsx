@@ -2,12 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 import { chatAiEmployee, type AiEmployeeAction } from '@/lib/api/hatch';
 import type { AiPersona } from '@/hooks/useAiEmployees';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { PERSONAS, getPersonaConfigById, type PersonaConfig, type PersonaId } from '@/lib/ai/aiPersonas';
+import { AiPersonaFace } from '@/components/ai/AiPersonaFace';
 import { cn } from '@/lib/utils';
 import { CopilotSendEmailDialog } from '@/components/copilot/CopilotSendEmailDialog';
 import { extractEmailDraft } from '@/lib/ai/emailDraft';
@@ -43,6 +45,7 @@ export function CopilotPanel({ persona, personaConfig, context, className, sende
   const [dialogRecipients, setDialogRecipients] = useState<string[]>([]);
   const [autoOpenedFromDraft, setAutoOpenedFromDraft] = useState(false);
   const details = personaConfig ?? getPersonaConfigForPersona(persona);
+  const activePersonaId = (personaConfig?.id ?? persona.template.key) as PersonaId;
 
   useEffect(() => {
     setMessages([]);
@@ -225,97 +228,62 @@ export function CopilotPanel({ persona, personaConfig, context, className, sende
 
   return (
     <>
-      <div className={cn('flex h-full flex-col rounded-2xl border bg-background shadow-xl', className)}>
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div>
-          <div className="text-sm font-semibold">{details.name}</div>
-          <div className="text-[11px] text-muted-foreground">
-            {details.tagline} · {details.specialty}
-          </div>
-        </div>
-        <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-          {channel}
-        </span>
-      </div>
-
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
-        {messages.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-muted/40 p-4 text-sm text-muted-foreground">
-            Ask {details.shortName} to summarize leads, draft outreach, or prep your next call. Your chat stays scoped to this tenant.
-          </div>
-        ) : (
-          messages.map((message) => <MessageBubble key={message.id} message={message} />)
-        )}
-      </div>
-
-      {error && (
-        <div className="mx-4 mb-2 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
-        </div>
-      )}
-
-      {instance ? (
-        <div className="border-t px-4 py-3">
-          <SuggestionRow suggestions={details.examples} persona={details} onSelect={setSuggestion} />
-          <div className="mt-2 flex flex-col gap-3">
-            <Textarea
-              ref={inputRef}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder={details.placeholder}
-              className="min-h-[44px] resize-none rounded-2xl border px-3 py-2 text-sm"
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && !event.shiftKey) {
-                  event.preventDefault();
-                  if (!input.trim()) return;
-                  void send();
-                }
-              }}
-            />
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] text-muted-foreground">Ask {details.shortName}:</p>
-              <div className="flex flex-wrap gap-1 text-[11px] text-muted-foreground">
-                {details.examples.map((example) => (
-                  <button
-                    key={example}
-                    type="button"
-                    className="rounded-full border px-2 py-0.5"
-                    onClick={() => setSuggestion(example)}
-                  >
-                    {example}
-                  </button>
-                ))}
-              </div>
+      <div className={cn('flex h-full min-h-0 flex-col', className)}>
+        {/* Messages area - flex-1 priority */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
+          {messages.length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-200 bg-muted/40 p-3 text-xs text-muted-foreground">
+              Ask {details.shortName} to summarize leads, draft outreach, or prep your next call.
             </div>
-            <div className="flex justify-end">
-              <Button disabled={!input.trim() || sending} onClick={() => void send()}>
-                {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Send
+          ) : (
+            messages.map((message) => <MessageBubble key={message.id} message={message} personaId={activePersonaId} />)
+          )}
+          {sending && <ThinkingIndicator personaId={activePersonaId} />}
+        </div>
+
+        {error && (
+          <div className="mx-3 mb-2 rounded-lg border border-red-100 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* Input area - flex-none, always visible */}
+        {instance ? (
+          <div className="flex-none border-t px-3 py-2">
+            <SuggestionRow suggestions={details.examples} persona={details} onSelect={setSuggestion} />
+            <div className="mt-1.5 flex gap-2">
+              <Textarea
+                ref={inputRef}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder={details.placeholder}
+                className="flex-1 min-h-[36px] max-h-[80px] resize-none rounded-lg border px-2 py-1.5 text-xs"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    if (!input.trim()) return;
+                    void send();
+                  }
+                }}
+              />
+              <Button
+                size="sm"
+                disabled={!input.trim() || sending}
+                onClick={() => void send()}
+                className="self-end h-9"
+              >
+                {sending ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Send'}
               </Button>
             </div>
-            <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-2 text-[11px] text-muted-foreground">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span>Need the latest response as an email?</span>
-                <Button
-                  size="xs"
-                  variant="secondary"
-                  disabled={!lastDraft && !lastAssistantMessage}
-                  onClick={handleOpenEmailDialog}
-                >
-                  Send with AI
-                </Button>
-              </div>
+          </div>
+        ) : (
+          <div className="flex-none border-t px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              <span>Provisioning...</span>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="border-t px-4 py-3 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            <span>{details.shortName} is provisioning for this tenant. You’ll be able to chat in a moment.</span>
-          </div>
-        </div>
-      )}
+        )}
       </div>
 
       <CopilotSendEmailDialog
@@ -342,13 +310,12 @@ function SuggestionRow({
 }) {
   if (!suggestions.length) return null;
   return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <span className="font-semibold uppercase tracking-wide text-slate-400">Try asking {persona.shortName}:</span>
+    <div className="flex flex-wrap items-center gap-1 text-[10px] text-muted-foreground">
       {suggestions.map((suggestion) => (
         <button
           key={suggestion}
           type="button"
-          className="rounded-full border border-dashed px-3 py-1 text-[11px] font-medium hover:border-blue-400 hover:text-blue-600"
+          className="rounded-full border border-dashed px-2 py-0.5 text-[10px] hover:border-blue-400 hover:text-blue-600"
           onClick={() => onSelect(suggestion)}
         >
           {suggestion}
@@ -358,17 +325,24 @@ function SuggestionRow({
   );
 }
 
-function MessageBubble({ message }: { message: CopilotMessage }) {
+function MessageBubble({ message, personaId }: { message: CopilotMessage; personaId?: PersonaId }) {
   return (
-    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}>
+      {message.role === 'assistant' && personaId && (
+        <div className="flex-shrink-0 mt-1">
+          <AiPersonaFace personaId={personaId} size="sm" animated active />
+        </div>
+      )}
       <div
-        className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm ${
-          message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-900'
+        className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs ${
+          message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white'
         }`}
       >
-        <p>{message.content}</p>
+        <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0 [&_*]:text-white">
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
         {message.role === 'assistant' && message.actions && message.actions.length > 0 && (
-          <div className="mt-2 space-y-1 text-xs text-slate-600">
+          <div className="mt-2 space-y-1 text-xs text-white/80">
             {message.actions.map((action) => {
               const status = (action.status ?? '').toLowerCase();
               const waitingApproval =
@@ -427,6 +401,26 @@ function InlineStatus({ status }: { status: string }) {
     <span className={`ml-2 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${variant.className}`}>
       {variant.label}
     </span>
+  );
+}
+
+function ThinkingIndicator({ personaId }: { personaId?: PersonaId }) {
+  return (
+    <div className="flex justify-start gap-2">
+      {personaId && (
+        <div className="flex-shrink-0 mt-1">
+          <AiPersonaFace personaId={personaId} size="sm" animated active />
+        </div>
+      )}
+      <div className="max-w-[85%] rounded-2xl px-3 py-2 bg-blue-500 text-white flex items-center gap-2">
+        <div className="flex gap-1">
+          <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+          <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+          <span className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+        </div>
+        <span className="text-xs text-white/80">Thinking...</span>
+      </div>
+    </div>
   );
 }
 

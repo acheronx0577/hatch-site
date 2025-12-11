@@ -15,6 +15,7 @@ import {
 } from '@hatch/db';
 
 import { AiService } from '@/modules/ai/ai.service';
+import { AiPersonasService } from '@/modules/ai/personas/ai-personas.service';
 import { RequestContext } from '@/modules/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { AuditService } from '@/modules/audit/audit.service';
@@ -112,7 +113,8 @@ export class AiEmployeesService {
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
     private readonly tools: AiToolRegistry,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly personas: AiPersonasService
   ) {
     this.collectors = new AiContextCollectors(this.prisma);
   }
@@ -476,15 +478,28 @@ export class AiEmployeesService {
 
     const history = await this.loadConversationHistory(session.id);
     const allowedTools = this.extractAllowedTools(instance.template.allowedTools);
-    const systemPrompt = this.buildSystemPrompt(instance, allowedTools);
-    const completion = await this.ai.runStructuredChat({
-      systemPrompt,
-      messages: [...history, { role: 'user', content: input.message }],
-      responseFormat: 'json_object'
-    });
 
-    const plan = this.parseAssistantPlan(completion.text, allowedTools);
-    const reply = plan.reply;
+    // Check if this is a contract/forms query and delegate to personas service
+    const lowerMsg = input.message.toLowerCase();
+    const isContractQuery = ['form', 'forms', 'contract', 'contracts', 'document', 'documents', 'paperwork'].some(kw => lowerMsg.includes(kw));
+
+    let reply: string;
+    let plan: AssistantPlan;
+    if (isContractQuery && instance.template.key === 'hatch_assistant') {
+      // Delegate to personas service for grounded docs search
+      reply = await this.personas['answerWithGroundedDocs']({ tenantId: input.tenantId, query: input.message });
+      plan = { reply, actions: [] };
+    } else {
+      const systemPrompt = this.buildSystemPrompt(instance, allowedTools);
+      const completion = await this.ai.runStructuredChat({
+        systemPrompt,
+        messages: [...history, { role: 'user', content: input.message }],
+        responseFormat: 'json_object'
+      });
+
+      plan = this.parseAssistantPlan(completion.text, allowedTools);
+      reply = plan.reply;
+    }
 
     await this.recordConversationLog({
       employeeInstanceId: instance.id,
@@ -1048,6 +1063,7 @@ export class AiEmployeesService {
   }
 
   private toTemplateDto(row: AiEmployeeTemplate): AiEmployeeTemplateDto {
+    const meta = this.extractPersonaMeta(row);
     return {
       id: row.id,
       key: row.key,
@@ -1055,7 +1071,13 @@ export class AiEmployeesService {
       description: row.description,
       systemPrompt: row.systemPrompt,
       defaultSettings: this.toRecord(row.defaultSettings),
-      allowedTools: this.extractAllowedTools(row.allowedTools)
+      allowedTools: this.extractAllowedTools(row.allowedTools),
+      canonicalKey: meta.canonicalKey,
+      personaColor: meta.personaColor,
+      avatarShape: meta.avatarShape,
+      avatarIcon: meta.avatarIcon,
+      avatarInitial: meta.avatarInitial,
+      tone: meta.tone
     };
   }
 
@@ -1134,6 +1156,74 @@ export class AiEmployeesService {
     const templateObj = this.toRecord(templateSettings);
     const instanceObj = this.toRecord(instanceSettings);
     return { ...templateObj, ...instanceObj };
+  }
+
+  private extractPersonaMeta(row: AiEmployeeTemplate) {
+    const defaults = this.toRecord(row.defaultSettings);
+    const canonicalKey = this.mapToCanonicalPersona(row.key, row.displayName);
+
+    const trim = (value: unknown): string | undefined => {
+      if (typeof value !== 'string') return undefined;
+      const v = value.trim();
+      return v.length ? v : undefined;
+    };
+
+    const canonicalDefaults: Record<
+      string,
+      Partial<Record<'personaColor' | 'avatarShape' | 'avatarIcon' | 'avatarInitial' | 'tone', string>>
+    > = {
+      hatch_assistant: { personaColor: '#2563EB', avatarShape: 'circle', avatarIcon: 'robot', avatarInitial: 'H', tone: 'professional' },
+      agent_copilot: { personaColor: '#EAB308', avatarShape: 'circle', avatarIcon: 'brain', avatarInitial: 'E', tone: 'balanced' },
+      lead_nurse: { personaColor: '#FF8A80', avatarShape: 'circle', avatarIcon: 'stethoscope', avatarInitial: 'L', tone: 'warm' },
+      listing_concierge: { personaColor: '#9B5BFF', avatarShape: 'circle', avatarIcon: 'sparkles', avatarInitial: 'H', tone: 'creative' },
+      market_analyst: { personaColor: '#FF9F43', avatarShape: 'circle', avatarIcon: 'chart-bar', avatarInitial: 'A', tone: 'analytical' },
+      transaction_coordinator: { personaColor: '#F368E0', avatarShape: 'circle', avatarIcon: 'clipboard', avatarInitial: 'N', tone: 'precise' }
+    };
+
+    const canonDefaults = canonicalKey ? canonicalDefaults[canonicalKey] ?? {} : {};
+
+    return {
+      canonicalKey,
+      personaColor: trim(defaults.personaColor) ?? (canonDefaults.personaColor as string | undefined),
+      avatarShape: (trim(defaults.avatarShape) ?? (canonDefaults.avatarShape as string | undefined)) as
+        | 'circle'
+        | 'square'
+        | 'rounded-square'
+        | 'hexagon'
+        | 'pill'
+        | undefined,
+      avatarIcon: trim(defaults.avatarIcon) ?? (canonDefaults.avatarIcon as string | undefined),
+      avatarInitial: trim(defaults.avatarInitial) ?? (canonDefaults.avatarInitial as string | undefined),
+      tone: trim(defaults.tone) ?? (canonDefaults.tone as string | undefined)
+    };
+  }
+
+  private mapToCanonicalPersona(key: string, displayName?: string | null): string | null {
+    const normalize = (value?: string | null) => (value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const candidates = [normalize(key), normalize(displayName)];
+    const map: Record<string, string> = {
+      hatchassistant: 'hatch_assistant',
+      hatch: 'hatch_assistant',
+      aibroker: 'hatch_assistant',
+      switchboard: 'hatch_assistant',
+      agentcopilot: 'agent_copilot',
+      echo: 'agent_copilot',
+      leadnurse: 'lead_nurse',
+      lumen: 'lead_nurse',
+      listingconcierge: 'listing_concierge',
+      haven: 'listing_concierge',
+      marketanalyst: 'market_analyst',
+      atlas: 'market_analyst',
+      transactioncoordinator: 'transaction_coordinator',
+      nova: 'transaction_coordinator'
+    };
+
+    for (const candidate of candidates) {
+      if (map[candidate]) return map[candidate];
+      const partial = Object.keys(map).find((keyPart) => candidate.includes(keyPart));
+      if (partial) return map[partial];
+    }
+    return null;
   }
 
   private extractAllowedTools(payload: Prisma.JsonValue | null): string[] {

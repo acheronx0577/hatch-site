@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 
 import { CopilotPanel } from './CopilotPanel';
 import { PersonaSelector } from './PersonaSelector';
+import { AiPersonaFace } from '@/components/ai/AiPersonaFace';
 import { useAiEmployees, type AiPersona } from '@/hooks/useAiEmployees';
 import { useAiActions } from '@/hooks/useAiActions';
 import { useToast } from '@/components/ui/use-toast';
@@ -54,7 +55,8 @@ export function CopilotDock({ debug = false }: { debug?: boolean }) {
   const [context, setContext] = useState<CopilotContext | undefined>(undefined);
   const [usageStats, setUsageStats] = useState<AiEmployeeUsageStats[] | null>(null);
   const [selectedKey, setSelectedKey] = useState<PersonaId | null>(PERSONAS[0]?.id ?? null);
-  const hatchPersona = useMemo(() => PERSONAS.find((p) => p.id === 'hatch_assistant'), []);
+  const [dockSize, setDockSize] = useState({ width: 520, height: 600 });
+  const [isResizing, setIsResizing] = useState(false);
   const {
     personas,
     loading: personaLoading,
@@ -264,74 +266,135 @@ export function CopilotDock({ debug = false }: { debug?: boolean }) {
     return usageStats.find((stat) => stat.personaKey === selectedConfig.id);
   }, [selectedConfig, usageStats]);
 
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = window.innerWidth - e.clientX;
+      const newHeight = window.innerHeight - e.clientY;
+      setDockSize({
+        width: Math.max(400, Math.min(800, newWidth)),
+        height: Math.max(400, Math.min(window.innerHeight * 0.9, newHeight))
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
   return (
     <>
       {!open && (
         <button
           type="button"
           aria-label="Open Hatch Copilot"
-          className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition hover:scale-[1.02]"
+          className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-40 flex h-14 sm:h-12 items-center gap-2 rounded-full bg-[#1F5FFF] px-4 sm:px-4 text-sm font-medium text-white shadow-lg antialiased transition-all duration-200 scale-100 hover:scale-105 active:scale-95"
           onClick={() => setOpen(true)}
         >
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold tracking-tight animate-pulse"
-            style={{ backgroundColor: hatchPersona?.avatarBg ?? 'rgba(37,99,235,0.14)', color: hatchPersona?.color ?? 'white' }}
-          >
-            {hatchPersona?.avatarEmoji ?? '🤖'}
-          </span>
+          <AiPersonaFace personaId="hatch_assistant" size="sm" animated />
+          <span className="hidden sm:inline">Open Copilot</span>
         </button>
       )}
 
       {open && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/30" onClick={() => setOpen(false)}>
-          <div className="pointer-events-auto w-full max-w-3xl px-4 pb-8" onClick={(event) => event.stopPropagation()}>
-            <div className="flex max-h-[80vh] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-              <ChatHeader
-                persona={selectedPersona}
-                personaConfig={selectedConfig ?? undefined}
-                context={context}
-                onClose={() => setOpen(false)}
-                onRefresh={refreshAll}
-                onViewDetails={() => setShowDetails(true)}
-                isRefreshing={isRefreshing}
-                personaError={personaError}
-              />
+        <div className="fixed bottom-0 right-0 left-0 sm:left-auto sm:bottom-6 sm:right-6 z-40 flex flex-col items-end" onClick={() => setOpen(false)}>
+          <div
+            className="pointer-events-auto w-full sm:w-auto px-0 sm:px-0 pb-0 relative"
+            style={{
+              width: window.innerWidth < 640 ? '100%' : `${dockSize.width}px`,
+              height: window.innerWidth < 640 ? '100vh' : `${dockSize.height}px`
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-t-2xl sm:rounded-[28px] border border-slate-200 bg-white shadow-2xl relative">
+              {/* Resize handle */}
+              <div
+                className="hidden sm:block absolute left-0 top-0 w-4 h-4 cursor-nwse-resize z-50 hover:bg-blue-500/20 transition-colors"
+                onMouseDown={handleResizeStart}
+                style={{
+                  borderTopLeftRadius: '28px'
+                }}
+              >
+                <svg
+                  className="absolute left-1 top-1 w-2 h-2 text-slate-400"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                >
+                  <circle cx="2" cy="2" r="1.5" />
+                  <circle cx="8" cy="2" r="1.5" />
+                  <circle cx="2" cy="8" r="1.5" />
+                </svg>
+              </div>
 
-              <>
-                <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-3 min-w-0">
-                  <PersonaSelector
-                    activeId={selectedConfig?.id ?? null}
-                    onSelect={(id) => setSelectedKey(id)}
-                    statuses={personaStatuses}
-                  />
+              {/* Compact header */}
+              <div className="flex-none border-b px-3 py-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-semibold truncate">{selectedConfig?.name ?? 'Agent Copilot'}</div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isRefreshing && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                    <button onClick={refreshAll} className="p-1 hover:bg-slate-100 rounded" title="Refresh">
+                      <RefreshCw className="h-3 w-3" />
+                    </button>
+                    <button onClick={() => setOpen(false)} className="p-1 hover:bg-slate-100 rounded" title="Close">
+                      <span className="text-xs">✕</span>
+                    </button>
+                  </div>
                 </div>
+              </div>
 
-                {context && <ContextBanner context={context} />}
-                {personaUsage && <PersonaStatsStrip usage={personaUsage} />}
+              {/* Compact persona selector */}
+              <div className="flex-none border-b border-slate-100 bg-slate-50/40 px-2 py-1.5">
+                <div className="flex gap-1 overflow-x-auto scrollbar-thin">
+                  {PERSONAS.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedKey(p.id)}
+                      className={cn(
+                        "flex-none flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition whitespace-nowrap",
+                        selectedConfig?.id === p.id
+                          ? "bg-blue-100 text-blue-700"
+                          : "bg-white text-slate-600 hover:bg-slate-100"
+                      )}
+                    >
+                      <AiPersonaFace personaId={p.id} size="sm" animated active={selectedConfig?.id === p.id} />
+                      {p.shortName}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                <div className="flex-1 overflow-hidden px-4 pb-4 pt-2">
-                  {selectedPersona && selectedConfig ? (
-                    <CopilotPanel
-                      persona={selectedPersona}
-                      personaConfig={selectedConfig}
-                      context={context}
-                      className="h-full"
+              {/* Chat area - priority */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                {selectedPersona && selectedConfig ? (
+                  <CopilotPanel
+                    persona={selectedPersona}
+                    personaConfig={selectedConfig}
+                    context={context}
+                    className="h-full"
                     senderName={senderName}
                   />
-                  ) : (
-                    <EmptyState loading={personaLoading} />
-                  )}
-                </div>
-
-                <div className="border-t border-slate-100 px-4 py-3 text-[11px] text-slate-500">
-                  <p>Agent Copilot may make mistakes. Verify important details before acting.</p>
-                  {debug && selectedPersona && (
-                    <div className="mt-2">
-                      <PromptDebug persona={selectedPersona} />
-                    </div>
-                  )}
-                </div>
-              </>
+                ) : (
+                  <EmptyState loading={personaLoading} />
+                )}
+              </div>
             </div>
           </div>
         </div>
