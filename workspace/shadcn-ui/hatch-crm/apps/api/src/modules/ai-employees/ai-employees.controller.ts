@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   Req,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
   UseGuards,
@@ -42,10 +43,13 @@ import { AiPersonaId } from './personas/registry';
 @ApiStandardErrors()
 @UseInterceptors(AuditInterceptor)
 export class AiEmployeesController {
+  private readonly log = new Logger(AiEmployeesController.name);
+
   constructor(private readonly service: AiEmployeesService) {}
 
   private ensureAiEmployeesEnabled() {
     if (!isAiEmployeesEnabled()) {
+      this.log.warn('AI Employees request blocked because the feature is disabled');
       throw new ServiceUnavailableException('AI Employees are disabled in this environment.');
     }
   }
