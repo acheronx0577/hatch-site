@@ -460,6 +460,7 @@ export class AiEmployeesService {
     const session = await this.upsertSession({
       employeeInstanceId: instance.id,
       tenantId: input.tenantId,
+      orgId: input.orgId,
       userId: input.userId,
       channel: input.channel,
       contextType: input.contextType,
@@ -831,11 +832,14 @@ export class AiEmployeesService {
   private async upsertSession(params: {
     employeeInstanceId: string;
     tenantId: string;
+    orgId: string;
     userId: string;
     channel: string;
     contextType?: string;
     contextId?: string;
   }) {
+    await this.ensureUserExists(params.userId, params.orgId, params.tenantId);
+
     const existing = await this.prisma.aiEmployeeSession.findFirst({
       where: {
         employeeInstanceId: params.employeeInstanceId,
@@ -861,6 +865,46 @@ export class AiEmployeesService {
         contextId: params.contextId ?? null
       }
     });
+  }
+
+  private async ensureUserExists(userId: string, orgId: string, tenantId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user) return;
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: { organization: true }
+    });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found for AI session');
+    }
+    const organization =
+      (await this.prisma.organization.findUnique({ where: { id: orgId } })) ?? tenant.organization;
+
+    const createdUser = await this.prisma.user.create({
+      data: {
+        id: userId,
+        email: `${userId}@autogen.local`,
+        firstName: 'AI',
+        lastName: 'User',
+        role: UserRole.BROKER,
+        organizationId: organization.id,
+        tenantId: tenant.id
+      }
+    });
+
+    const membership = await this.prisma.userOrgMembership.findUnique({
+      where: { userId_orgId: { userId: createdUser.id, orgId: organization.id } }
+    });
+    if (!membership) {
+      await this.prisma.userOrgMembership.create({
+        data: {
+          userId: createdUser.id,
+          orgId: organization.id,
+          isOrgAdmin: true
+        }
+      });
+    }
   }
 
   private buildSystemPrompt(instance: EmployeeWithTemplate, allowedTools: string[]): string {
