@@ -341,8 +341,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await refresh()
     } catch (error) {
       console.warn('Backend login failed', error)
-      if (options?.allowDevFallback && import.meta.env.DEV) {
-        const session = buildDevSession(email)
+      const shouldFallback = (options?.allowDevFallback ?? true) && (import.meta.env.DEV || DEMO_MODE_ENABLED)
+      if (shouldFallback) {
+        const session = DEMO_MODE_ENABLED ? buildDemoSession(DEMO_ORG_ID) : buildDevSession(email)
         setDevAuth(session)
         return
       }
@@ -377,6 +378,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const initialise = async () => {
       listenerRef.current?.subscription?.unsubscribe()
+
+      // Restore dev/demo session if cached
+      const cachedDev = readDevAuth()
+      if (cachedDev) {
+        setDevAuth(cachedDev)
+        return
+      }
 
       // No auto-login - user must authenticate manually
 
