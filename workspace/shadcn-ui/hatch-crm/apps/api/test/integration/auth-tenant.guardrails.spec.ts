@@ -58,23 +58,27 @@ describeIf(RUN_INTEGRATION)('Auth/Tenant guardrails - contacts & files', () => {
       request(app.getHttpServer()).post(`/contacts/${contact.id}/convert-to-opportunity`).send({
         opportunityName: 'Guardrail Opp'
       })
-    ).expect(200);
+    ).expect(201);
     expect(ok.body.opportunity).toBeDefined();
     expect(ok.body.account).toBeDefined();
 
-    await withBroker(
-      request(app.getHttpServer())
-        .post(`/contacts/${contact.id}/convert-to-opportunity`)
-        .send({})
-        .set('x-tenant-id', 'tenant-other')
-    ).expect(404);
+    await request(app.getHttpServer())
+      .post(`/contacts/${contact.id}/convert-to-opportunity`)
+      .set('Authorization', brokerAuth)
+      .set('x-tenant-id', 'tenant-other')
+      .set('x-org-id', orgId)
+      .set('x-user-role', 'BROKER')
+      .send({})
+      .expect(404);
 
-    await withBroker(
-      request(app.getHttpServer())
-        .post(`/contacts/${contact.id}/convert-to-opportunity`)
-        .send({})
-        .set('x-org-id', 'org-other')
-    ).expect(404);
+    await request(app.getHttpServer())
+      .post(`/contacts/${contact.id}/convert-to-opportunity`)
+      .set('Authorization', brokerAuth)
+      .set('x-tenant-id', tenantId)
+      .set('x-org-id', 'org-other')
+      .set('x-user-role', 'BROKER')
+      .send({})
+      .expect(404);
   });
 
   it('scopes file links by org for listings', async () => {

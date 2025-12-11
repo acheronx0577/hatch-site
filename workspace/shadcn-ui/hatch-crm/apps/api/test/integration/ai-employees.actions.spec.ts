@@ -60,7 +60,7 @@ describeIf(RUN_INTEGRATION)('AI employees - actions & usage smoke', () => {
 
     const approved = await withBroker(
       request(app.getHttpServer()).post(`/ai/employees/actions/${pending.id}/approve`).send({ note: 'looks good' })
-    ).expect(200);
+    ).expect(201);
     expect(approved.body.status).toBe('executed');
     expect(approved.body.dryRun).toBe(true);
 
@@ -77,7 +77,7 @@ describeIf(RUN_INTEGRATION)('AI employees - actions & usage smoke', () => {
 
     const rejected = await withBroker(
       request(app.getHttpServer()).post(`/ai/employees/actions/${rejectTarget.id}/reject`).send({ note: 'not safe' })
-    ).expect(200);
+    ).expect(201);
     expect(rejected.body.status).toBe('rejected');
     expect(rejected.body.errorMessage).toBe('not safe');
 
