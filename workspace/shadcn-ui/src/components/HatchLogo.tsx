@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import hatchLogo from '@/assets/brand/hatch-logo.png'
+import hatchLogo from '@/assets/brand/hatch-logo-optimized.png'
 
 type HatchLogoProps = {
   className?: string

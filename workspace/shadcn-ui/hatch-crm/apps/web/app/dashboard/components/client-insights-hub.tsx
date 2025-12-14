@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, FilterIcon, RefreshCcw, Sparkles, TrendingUp } from 'lucide-react';
+import { AlertCircle, AlertTriangle, FilterIcon, Loader2, RefreshCcw, Sparkles, TrendingUp } from 'lucide-react';
 import clsx from 'clsx';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
@@ -25,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
-import { emitCopilotContext } from '@/lib/copilot/events';
+import { emitPersonaContext } from '@/lib/personas/events';
 
 type ClientInsightsHubProps = {
   tenantId: string;
@@ -179,7 +179,7 @@ export function ClientInsightsHub({ tenantId }: ClientInsightsHubProps) {
   };
 
   useEffect(() => {
-    emitCopilotContext({
+    emitPersonaContext({
       surface: 'dashboard',
       summary: `Client insights · ${filters.period}`,
       metadata: {
@@ -191,6 +191,34 @@ export function ClientInsightsHub({ tenantId }: ClientInsightsHubProps) {
       }
     });
   }, [tenantId, filters, reengageList.length, breachQueue.length]);
+
+  const hasFiltersApplied = Boolean(filters.ownerId || filters.tier || filters.activity || filters.viewId);
+  const hasData =
+    !!payload?.summary ||
+    (payload?.trendCards?.length ?? 0) > 0 ||
+    reengageList.length > 0 ||
+    breachQueue.length > 0 ||
+    activityFeedEntries.length > 0 ||
+    (payload?.copilotInsights?.length ?? 0) > 0;
+
+  if (isLoading && !data) {
+    return <ClientInsightsLoading />;
+  }
+
+  if (isError) {
+    return <ClientInsightsError onRetry={() => refetch()} />;
+  }
+
+  if (!hasData) {
+    return (
+      <ClientInsightsEmpty
+        onRefresh={() => refetch()}
+        onResetFilters={resetFilters}
+        filtersApplied={hasFiltersApplied}
+        isRefreshing={isFetching}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -249,7 +277,7 @@ export function ClientInsightsHub({ tenantId }: ClientInsightsHubProps) {
 
       <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <AttentionPanel entries={liveFeed} />
-        <CopilotPanel insights={payload?.copilotInsights ?? []} />
+        <InsightsPanel insights={payload?.copilotInsights ?? []} />
       </div>
 
       <EngagementHeatmap
@@ -274,6 +302,114 @@ export function ClientInsightsHub({ tenantId }: ClientInsightsHubProps) {
 
       <ActivityFeed entries={activityFeedEntries} loading={isLoading && !data} />
     </div>
+  );
+}
+
+function ClientInsightsLoading() {
+  return (
+    <div className="space-y-6" data-testid="client-insights-loading">
+      <div className="space-y-2">
+        <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
+        <div className="h-8 w-64 animate-pulse rounded bg-slate-200" />
+        <div className="h-4 w-96 max-w-full animate-pulse rounded bg-slate-100" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div
+            key={index}
+            className="h-28 animate-pulse rounded-xl border border-slate-200 bg-slate-100"
+          />
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-4 w-full animate-pulse rounded bg-slate-100" />
+          ))}
+        </div>
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-4 w-full animate-pulse rounded bg-slate-100" />
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 h-4 w-32 animate-pulse rounded bg-slate-200" />
+        <div className="grid gap-4 md:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-10 animate-pulse rounded bg-slate-100" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClientInsightsError({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <Card className="space-y-4 border border-rose-200 bg-rose-50/70 p-6 shadow-sm" data-testid="client-insights-error">
+      <div className="flex items-center gap-3 text-rose-700">
+        <AlertCircle className="h-5 w-5" />
+        <div>
+          <p className="text-sm font-semibold">Unable to load insights</p>
+          <p className="text-xs text-rose-600">Check your connection and retry to keep the dashboard fresh.</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Button size="sm" className="gap-2" onClick={() => onRetry?.()}>
+          <RefreshCcw className="h-4 w-4" />
+          Retry
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => window.location.reload()}>
+          Hard reload
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+function ClientInsightsEmpty({
+  onRefresh,
+  onResetFilters,
+  filtersApplied,
+  isRefreshing
+}: {
+  onRefresh?: () => void;
+  onResetFilters: () => void;
+  filtersApplied: boolean;
+  isRefreshing: boolean;
+}) {
+  return (
+    <Card className="flex flex-col gap-3 border border-dashed border-slate-200 bg-white/80 p-6 shadow-sm" data-testid="client-insights-empty">
+      <div className="flex items-center gap-3">
+        <Sparkles className="h-5 w-5 text-emerald-600" />
+        <div>
+          <p className="text-sm font-semibold text-slate-900">No insights yet</p>
+          <p className="text-xs text-slate-600">
+            {filtersApplied
+              ? 'No results match your current filters. Try resetting or widening the timeframe.'
+              : 'We have not seen activity for this cohort yet. Refresh to pull the latest events.'}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Button size="sm" className="gap-2" onClick={() => onRefresh?.()} disabled={isRefreshing}>
+          {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
+          Refresh data
+        </Button>
+        {filtersApplied && (
+          <Button size="sm" variant="outline" onClick={onResetFilters}>
+            Clear filters
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" asChild>
+          <a href="/people">View people</a>
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -442,13 +578,13 @@ function TrendCards({
   );
 }
 
-function CopilotPanel({ insights }: { insights: InsightCopilotMessage[] }) {
+function InsightsPanel({ insights }: { insights: InsightCopilotMessage[] }) {
   return (
     <Card className="flex flex-col gap-3 border border-emerald-100 bg-emerald-50/60 p-6 shadow-sm">
       <div className="flex items-center gap-3">
         <Sparkles className="h-5 w-5 text-emerald-600" />
         <div>
-          <p className="text-sm font-semibold text-emerald-900">Copilot Insights</p>
+          <p className="text-sm font-semibold text-emerald-900">AI Insights</p>
           <p className="text-xs text-emerald-600/80">Narrative takeaways generated from live analytics.</p>
         </div>
       </div>
@@ -456,7 +592,7 @@ function CopilotPanel({ insights }: { insights: InsightCopilotMessage[] }) {
         {insights.length === 0 ? (
           <li className="flex items-center gap-2 text-xs text-emerald-700">
             <AlertTriangle className="h-4 w-4" />
-            No insights yet—log activity to train the copilot.
+            No insights yet—log activity to train the AI.
           </li>
         ) : (
           insights.map((insight, index) => (

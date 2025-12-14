@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 
 import { Loader2, RefreshCw } from 'lucide-react';
 
-import { CopilotPanel } from '@/components/copilot/CopilotPanel';
+import { PersonaChatPanel } from '@/components/personas/PersonaChatPanel';
 import { useAiEmployees, type AiPersona } from '@/hooks/use-ai-employees';
 import { useAiActions } from '@/hooks/use-ai-actions';
 import { useToast } from '@/components/ui/use-toast';
@@ -17,18 +17,19 @@ import {
   AiEmployeesDisabledError,
   getAiEmployeeUsageStats
 } from '@/lib/api/ai-employees';
-import type { CopilotCitation, CopilotSnippet } from '@/lib/ai-client';
-import type { CopilotContext } from '@/lib/copilot/events';
+import type { PersonaContext } from '@/lib/personas/events';
+import type { PersonaCitation, PersonaSnippet } from '@/lib/personas/types';
+import { PersonaFace, templateToPersonaId } from './PersonaFace';
 
-type CopilotDockProps = {
+type PersonaDockProps = {
   debug?: boolean;
   header?: ReactNode;
 };
 
-export function CopilotDock({ debug = false, header }: CopilotDockProps) {
-  const [context, setContext] = useState<CopilotContext | undefined>(undefined);
-  const [snippets, setSnippets] = useState<CopilotSnippet[]>([]);
-  const [citations, setCitations] = useState<CopilotCitation[]>([]);
+export function PersonaDock({ debug = false, header }: PersonaDockProps) {
+  const [context, setContext] = useState<PersonaContext | undefined>(undefined);
+  const [snippets, setSnippets] = useState<PersonaSnippet[]>([]);
+  const [citations, setCitations] = useState<PersonaCitation[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [usageStats, setUsageStats] = useState<AiEmployeeUsageStats[] | null>(null);
   const [usageDisabled, setUsageDisabled] = useState(false);
@@ -53,24 +54,24 @@ export function CopilotDock({ debug = false, header }: CopilotDockProps) {
 
   useEffect(() => {
     const snippetHandler = (event: Event) => {
-      const detail = (event as CustomEvent<CopilotSnippet[]>).detail ?? [];
+      const detail = (event as CustomEvent<PersonaSnippet[]>).detail ?? [];
       setSnippets(detail);
     };
     const citationHandler = (event: Event) => {
-      const detail = (event as CustomEvent<CopilotCitation[]>).detail ?? [];
+      const detail = (event as CustomEvent<PersonaCitation[]>).detail ?? [];
       setCitations(detail);
     };
     const contextHandler = (event: Event) => {
-      const detail = (event as CustomEvent<CopilotContext | undefined>).detail ?? undefined;
+      const detail = (event as CustomEvent<PersonaContext | undefined>).detail ?? undefined;
       setContext(detail);
     };
-    window.addEventListener('copilot:snippets', snippetHandler);
-    window.addEventListener('copilot:citations', citationHandler);
-    window.addEventListener('copilot:context', contextHandler);
+    window.addEventListener('persona:snippets', snippetHandler);
+    window.addEventListener('persona:citations', citationHandler);
+    window.addEventListener('persona:context', contextHandler);
     return () => {
-      window.removeEventListener('copilot:snippets', snippetHandler);
-      window.removeEventListener('copilot:citations', citationHandler);
-      window.removeEventListener('copilot:context', contextHandler);
+      window.removeEventListener('persona:snippets', snippetHandler);
+      window.removeEventListener('persona:citations', citationHandler);
+      window.removeEventListener('persona:context', contextHandler);
     };
   }, []);
 
@@ -189,7 +190,7 @@ export function CopilotDock({ debug = false, header }: CopilotDockProps) {
     return (
       <div className="flex w-full flex-col overflow-hidden rounded-xl border bg-white shadow-lg">
         <div className="border-b px-4 py-3">
-          {header ?? <span className="text-sm font-semibold text-slate-700">Hatch Copilot</span>}
+          {header ?? <span className="text-sm font-semibold text-slate-700">AI Personas</span>}
         </div>
         <DisabledNotice onRetry={refreshAll} />
       </div>
@@ -199,7 +200,7 @@ export function CopilotDock({ debug = false, header }: CopilotDockProps) {
   return (
     <div className="flex w-full flex-col overflow-hidden rounded-xl border bg-white shadow-lg">
       <div className="border-b px-4 py-3">
-        {header ?? <span className="text-sm font-semibold text-slate-700">Hatch Copilot</span>}
+          {header ?? <span className="text-sm font-semibold text-slate-700">AI Personas</span>}
       </div>
 
       <PersonaHeader
@@ -221,7 +222,7 @@ export function CopilotDock({ debug = false, header }: CopilotDockProps) {
 
       <div className="border-t px-4 py-4">
         {selectedPersona ? (
-          <CopilotPanel persona={selectedPersona} context={context} />
+          <PersonaChatPanel persona={selectedPersona} context={context} onActionsCreated={refreshActions} />
         ) : (
           <EmptyState loading={personaLoading} />
         )}
@@ -249,10 +250,10 @@ function DisabledNotice({ onRetry }: { onRetry?: () => void }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
       <p className="text-base font-semibold text-slate-900">
-        AI Employees are disabled in this environment.
+        AI Personas are disabled in this environment.
       </p>
       <p className="text-sm text-slate-500">
-        Enable the feature flag or switch environments to access Copilot.
+        Enable the feature flag or switch environments to access AI Personas.
       </p>
       {onRetry && (
         <button
@@ -283,11 +284,11 @@ function PersonaHeader({
       <div>
         <p className="text-[11px] uppercase tracking-[0.4em] text-slate-400">Persona</p>
         <p className="text-base font-semibold text-slate-900">
-          {persona?.template.displayName ?? 'Select an AI employee'}
+          {persona?.template.displayName ?? 'Select an AI persona'}
         </p>
         <p className="text-xs text-slate-500">
           {persona?.template.description ??
-            'Connect a template to this tenant to start chatting with AI employees.'}
+            'Connect a template to this tenant to start chatting with AI personas.'}
         </p>
         {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
@@ -318,7 +319,7 @@ function PersonaSwitcher({
   if (!personas.length && !loading) {
     return (
       <div className="border-t px-4 py-3 text-xs text-slate-500">
-        No AI employees assigned to this tenant yet.
+        No AI personas assigned to this tenant yet.
       </div>
     );
   }
@@ -337,7 +338,7 @@ function PersonaSwitcher({
   );
 }
 
-function ContextBanner({ context }: { context: CopilotContext }) {
+function ContextBanner({ context }: { context: PersonaContext }) {
   const entityLabel =
     context.entityType && context.entityId ? `${context.entityType} · ${context.entityId}` : context.entityId ?? null;
   return (
@@ -381,6 +382,7 @@ function PersonaCard({
   onSelect: () => void;
 }) {
   const meta = getPersonaMeta(persona.template);
+  const personaId = templateToPersonaId(persona.template);
   return (
     <button
       type="button"
@@ -389,12 +391,16 @@ function PersonaCard({
         active ? 'border-slate-900 shadow-md' : 'border-slate-200 hover:border-slate-300'
       }`}
     >
-      <span
-        className={`${meta.shapeClass} inline-flex items-center justify-center text-[11px] font-semibold uppercase text-white`}
-        style={meta.shapeStyle}
-      >
-        {meta.initials}
-      </span>
+      {personaId ? (
+        <PersonaFace personaId={personaId} size="sm" animated active={active} />
+      ) : (
+        <span
+          className={`${meta.shapeClass} inline-flex items-center justify-center text-[11px] font-semibold uppercase text-white`}
+          style={meta.shapeStyle}
+        >
+          {meta.initials}
+        </span>
+      )}
       <div>
         <p className="text-sm font-semibold text-slate-900">{persona.template.displayName}</p>
         <p className="text-[11px] text-slate-500">Tone: {meta.tone ?? 'balanced'}</p>
@@ -447,8 +453,8 @@ function ActionTray({
     <div className="border-t px-4 py-3 text-xs text-slate-600">
       <div className="mb-2 flex items-center justify-between">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Approvals</p>
-          <p className="text-sm font-semibold text-slate-900">Pending AI actions</p>
+        <p className="text-[11px] uppercase tracking-[0.3em] text-slate-400">Approvals</p>
+        <p className="text-sm font-semibold text-slate-900">Pending persona actions</p>
         </div>
         <button
           type="button"
@@ -571,8 +577,8 @@ function DebugPanel({
   snippets,
   citations
 }: {
-  snippets: CopilotSnippet[];
-  citations: CopilotCitation[];
+  snippets: PersonaSnippet[];
+  citations: PersonaCitation[];
 }) {
   return (
     <div className="space-y-2 border-t bg-slate-50 px-3 py-3 text-xs">
@@ -627,7 +633,7 @@ function EmptyState({ loading }: { loading: boolean }) {
   }
   return (
     <div className="flex flex-col items-center justify-center px-6 py-10 text-center text-sm text-slate-500">
-      Connect AI employees to this workspace to start chatting in real time.
+      Connect AI personas to this workspace to start chatting in real time.
     </div>
   );
 }
@@ -644,7 +650,9 @@ function getPersonaMeta(template?: AiEmployeeTemplate): PersonaMeta {
   const settings = (template?.defaultSettings ?? {}) as Record<string, unknown>;
   const getString = (key: string): string | undefined => {
     const value = settings[key];
-    return typeof value === 'string' ? value : undefined;
+    if (typeof value !== 'string') return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
   };
 
   const shape = getString('avatarShape');

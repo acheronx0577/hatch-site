@@ -1,4 +1,4 @@
-export type CopilotContext = {
+export type PersonaContext = {
   surface: 'dashboard' | 'lead' | 'listing' | 'transaction' | 'admin' | 'other';
   entityId?: string;
   entityType?: 'lead' | 'contact' | 'listing' | 'transaction';
@@ -6,9 +6,9 @@ export type CopilotContext = {
   metadata?: Record<string, unknown>;
 };
 
-const CONTEXT_EVENT = 'copilot:context';
+const CONTEXT_EVENT = 'persona:context';
 
-export function emitCopilotContext(context: CopilotContext) {
+export function emitPersonaContext(context: PersonaContext) {
   if (typeof window === 'undefined') {
     return;
   }

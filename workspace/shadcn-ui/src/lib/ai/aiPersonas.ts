@@ -64,9 +64,9 @@ export const PERSONAS: PersonaConfig[] = [
     tagline: 'AI broker & switchboard',
     placeholder: 'Ask Hatch anything — it will pull in Echo, Nova, and others as needed…',
     examples: [
-      'Hatch, triage my day and loop in the right teammate',
-      'Hatch, summarize compliance and ask Nova to fix gaps',
-      'Hatch, have Echo and Atlas review this listing'
+      'Triage my day and loop in the right teammate',
+      'Summarize compliance and ask Nova to fix gaps',
+      'Have Echo and Atlas review this listing'
     ],
     specialty: 'Broker-wide orchestrator that can delegate to Echo, Nova, and other AI employees.'
   },
@@ -80,7 +80,7 @@ export const PERSONAS: PersonaConfig[] = [
     avatarEmoji: '🧠',
     tagline: 'Daily briefings & next best actions',
     placeholder: 'Ask Echo to summarize your day, prioritize leads, or plan what to do next…',
-    examples: ['Echo, help prioritize my leads', 'Echo, summarize my new leads today', 'Echo, which sellers need attention this week?'],
+    examples: ['Help prioritize my leads', 'Summarize my new leads today', 'Which sellers need attention?'],
     specialty: 'High-level overview of your book of business, prioritization, and daily planning.'
   },
   {
@@ -93,7 +93,7 @@ export const PERSONAS: PersonaConfig[] = [
     avatarEmoji: '✨',
     tagline: 'Warm outreach & follow-up nurturing',
     placeholder: 'Ask Lumen to write follow-ups, check-in texts, or nurture campaigns…',
-    examples: ['Lumen, draft a warm follow-up', 'Lumen, write a check-in text', 'Lumen, create a nurturing sequence'],
+    examples: ['Draft a warm follow-up', 'Write a check-in text', 'Create a nurturing sequence'],
     specialty: 'Nurturing sequences, relationship-driven communication, and outreach messages.'
   },
   {
@@ -106,7 +106,7 @@ export const PERSONAS: PersonaConfig[] = [
     avatarEmoji: '🏡',
     tagline: 'Listing descriptions & marketing copy',
     placeholder: 'Ask Haven to write listing descriptions or highlight key features…',
-    examples: ['Haven, write a listing description', 'Haven, rewrite this to sound luxury', 'Haven, highlight features for social media'],
+    examples: ['Write a listing description', 'Rewrite this to sound luxury', 'Highlight features for social media'],
     specialty: 'Listing descriptions, marketing remarks, and property-focused copywriting.'
   },
   {
@@ -119,7 +119,7 @@ export const PERSONAS: PersonaConfig[] = [
     avatarEmoji: '📊',
     tagline: 'Local trends & pricing insight',
     placeholder: 'Ask Atlas about pricing, comps, or what’s happening in your market…',
-    examples: ['Atlas, is this listing overpriced?', 'Atlas, summarize price trends', 'Atlas, give me seller talking points'],
+    examples: ['Is this listing overpriced?', 'Summarize price trends', 'Give me seller talking points'],
     specialty: 'Explaining trends, comps, pricing context, and economic reasoning.'
   },
   {
@@ -132,7 +132,7 @@ export const PERSONAS: PersonaConfig[] = [
     avatarEmoji: '📑',
     tagline: 'Contract dates, milestones & checklists',
     placeholder: 'Ask Nova about key dates, contingencies, or deal steps…',
-    examples: ['Nova, summarize the key dates for 123 Main St', 'Nova, what contingencies are open?', 'Nova, create a closing checklist'],
+    examples: ['Summarize key dates for this deal', 'What contingencies are open?', 'Create a closing checklist'],
     specialty: 'Tracking contract dates, contingencies, and transaction milestones so nothing falls through the cracks.'
   }
 ];

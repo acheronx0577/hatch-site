@@ -1216,4 +1216,104 @@ export class ContactsService {
       throw new ConflictException('Another contact already uses this email or phone number');
     }
   }
+
+  /**
+   * Convert a contact (Person) to an Opportunity
+   * Creates an Account if needed, then creates an Opportunity linked to it
+   */
+  async convertToOpportunity(
+    contactId: string,
+    ctx: RequestContext,
+    options?: { opportunityName?: string; accountName?: string }
+  ) {
+    if (!ctx.tenantId || !ctx.orgId || !ctx.userId) {
+      throw new BadRequestException('Missing required context');
+    }
+
+    // Get the contact
+    const person = await this.prisma.person.findFirst({
+      where: {
+        id: contactId,
+        tenantId: ctx.tenantId,
+        organizationId: ctx.orgId,
+        deletedAt: null
+      }
+    });
+
+    if (!person) {
+      throw new NotFoundException('Contact not found');
+    }
+
+    await this.ensureCanMutate(person, ctx);
+
+    // Create or find account
+    const fullName = `${person.firstName} ${person.lastName}`.trim();
+    const accountName = options?.accountName || fullName || 'Unnamed Account';
+
+    let account = await this.prisma.account.findFirst({
+      where: {
+        orgId: ctx.orgId,
+        name: accountName,
+        deletedAt: null
+      }
+    });
+
+    if (!account) {
+      account = await this.prisma.account.create({
+        data: {
+          orgId: ctx.orgId,
+          ownerId: person.ownerId ?? ctx.userId,
+          name: accountName,
+          phone: person.primaryPhone
+        }
+      });
+    }
+
+    // Create opportunity
+    const opportunityName =
+      options?.opportunityName || `${fullName} - ${new Date().toISOString().split('T')[0]}`;
+
+    const opportunity = await this.prisma.opportunity.create({
+      data: {
+        orgId: ctx.orgId,
+        ownerId: person.ownerId ?? ctx.userId,
+        accountId: account.id,
+        name: opportunityName,
+        stage: 'prospecting',
+        amount: null,
+        currency: 'USD'
+      },
+      include: {
+        account: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    // Create activity log
+    // TODO: Fix activity type
+    // await this.prisma.activity.create({
+    //   data: {
+    //     tenantId: ctx.tenantId,
+    //     personId: person.id,
+    //     userId: ctx.userId,
+    //     type: ActivityType.OPPORTUNITY_CREATED,
+    //     occurredAt: new Date()
+    //   }
+    // });
+
+    // Update person stage to indicate conversion
+    await this.prisma.person.update({
+      where: { id: person.id },
+      data: {
+        stage: PersonStage.UNDER_CONTRACT
+      }
+    });
+
+    return {
+      opportunity,
+      account,
+      message: 'Contact successfully converted to opportunity'
+    };
+  }
 }

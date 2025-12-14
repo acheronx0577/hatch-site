@@ -1355,6 +1355,8 @@ model OrgListing {
   AiCopilotActionRecommendation AiCopilotActionRecommendation[]
 
   @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, status, expiresAt])
 }
 
 model OrgListingDocument {
@@ -1405,6 +1407,8 @@ model OrgTransaction {
   AiCopilotActionRecommendation AiCopilotActionRecommendation[]
 
   @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([organizationId, closingDate])
 }
 
 model OrgTransactionDocument {
@@ -1554,6 +1558,7 @@ model OrgMessage {
   attachments  OrgMessageAttachment[]
 
   @@index([organizationId, conversationId, createdAt])
+  @@index([organizationId, createdAt])
 }
 
 model OrgMessageAttachment {
@@ -1752,6 +1757,7 @@ model AgentWorkflowTask {
   transaction     OrgTransaction?          @relation("AgentWorkflowTaskTransaction", fields: [transactionId], references: [id])
 
   @@index([organizationId, agentProfileId, type])
+  @@index([organizationId, type, status])
 }
 
 model OfferIntent {
@@ -1780,6 +1786,7 @@ model OfferIntent {
 
   @@index([organizationId, listingId])
   @@index([organizationId, consumerId])
+  @@index([organizationId, status])
 }
 
 model RentalProperty {
@@ -1851,6 +1858,7 @@ model RentalLease {
   AiCopilotActionRecommendation AiCopilotActionRecommendation[]
 
   @@index([organizationId, unitId])
+  @@index([organizationId, endDate])
 }
 
 model RentalTaxSchedule {
@@ -1934,6 +1942,7 @@ model ListingSearchIndex {
 
   @@unique([organizationId, mlsNumber])
   @@index([organizationId, isActive])
+  @@index([organizationId, isActive, isRental])
   @@index([organizationId, city])
   @@index([organizationId, state])
   @@index([organizationId, postalCode])
@@ -1972,6 +1981,7 @@ model SavedSearch {
   alertEvents  SavedSearchAlertEvent[]
 
   @@index([organizationId, consumerId])
+  @@index([organizationId, frequency, alertsEnabled])
 }
 
 model SavedSearchAlertEvent {
@@ -2326,6 +2336,7 @@ model OrgFile {
 
   @@index([orgId, folderId])
   @@index([orgId, category])
+  @@index([orgId, complianceStatus])
   @@index([listingId])
   @@index([transactionId])
   @@index([leaseId])
@@ -3584,8 +3595,7 @@ model Deal {
   tenantId           String
   personId           String
   companyId          String?
-  /// TODO(migrate): enforce NOT NULL + ON DELETE CASCADE
-  listingId          String?
+  listingId          String
   agreementId        String?
   opportunityId      String?
   /// TODO(migrate): ensure stage remains NOT NULL with default 'OFFER'
@@ -3602,8 +3612,7 @@ model Deal {
   tenant             Tenant             @relation(fields: [tenantId], references: [id])
   person             Person             @relation(fields: [personId], references: [id])
   company            Company?           @relation(fields: [companyId], references: [id])
-  /// TODO(migrate): re_transactions.listingId ON DELETE CASCADE
-  listing            Listing?           @relation(fields: [listingId], references: [id])
+  listing            Listing?           @relation(fields: [listingId], references: [id], onDelete: Cascade)
   agreement          Agreement?         @relation(fields: [agreementId], references: [id])
   offers             Offer[]
   activities         Activity[]
@@ -3619,21 +3628,18 @@ model Deal {
 model Offer {
   id        String      @id @default(cuid())
   tenantId  String
-  /// TODO(migrate): enforce NOT NULL + ON DELETE CASCADE
   listingId String
   personId  String
   dealId    String?
-  /// TODO(migrate): ensure NOT NULL default 'SUBMITTED'
   status    OfferStatus @default(SUBMITTED)
-  /// TODO(migrate): persist scalar amount column (NOT NULL) alongside terms JSON
   terms     Json
+  amount    Decimal     @db.Decimal(18, 2) @default(0)
   version   Int         @default(1)
   metadata  Json?
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
   tenant    Tenant      @relation(fields: [tenantId], references: [id])
-  /// TODO(migrate): re_offers.listingId ON DELETE CASCADE
-  listing   Listing     @relation(fields: [listingId], references: [id])
+  listing   Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
   person    Person      @relation(fields: [personId], references: [id])
   deal      Deal?       @relation(fields: [dealId], references: [id])
   /// TODO(migrate): partial unique index enforcing a single ACCEPTED offer per listing
@@ -4746,4 +4752,141 @@ model BatchEvent {
   payload    Json
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+// ============================================
+// EXTERNAL MARKET DATA MODELS (Atlas/MLS)
+// ============================================
+
+/// External MLS listings from data feeds (not tenant-specific)
+/// This is the source of truth for Atlas market analysis
+model MlsListing {
+  id              String    @id @default(cuid())
+  mlsId           String    @unique // External MLS ID
+  mlsSource       String    // e.g., "NABOR", "Stellar", "Bright"
+
+  // Address
+  addressLine1    String
+  addressLine2    String?
+  city            String
+  state           String
+  postalCode      String
+  county          String?
+  latitude        Float?
+  longitude       Float?
+
+  // Property details
+  listPrice       Decimal?
+  bedrooms        Int?
+  bathrooms       Float?
+  squareFeet      Int?
+  lotSize         Int?      // Square feet
+  yearBuilt       Int?
+  propertyType    String?   // e.g., "Single Family", "Condo", "Townhouse"
+  propertySubType String?
+
+  // Listing metadata
+  status          String    // e.g., "ACTIVE", "PENDING", "SOLD", "WITHDRAWN"
+  listingDate     DateTime?
+  statusChangeDate DateTime?
+  daysOnMarket    Int?
+
+  // Additional details
+  description     String?
+  photoUrls       String[]  // Array of photo URLs
+  virtualTourUrl  String?
+
+  // Agent/Office info
+  listingAgentName   String?
+  listingOfficeName  String?
+
+  // System metadata
+  importedAt      DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([city, state, status])
+  @@index([listPrice, bedrooms, bathrooms])
+  @@index([status, listingDate])
+  @@index([mlsSource])
+}
+
+/// Sold properties (comparables) from external data feeds
+/// Used for pricing analysis and market comps
+model MarketComparable {
+  id              String    @id @default(cuid())
+  mlsId           String?   // External MLS ID (if available)
+  mlsSource       String    // e.g., "NABOR", "Stellar", "Public Records"
+
+  // Address
+  addressLine1    String
+  addressLine2    String?
+  city            String
+  state           String
+  postalCode      String
+  county          String?
+  latitude        Float?
+  longitude       Float?
+
+  // Property details
+  salePrice       Decimal   // Actual sale price
+  originalListPrice Decimal? // Original list price
+  bedrooms        Int?
+  bathrooms       Float?
+  squareFeet      Int?
+  lotSize         Int?
+  yearBuilt       Int?
+  propertyType    String?
+
+  // Sale metadata
+  saleDate        DateTime  // Closing date
+  daysOnMarket    Int?
+
+  // System metadata
+  importedAt      DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([city, state, saleDate])
+  @@index([salePrice, bedrooms, bathrooms])
+  @@index([saleDate])
+  @@index([mlsSource])
+}
+
+/// Aggregated market statistics by geography
+/// Pre-calculated metrics for faster Atlas queries
+model MarketMetrics {
+  id                String    @id @default(cuid())
+
+  // Geography
+  city              String
+  state             String
+  postalCode        String?
+  county            String?
+
+  // Time period
+  periodStart       DateTime
+  periodEnd         DateTime
+  granularity       String    // e.g., "DAILY", "WEEKLY", "MONTHLY"
+
+  // Inventory metrics
+  activeListings    Int       @default(0)
+  newListings       Int       @default(0)
+  pendingListings   Int       @default(0)
+  soldListings      Int       @default(0)
+
+  // Price metrics
+  medianListPrice   Decimal?
+  medianSalePrice   Decimal?
+  avgListPrice      Decimal?
+  avgSalePrice      Decimal?
+
+  // Market velocity
+  avgDaysOnMarket   Int?
+  inventoryMonths   Float?    // Months of inventory
+
+  // System metadata
+  calculatedAt      DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([city, state, postalCode, periodStart, granularity])
+  @@index([city, state, periodStart])
 }

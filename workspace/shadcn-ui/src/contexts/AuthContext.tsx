@@ -11,6 +11,7 @@ import React, {
 } from 'react'
 import { supabase } from '@/lib/api/client'
 import { fetchSession, type SessionMembership, type SessionResponse } from '@/lib/api/session'
+import { login as backendLogin } from '@/lib/api/auth'
 
 interface AuthContextValue {
   loading: boolean
@@ -38,6 +39,7 @@ const DEV_TENANT_ID = import.meta.env.VITE_TENANT_ID || 'tenant-hatch'
 const DEV_ORG_ID = import.meta.env.VITE_ORG_ID || 'org-hatch'
 const SIGN_IN_TIMEOUT_MS = Number(import.meta.env.VITE_SUPABASE_SIGNIN_TIMEOUT_MS ?? 8000)
 const DEV_AUTH_CACHE_KEY = 'hatch_dev_auth'
+const AUTH_STORAGE_KEY = 'hatch_auth_tokens'
 const DEMO_MODE_ENABLED = (import.meta.env.VITE_DEMO_MODE ?? 'false').toLowerCase() === 'true'
 const DEMO_ORG_ID = import.meta.env.VITE_DEMO_ORG_ID || DEV_ORG_ID
 const CAN_CACHE_AUTH = import.meta.env.DEV || DEMO_MODE_ENABLED
@@ -282,21 +284,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await withRetry(fetchSession, { retries: 1, baseDelayMs: 500 })
       applySupabaseSession(response)
     } catch (error) {
-      console.warn('Failed to refresh session', error)
-      if (import.meta.env.DEV) {
-        const cached = readDevAuth()
-        if (cached) {
-          setDevAuth(cached)
-          return
-        }
-        const email = lastSignInEmailRef.current ?? 'dev@local.dev'
-        const fallbackSession = buildDevSession(email)
-        setDevAuth(fallbackSession)
-        return
-      }
+      // Silently handle auth errors - user must authenticate manually
       applySupabaseSession(null)
     }
-  }, [applySupabaseSession, devSession, setDevAuth])
+  }, [applySupabaseSession, devSession])
 
   const setActiveOrg = useCallback(async (orgId: string | null) => {
     if (devSession) {
@@ -324,46 +315,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [setDevAuth])
 
   const signIn = useCallback(async (email: string, password: string, options?: { allowDevFallback?: boolean }) => {
-    const allowDevFallback = options?.allowDevFallback ?? true
     setStatus('loading')
     lastSignInEmailRef.current = email || lastSignInEmailRef.current
 
-    const fallback = () => {
-      if (import.meta.env.DEV && allowDevFallback) {
-        const session = buildDevSession(email)
-        setDevAuth(session)
-      } else {
-        setStatus('unauthenticated')
-      }
-    }
-
     clearDevSession()
 
-    const authOperation = () => supabase.auth.signInWithPassword({ email, password })
-    const authPromise = withRetry(authOperation, { retries: 1, baseDelayMs: 600 })
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('supabase_signin_timeout')), SIGN_IN_TIMEOUT_MS)
-    })
-
-    let authResponse: Awaited<ReturnType<typeof supabase.auth.signInWithPassword>>
+    // Try backend API login (uses AWS Cognito)
     try {
-      authResponse = await Promise.race([authPromise, timeoutPromise])
-    } catch (error) {
-      console.warn('Supabase sign-in failed', error)
-      fallback()
-      return
-    }
+      const response = await backendLogin({ email, password })
 
-    if (authResponse.error) {
-      console.error('Supabase sign-in error', authResponse.error)
-      throw authResponse.error
-    }
+      // Store tokens in localStorage
+      localStorage.setItem('accessToken', response.accessToken)
+      localStorage.setItem('refreshToken', response.refreshToken)
+      localStorage.setItem(
+        AUTH_STORAGE_KEY,
+        JSON.stringify({
+          accessToken: response.accessToken,
+          refreshToken: response.refreshToken,
+          user: { id: response.user.id, role: response.user.role }
+        })
+      )
 
-    setDevAuth(null)
-    try {
+      // Refresh session to pick up the new tokens
+      setDevAuth(null)
       await refresh()
     } catch (error) {
-      console.warn('Post sign-in refresh failed', error)
+      console.warn('Backend login failed', error)
+      const shouldFallback = (options?.allowDevFallback ?? true) && import.meta.env.DEV
+      if (shouldFallback) {
+        const session = DEMO_MODE_ENABLED ? buildDemoSession(DEMO_ORG_ID) : buildDevSession(email)
+        setDevAuth(session)
+        return
+      }
+      setStatus('unauthenticated')
+      throw error
     }
   }, [refresh, setDevAuth, clearDevSession])
 
@@ -372,6 +357,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setDevAuth(null)
       return
     }
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('refreshToken')
+    localStorage.removeItem(AUTH_STORAGE_KEY)
     await supabase.auth.signOut()
     applySupabaseSession(null)
   }, [devSession, setDevAuth, applySupabaseSession])
@@ -391,20 +379,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const initialise = async () => {
       listenerRef.current?.subscription?.unsubscribe()
 
-      if (import.meta.env.DEV) {
-        const cachedDev = readDevAuth()
-        if (cachedDev) {
-          setDevSession((prev) => prev ?? cachedDev)
-          setStatus('authenticated')
-          return
-        }
+      if (devSession) {
+        return
       }
+
+      // Restore dev/demo session if cached
+      const cachedDev = readDevAuth()
+      if (cachedDev) {
+        setDevAuth(cachedDev)
+        return
+      }
+
+      // No auto-login - user must authenticate manually
 
       try {
         const response = await fetchSession()
         applySupabaseSession(response)
       } catch (error) {
-        console.warn('Initial session fetch failed', error)
+        // Silently handle auth errors - user is not logged in
         applySupabaseSession(null)
       }
 

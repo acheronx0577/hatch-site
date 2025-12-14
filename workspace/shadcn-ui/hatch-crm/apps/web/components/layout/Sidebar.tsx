@@ -48,6 +48,8 @@ const NAV: NavItem[] = [
   { href: '/dashboard/offer-intents', label: 'Offer Intents', icon: Route, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/contracts', label: 'Contracts', icon: FileSignature, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/leads', label: 'Leads & CRM', icon: UserCircle2, roles: ['BROKER', 'AGENT', 'ADMIN'] },
+  { href: '/accounts', label: 'Accounts', icon: Building2, roles: ['BROKER', 'AGENT', 'ADMIN'] },
+  { href: '/opportunities', label: 'Opportunities', icon: TrendingUp, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/compliance', label: 'Risk & Compliance', icon: ShieldCheck, roles: ['BROKER', 'ADMIN'] },
   { href: '/dashboard/notifications', label: 'Notifications', icon: Bell, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/team', label: 'Team', icon: Users, roles: ['BROKER', 'ADMIN'] },

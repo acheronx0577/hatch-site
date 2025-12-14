@@ -10,7 +10,15 @@ import { AiService } from '../ai.service';
 import { PERSONAS, HANDOFF_TEMPLATE } from './ai-personas.config';
 import { buildSystemPromptForPersona } from './ai-personas.prompts';
 import { AiPersonaRouterService } from './ai-personas.router';
-import { buildEchoCrmContext } from './ai-personas.crm-context';
+import {
+  buildEchoCrmContext,
+  buildEnhancedEchoContext,
+  buildLumenContext,
+  buildNovaContext,
+  buildHavenContext,
+  buildAtlasContext,
+  buildMissionControlMetrics
+} from './ai-personas.crm-context';
 import { loadAiMemories, recordAiMemory } from './ai-personas.memory';
 import type { PersonaChatMessage, PersonaChatResponse, PersonaId } from './ai-personas.types';
 
@@ -96,32 +104,57 @@ export class AiPersonasService {
 
   async handleChatMessage(input: {
     tenantId: string;
+    orgId: string;
     text: string;
     currentPersonaId: PersonaId;
     history: ChatHistory;
     forceCurrentPersona?: boolean;
   }): Promise<PersonaChatResponse> {
-    const { text, currentPersonaId, history, tenantId, forceCurrentPersona } = input;
+    const { text, currentPersonaId, history, tenantId, orgId, forceCurrentPersona } = input;
     const lowerText = text.toLowerCase();
-    const forceHatch =
-      ['form', 'forms', 'contract', 'contracts', 'document', 'documents', 'paperwork'].some((kw) =>
-        lowerText.includes(kw)
-      ) || lowerText.includes('naples') || lowerText.includes('florida') || /\bfl\b/.test(lowerText);
+    const hasContractKeyword = ['form', 'forms', 'contract', 'contracts', 'document', 'documents', 'paperwork'].some((kw) =>
+      lowerText.includes(kw)
+    );
+    const hasGeography = lowerText.includes('naples') || lowerText.includes('florida') || /\bfl\b/.test(lowerText);
+
+    this.log.debug(`[SERVICE] Query: "${text}"`);
+    this.log.debug(`[SERVICE] hasContractKeyword: ${hasContractKeyword}, hasGeography: ${hasGeography}`);
+
+    // Only force Hatch if query is actually about contracts/forms
+    // Don't force just because geography is mentioned (e.g., "analyze naples market" should go to Atlas)
+    const forceHatch = hasContractKeyword;
+
+    this.log.debug(`[SERVICE] forceHatch: ${forceHatch}, forceCurrentPersona: ${forceCurrentPersona}`);
 
     const routing = forceCurrentPersona
       ? { targetPersonaId: currentPersonaId, reason: 'persona override' }
       : forceHatch
-        ? { targetPersonaId: 'hatch_assistant', reason: 'forms/location override' }
+        ? { targetPersonaId: 'hatch_assistant', reason: 'forms/contracts override' }
         : await this.router.routeMessage(currentPersonaId, text);
+
+    this.log.debug(`[SERVICE] Routing result: ${routing.targetPersonaId} - ${routing.reason}`);
+
     const persona = PERSONAS.find((candidate) => candidate.id === routing.targetPersonaId) ?? PERSONAS[0];
     const wantsForms =
       persona.id === 'hatch_assistant' &&
       ['nabor', 'far-bar', 'far bar', 'contract', 'form'].some((keyword) => lowerText.includes(keyword));
 
-    const [crmContext, memoryContext] = await Promise.all([
-      this.safeBuildCrmContext(persona.id === 'agent_copilot', tenantId),
+    // Check if user is asking about metrics/performance
+    const wantsMetrics = this.isMetricsQuery(text);
+
+    const [baseCrmContext, metricsContext, memoryContext] = await Promise.all([
+      this.safeBuildCrmContext(persona.id, orgId, text),
+      wantsMetrics ? this.safeBuildMetrics(tenantId) : Promise.resolve(undefined),
       this.safeLoadMemories(tenantId)
     ]);
+
+    // Combine CRM context with metrics if available
+    let crmContext = baseCrmContext;
+    if (metricsContext && baseCrmContext) {
+      crmContext = `${baseCrmContext}\n\n## Business Metrics\n${metricsContext}`;
+    } else if (metricsContext) {
+      crmContext = `## Business Metrics\n${metricsContext}`;
+    }
 
     const prompt = buildSystemPromptForPersona(persona, { crmContext, memoryContext });
     const messages = history.slice(-10);
@@ -181,15 +214,114 @@ export class AiPersonasService {
     }
   }
 
-  private async safeBuildCrmContext(isEcho: boolean, tenantId: string): Promise<string | undefined> {
-    if (!isEcho) {
+  private async safeBuildCrmContext(
+    personaId: PersonaId,
+    orgId: string,
+    messageText: string
+  ): Promise<string | undefined> {
+    try {
+      switch (personaId) {
+        case 'agent_copilot': // Echo - Enhanced context with opportunities, transactions, metrics
+          return await buildEnhancedEchoContext(this.prisma, orgId);
+
+        case 'lead_nurse': // Lumen - Contact details for email drafting
+          // Extract contact name/email from message if mentioned
+          const contactQuery = this.extractContactQuery(messageText);
+          return await buildLumenContext(this.prisma, orgId, contactQuery);
+
+        case 'transaction_coordinator': // Nova - Transaction coordination
+          return await buildNovaContext(this.prisma, orgId);
+
+        case 'listing_concierge': // Haven - Listing copywriting
+          const listingQuery = this.extractListingQuery(messageText);
+          return await buildHavenContext(this.prisma, orgId, listingQuery);
+
+        case 'market_analyst': // Atlas - Market analysis
+          this.log.debug('[SERVICE] Building Atlas context...');
+          const atlasContext = await buildAtlasContext(this.prisma, orgId);
+          this.log.debug(`[SERVICE] Atlas context length: ${atlasContext?.length ?? 0} chars`);
+          return atlasContext;
+
+        case 'hatch_assistant': // Hatch - Use basic CRM context for orchestration
+          return await buildEchoCrmContext(this.prisma, orgId);
+
+        default:
+          // Other personas don't need CRM context yet
+          return undefined;
+      }
+    } catch (error) {
+      this.log.warn(`Failed to build CRM context for ${personaId}: ${this.formatError(error)}`);
       return undefined;
     }
+  }
 
+  private extractContactQuery(messageText: string): string | undefined {
+    // Look for patterns like "draft email to John", "email Sarah", "contact about Mike"
+    const patterns = [
+      /(?:email|write|draft|send|contact|reach out to|message)\s+(?:to\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+      /(?:about|regarding|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+      /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/
+    ];
+
+    for (const pattern of patterns) {
+      const match = messageText.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+
+    return undefined;
+  }
+
+  private extractListingQuery(messageText: string): string | undefined {
+    // Look for patterns like "listing at 123 Main St", "property on Oak Ave", MLS numbers, etc.
+    const patterns = [
+      /(?:listing|property)\s+(?:at|on|for)\s+([0-9]+\s+[A-Za-z\s]+(?:st|street|ave|avenue|rd|road|dr|drive|ln|lane|ct|court|blvd|boulevard))/i,
+      /(?:mls|mls#|mls\s+#)\s*:?\s*([A-Z0-9-]+)/i,
+      /([0-9]+\s+[A-Za-z\s]+(?:st|street|ave|avenue|rd|road|dr|drive|ln|lane|ct|court|blvd|boulevard))/i
+    ];
+
+    for (const pattern of patterns) {
+      const match = messageText.match(pattern);
+      if (match && match[1]) {
+        return match[1].trim();
+      }
+    }
+
+    return undefined;
+  }
+
+  private isMetricsQuery(messageText: string): boolean {
+    const lowerText = messageText.toLowerCase();
+    const metricsKeywords = [
+      'how many',
+      'count',
+      'total',
+      'revenue',
+      'performance',
+      'metrics',
+      'dashboard',
+      'stats',
+      'statistics',
+      'deals',
+      'opportunities',
+      'listings',
+      'transactions',
+      'closings',
+      'pending',
+      'active leads',
+      'pipeline',
+      'business'
+    ];
+
+    return metricsKeywords.some(keyword => lowerText.includes(keyword));
+  }
+
+  private async safeBuildMetrics(tenantId: string): Promise<string | undefined> {
     try {
-      return await buildEchoCrmContext(this.prisma, tenantId);
+      return await buildMissionControlMetrics(this.prisma, tenantId);
     } catch (error) {
-      this.log.warn(`Failed to build CRM context: ${this.formatError(error)}`);
+      this.log.warn(`Failed to build Mission Control metrics: ${this.formatError(error)}`);
       return undefined;
     }
   }
@@ -211,7 +343,7 @@ export class AiPersonasService {
       });
 
       if (results.length) {
-        const bullets = results.map((result) => {
+        const bullets = results.map((result, idx) => {
           const meta = result.meta ?? {};
           const title =
             (meta as Record<string, unknown>).title ??
@@ -219,17 +351,22 @@ export class AiPersonasService {
             (meta as Record<string, unknown>).formName ??
             (meta as Record<string, unknown>).s3Key ??
             result.entityId;
-          const s3Key = (meta as Record<string, unknown>).s3Key ?? '';
-          return `- ${title}${s3Key ? ` (${s3Key})` : ''}`;
+          return `${idx + 1}. **${title}**`;
         });
 
-        return [
-          'Here are the form contracts I found:',
-          ...bullets,
-          ...(guardrail ? ['', guardrail] : []),
-          '',
-          'Please consult your broker or attorney before using these forms.'
-        ].join('\n');
+        const parts = ['**Recommended Contracts:**\n', ...bullets];
+
+        if (guardrail) {
+          const primaryMatch = guardrail.match(/Primary: ([^\n]+)/);
+          if (primaryMatch) {
+            parts.push('\n\n**Primary Contract:**');
+            parts.push(primaryMatch[1]);
+          }
+        }
+
+        parts.push('\n\n⚠️ *Please consult your broker or attorney before using these forms.*');
+
+        return parts.join('\n');
       }
     } catch (error) {
       this.log.warn(`Failed semantic lookup: ${this.formatError(error)}`);
@@ -353,17 +490,24 @@ export class AiPersonasService {
   }
 
   private formatFormResults(entries: FormEntry[], guardrail?: string): string {
-    const lines = entries.map((entry) => {
+    const lines = entries.map((entry, idx) => {
       const jurisdiction = entry.jurisdiction ? ` [${entry.jurisdiction}]` : '';
-      return `- ${entry.title}${jurisdiction}`;
+      return `${idx + 1}. **${entry.title}**${jurisdiction}`;
     });
-    return [
-      'Here are the form contracts I found:',
-      ...lines,
-      ...(guardrail ? ['', guardrail] : []),
-      '',
-      'Please consult your broker or attorney before using these forms.'
-    ].join('\n');
+
+    const parts = ['**Recommended Contracts:**\n', ...lines];
+
+    if (guardrail) {
+      const primaryMatch = guardrail.match(/Primary: ([^\n]+)/);
+      if (primaryMatch) {
+        parts.push('\n\n**Primary Contract:**');
+        parts.push(primaryMatch[1]);
+      }
+    }
+
+    parts.push('\n\n⚠️ *Please consult your broker or attorney before using these forms.*');
+
+    return parts.join('\n');
   }
 
   private async searchFormsS3(

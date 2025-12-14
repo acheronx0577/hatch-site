@@ -10,6 +10,7 @@ import {
   AccountingSyncStatus,
   NotificationType,
   OrgEventType,
+  PlaybookTriggerType,
   UserRole
 } from '@hatch/db';
 
@@ -23,7 +24,6 @@ import { AuditService } from '../audit/audit.service';
 import { ConnectAccountingDto } from './dto/connect-accounting.dto';
 import { DemoConfig } from '@/config/demo.config';
 import { PlaybookRunnerService } from '../playbooks/playbook-runner.service';
-import { PlaybookTriggerType } from '@hatch/db';
 
 @Injectable()
 export class OrgAccountingService {

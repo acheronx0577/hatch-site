@@ -1,4 +1,4 @@
-import { forwardRef, Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, NotFoundException, forwardRef, Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { z } from 'zod';
 import { addDays, subDays, differenceInCalendarDays } from 'date-fns';
 
@@ -17,6 +17,7 @@ import { MessagesService } from '@/modules/messages/messages.service';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { RequestContext } from '@/modules/common';
 import { AiToolContext, AiToolRegistry, type AiToolDefinition } from './ai-tool.registry';
+import { AiEmployeesService } from './ai-employees.service';
 
 const leadNoteSchema = z.object({
   leadId: z.string().min(1),
@@ -40,7 +41,9 @@ const leadStageSchema = z.object({
 type LeadStageInput = z.infer<typeof leadStageSchema>;
 
 const leadContextSchema = z.object({
-  leadId: z.string().min(1)
+  leadId: z.string().min(1).optional(),
+  id: z.string().min(1).optional(),
+  personId: z.string().min(1).optional()
 });
 
 const emailSchema = z.object({
@@ -117,6 +120,99 @@ const listLimitSchema = z.object({
   limit: z.number().int().min(1).max(50).optional()
 });
 
+const idleLeadsSchema = z.object({
+  limit: z.number().int().min(1).max(50).optional(),
+  idleDays: z.number().int().min(1).max(90).optional()
+});
+
+const WORKFLOW_PERSONAS = [
+  { key: 'agent_copilot', name: 'Echo' },
+  { key: 'lead_nurse', name: 'Lumen' },
+  { key: 'listing_concierge', name: 'Haven' },
+  { key: 'market_analyst', name: 'Atlas' },
+  { key: 'transaction_coordinator', name: 'Nova' }
+] as const;
+
+const resolvePersonaKey = (raw: string | null | undefined) => {
+  if (!raw) return null;
+  const normalized = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+    .replace(/[^a-z0-9_]/g, '');
+
+  const direct = WORKFLOW_PERSONAS.find((p) => p.key === normalized);
+  if (direct) return direct.key;
+
+  const byName = WORKFLOW_PERSONAS.find((p) => p.name.toLowerCase() === normalized);
+  if (byName) return byName.key;
+
+  return null;
+};
+
+const extractWorkflowRequestsFromMessage = (message: string) => {
+  const trimmed = message.trim();
+  if (!trimmed) return [];
+
+  const names = WORKFLOW_PERSONAS.map((p) => p.name).join('|');
+  const segmentRegex = new RegExp(
+    `\\b(${names})\\b\\s*:\\s*([\\s\\S]*?)(?=\\b(?:${names})\\b\\s*:|$)`,
+    'gi'
+  );
+
+  const requests: Array<{ personaKey: string; message: string }> = [];
+  const segments = Array.from(trimmed.matchAll(segmentRegex));
+  if (segments.length > 0) {
+    for (const match of segments) {
+      const name = match[1]?.trim();
+      const task = match[2]?.trim();
+      const personaKey = resolvePersonaKey(name);
+      if (!personaKey || !task) continue;
+      requests.push({ personaKey, message: task });
+    }
+    return requests;
+  }
+
+  for (const persona of WORKFLOW_PERSONAS) {
+    if (new RegExp(`\\b${persona.name}\\b`, 'i').test(trimmed)) {
+      requests.push({ personaKey: persona.key, message: trimmed });
+    }
+  }
+
+  return requests;
+};
+
+const extractTopNFromMessage = (message: string, fallback: number) => {
+  const match = message.match(/\btop\s+(\d+)\b/i);
+  const n = match ? Number(match[1]) : NaN;
+  if (Number.isFinite(n) && n > 0) return Math.min(10, Math.max(1, n));
+  return fallback;
+};
+
+const formatHotLeadContext = (leads: Array<Record<string, unknown>>) => {
+  if (!leads.length) return '';
+  const lines = leads
+    .map((lead) => {
+      const id = typeof lead.id === 'string' ? lead.id : null;
+      const firstName = typeof lead.firstName === 'string' ? lead.firstName.trim() : '';
+      const lastName = typeof lead.lastName === 'string' ? lead.lastName.trim() : '';
+      const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown lead';
+      const tier = typeof lead.scoreTier === 'string' ? lead.scoreTier : null;
+      const score = typeof lead.leadScore === 'number' ? Math.round(lead.leadScore) : null;
+      const stage = typeof lead.stage === 'string' ? lead.stage.replace(/[_-]+/g, ' ').toLowerCase() : null;
+      const bits = [
+        id ? `leadId: ${id}` : null,
+        tier ? `tier: ${tier}` : null,
+        typeof score === 'number' ? `score: ${score}` : null,
+        stage ? `stage: ${stage}` : null
+      ].filter((value): value is string => Boolean(value));
+      const meta = bits.length > 0 ? ` (${bits.join(', ')})` : '';
+      return `- ${name}${meta}`;
+    })
+    .join('\n');
+  return `Here are the current highest-scoring leads from the CRM:\n${lines}`;
+};
+
 @Injectable()
 export class AiEmployeeToolRegistrar implements OnModuleInit {
   constructor(
@@ -124,7 +220,8 @@ export class AiEmployeeToolRegistrar implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly messages: MessagesService,
     @Inject(forwardRef(() => LeadsService))
-    private readonly leads: LeadsService
+    private readonly leads: LeadsService,
+    private readonly employees: AiEmployeesService
   ) {}
 
   onModuleInit() {
@@ -139,6 +236,7 @@ export class AiEmployeeToolRegistrar implements OnModuleInit {
     this.registerTransactionTools();
     this.registerMarketTools();
     this.registerSummaryTools();
+    this.registerWorkflowTools();
   }
 
   private registerLeadNoteTool() {
@@ -245,7 +343,16 @@ export class AiEmployeeToolRegistrar implements OnModuleInit {
       defaultRequiresApproval: false,
       run: async (input, context) => {
         const serviceCtx = buildRequestContext(context);
-        return this.leads.getById(input.leadId, serviceCtx.tenantId!);
+        const record = input as unknown as Record<string, unknown>;
+        const leadId =
+          (typeof record.leadId === 'string' && record.leadId) ||
+          (typeof record.id === 'string' && record.id) ||
+          (typeof record.personId === 'string' && record.personId) ||
+          null;
+        if (!leadId) {
+          throw new Error('leadId is required');
+        }
+        return this.leads.getById(leadId, serviceCtx.tenantId!);
       }
     });
   }
@@ -589,7 +696,10 @@ export class AiEmployeeToolRegistrar implements OnModuleInit {
       }
     });
 
-    this.registry.register<z.infer<typeof listLimitSchema>, { leads: Array<Record<string, unknown>> }>({
+    this.registry.register<
+      z.infer<typeof listLimitSchema>,
+      { leads: Array<Record<string, unknown>>; requestedLimit: number; availableCount: number }
+    >({
       key: 'get_hot_leads',
       description: 'Fetch the hottest leads by score/activity',
       schema: listLimitSchema,
@@ -597,19 +707,68 @@ export class AiEmployeeToolRegistrar implements OnModuleInit {
       defaultRequiresApproval: false,
       run: async (input, context) => {
         const tenantId = ensureTenant(context);
+        const where = {
+          tenantId,
+          deletedAt: null,
+          stage: { in: [PersonStage.NEW, PersonStage.NURTURE, PersonStage.ACTIVE] },
+          doNotContact: false
+        };
+        const requestedLimit = input.limit ?? 10;
+        const [availableCount, leads] = await Promise.all([
+          this.prisma.person.count({ where }),
+          this.prisma.person.findMany({
+            where,
+            orderBy: [
+              { scoreTier: 'asc' },
+              { leadScore: 'desc' },
+              { lastActivityAt: 'desc' },
+              { createdAt: 'desc' }
+            ],
+            take: requestedLimit,
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              stage: true,
+              scoreTier: true,
+              leadScore: true,
+              lastActivityAt: true,
+              createdAt: true,
+              ownerId: true
+            }
+          })
+        ]);
+
+        return { leads, requestedLimit, availableCount };
+      }
+    });
+
+    this.registry.register<z.infer<typeof idleLeadsSchema>, { leads: Array<Record<string, unknown>> }>({
+      key: 'get_idle_leads',
+      description: 'List idle leads (no recent activity)',
+      schema: idleLeadsSchema,
+      allowAutoRun: true,
+      defaultRequiresApproval: false,
+      run: async (input, context) => {
+        const tenantId = ensureTenant(context);
+        const now = new Date();
+        const idleSince = subDays(now, input.idleDays ?? 3);
         const leads = await this.prisma.person.findMany({
           where: {
             tenantId,
             deletedAt: null,
+            stage: { in: [PersonStage.NEW, PersonStage.NURTURE, PersonStage.ACTIVE] },
+            doNotContact: false,
             OR: [
-              { scoreTier: { in: ['A', 'B'] } },
-              { lastActivityAt: { gt: subDays(new Date(), 2) } }
+              { lastActivityAt: { lt: idleSince } },
+              { lastActivityAt: null, createdAt: { lt: idleSince } }
             ]
           },
           orderBy: [
+            { lastActivityAt: 'asc' },
             { scoreTier: 'asc' },
             { leadScore: 'desc' },
-            { lastActivityAt: 'desc' }
+            { createdAt: 'asc' }
           ],
           take: input.limit ?? 10,
           select: {
@@ -620,10 +779,70 @@ export class AiEmployeeToolRegistrar implements OnModuleInit {
             scoreTier: true,
             leadScore: true,
             lastActivityAt: true,
+            createdAt: true,
             ownerId: true
           }
         });
         return { leads };
+      }
+    });
+
+    this.registry.register<
+      z.infer<typeof idleLeadsSchema>,
+      { drafts: Array<{ leadId: string; name: string; text: string }> }
+    >({
+      key: 'draft_idle_lead_followups',
+      description: 'Draft 1–2 sentence SMS follow-up texts for the top idle leads.',
+      schema: idleLeadsSchema,
+      allowAutoRun: true,
+      defaultRequiresApproval: false,
+      run: async (input, context) => {
+        const tenantId = ensureTenant(context);
+        const now = new Date();
+        const idleSince = subDays(now, input.idleDays ?? 3);
+        const leads = await this.prisma.person.findMany({
+          where: {
+            tenantId,
+            deletedAt: null,
+            stage: { in: [PersonStage.NEW, PersonStage.NURTURE, PersonStage.ACTIVE] },
+            doNotContact: false,
+            OR: [
+              { lastActivityAt: { lt: idleSince } },
+              { lastActivityAt: null, createdAt: { lt: idleSince } }
+            ]
+          },
+          orderBy: [
+            { lastActivityAt: 'asc' },
+            { scoreTier: 'asc' },
+            { leadScore: 'desc' },
+            { createdAt: 'asc' }
+          ],
+          take: input.limit ?? 3,
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            stage: true,
+            scoreTier: true,
+            leadScore: true,
+            lastActivityAt: true,
+            createdAt: true
+          }
+        });
+
+        const drafts = leads.map((lead) => {
+          const firstName = (lead.firstName ?? '').trim();
+          const lastName = (lead.lastName ?? '').trim();
+          const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown lead';
+          const activityAt = lead.lastActivityAt ?? lead.createdAt;
+          const daysIdle = differenceInCalendarDays(now, activityAt);
+          const opener = firstName ? `Hi ${firstName},` : 'Hi there,';
+          const idlePhrase = Number.isFinite(daysIdle) && daysIdle > 0 ? `it’s been ${daysIdle} days since we last connected` : 'quick check-in';
+          const text = `${opener} quick check-in — ${idlePhrase}. Are you still looking, and would you like me to send 2–3 options that fit what you want?`;
+          return { leadId: lead.id, name, text };
+        });
+
+        return { drafts };
       }
     });
 
@@ -654,6 +873,252 @@ export class AiEmployeeToolRegistrar implements OnModuleInit {
         return { tasks };
       }
     });
+  }
+
+  private registerWorkflowTools() {
+    const loadLatestUserMessage = async (sessionId: string, employeeInstanceId: string) => {
+      const row = await this.prisma.aiExecutionLog.findFirst({
+        where: {
+          sessionId,
+          employeeInstanceId,
+          toolKey: 'conversation:user'
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { input: true }
+      });
+      const input = row?.input as unknown;
+      if (input && typeof input === 'object' && !Array.isArray(input)) {
+        const message = (input as Record<string, unknown>)['message'];
+        return typeof message === 'string' ? message : null;
+      }
+      return null;
+    };
+
+    const runDelegate = async (
+      personaRef: string,
+      message: string,
+      context: AiToolContext
+    ): Promise<{
+      personaKey: string;
+      personaName: string;
+      employeeInstanceId: string;
+      reply: string;
+      toolReplies?: string[];
+    } | null> => {
+      const personaKey = resolvePersonaKey(personaRef);
+      if (!personaKey) {
+        throw new BadRequestException(`Unknown persona: ${personaRef}`);
+      }
+      const target = await this.prisma.aiEmployeeInstance.findFirst({
+        where: {
+          tenantId: context.tenantId,
+          status: 'active',
+          template: { key: personaKey }
+        },
+        include: { template: true },
+        orderBy: { createdAt: 'asc' }
+      });
+      if (!target) {
+        throw new NotFoundException(`No active AI employee instance found for ${personaKey}`);
+      }
+      if (target.id === context.employeeInstanceId) {
+        return null;
+      }
+
+      const response = await this.employees.sendMessage({
+        tenantId: context.tenantId,
+        orgId: context.orgId,
+        employeeInstanceId: target.id,
+        userId: context.actorId,
+        actorRole: context.actorRole,
+        channel: 'workflow',
+        contextType: 'workflow',
+        contextId: context.sessionId,
+        message
+      });
+
+      const toolReplies = (response.actions ?? [])
+        .filter((action) => String(action.status ?? '').toLowerCase() === 'executed')
+        .map((action) => (typeof action.replyText === 'string' ? action.replyText.trim() : ''))
+        .filter((text) => text.length > 0);
+
+      return {
+        personaKey: target.template.key,
+        personaName: target.template.displayName,
+        employeeInstanceId: target.id,
+        reply: response.reply,
+        toolReplies: toolReplies.length > 0 ? toolReplies : undefined
+      };
+    };
+
+    this.registry.register({
+      key: 'delegate_to_employee',
+      description: 'Ask another AI employee (persona) for a response and return it.',
+      schema: z.any(),
+      allowAutoRun: true,
+      defaultRequiresApproval: false,
+      run: async (input: unknown, context: AiToolContext) => {
+        const payload = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+        const persona =
+          (typeof payload.persona === 'string' && payload.persona) ||
+          (typeof payload.personaKey === 'string' && payload.personaKey) ||
+          (typeof payload.employee === 'string' && payload.employee) ||
+          null;
+        const message =
+          (typeof payload.message === 'string' && payload.message) ||
+          (typeof payload.instruction === 'string' && payload.instruction) ||
+          (typeof payload.task === 'string' && payload.task) ||
+          null;
+
+        const resolvedMessage = message ?? (await loadLatestUserMessage(context.sessionId, context.employeeInstanceId));
+        if (!resolvedMessage) {
+          throw new BadRequestException('Missing message for delegation');
+        }
+        if (!persona) {
+          const extracted = extractWorkflowRequestsFromMessage(resolvedMessage);
+          if (extracted.length === 0) {
+            throw new BadRequestException('Missing persona for delegation');
+          }
+          return runDelegate(extracted[0].personaKey, extracted[0].message, context);
+        }
+        return runDelegate(persona, resolvedMessage, context);
+      }
+    } satisfies AiToolDefinition);
+
+    this.registry.register({
+      key: 'coordinate_workflow',
+      description: 'Coordinate multiple AI employees: ask each for input and return combined responses.',
+      schema: z.any(),
+      allowAutoRun: true,
+      defaultRequiresApproval: false,
+      run: async (input: unknown, context: AiToolContext) => {
+        const payload = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+        const explicitMessage = typeof payload.message === 'string' ? payload.message : null;
+        const rawMessage = explicitMessage ?? (await loadLatestUserMessage(context.sessionId, context.employeeInstanceId)) ?? '';
+
+        const requestsField = payload.requests ?? payload.tasks;
+        const requestsArray = Array.isArray(requestsField) ? requestsField : null;
+        const requests =
+          requestsArray?.flatMap((item) => {
+            if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+            const record = item as Record<string, unknown>;
+            const persona =
+              (typeof record.persona === 'string' && record.persona) ||
+              (typeof record.personaKey === 'string' && record.personaKey) ||
+              (typeof record.employee === 'string' && record.employee) ||
+              null;
+            const message =
+              (typeof record.message === 'string' && record.message) ||
+              (typeof record.instruction === 'string' && record.instruction) ||
+              (typeof record.task === 'string' && record.task) ||
+              null;
+            if (!persona) return [];
+            const personaKey = resolvePersonaKey(persona);
+            if (!personaKey) return [];
+            return [{ personaKey, message: message ?? rawMessage }];
+          }) ?? [];
+
+        const derived = requests.length > 0 ? requests : extractWorkflowRequestsFromMessage(rawMessage);
+        const limited = derived.slice(0, 5);
+        const topN = extractTopNFromMessage(rawMessage, 3);
+
+        // If this looks like a "prioritize calls by lead score" request and Lumen needs
+        // texts "for each", prefetch the top leads and attach them as context.
+        let hotLeadContext: string | null = null;
+        let hotLeads: Array<Record<string, unknown>> = [];
+        const wantsLeadScoredCalls =
+          /\b(lead\s*score|leadscore|score\s*tier|call\s+targets|who\s+should\s+i\s+call|prioritiz(e|ing)|top\s+\d+)\b/i.test(
+            rawMessage
+          ) && limited.some((req) => req.personaKey === 'agent_copilot' || req.personaKey === 'lead_nurse');
+
+        if (wantsLeadScoredCalls) {
+          try {
+            const output = await this.registry.execute('get_hot_leads', { limit: Math.max(5, topN) }, context);
+            const record =
+              output && typeof output === 'object' && !Array.isArray(output)
+                ? (output as Record<string, unknown>)
+                : null;
+            const leadsField = record && Array.isArray(record.leads) ? record.leads : [];
+            hotLeads = leadsField
+              .filter((lead): lead is Record<string, unknown> => Boolean(lead) && typeof lead === 'object' && !Array.isArray(lead))
+              .slice(0, topN);
+            if (hotLeads.length > 0) {
+              hotLeadContext = formatHotLeadContext(hotLeads);
+            }
+          } catch {
+            hotLeadContext = null;
+            hotLeads = [];
+          }
+        }
+        const results: Array<{
+          personaKey: string;
+          personaName: string;
+          employeeInstanceId: string;
+          reply: string;
+          toolReplies?: string[];
+        }> = [];
+
+        for (const request of limited) {
+          const messageWithContext = (() => {
+            if (!hotLeadContext) return request.message;
+            if (request.personaKey === 'agent_copilot') {
+              return `${request.message}\n\n${hotLeadContext}\n\nReturn the top ${topN} call targets (name + leadId) and 1 reason each.`;
+            }
+            if (request.personaKey === 'lead_nurse') {
+              if (hotLeads.length === 0) return request.message;
+              return `${request.message}\n\nWrite 1–2 sentence outreach texts for each lead below. Label each text with the lead's name.\n${formatHotLeadContext(hotLeads)}`;
+            }
+            return request.message;
+          })();
+
+          try {
+            const output = await runDelegate(request.personaKey, messageWithContext, context);
+            if (!output) continue;
+
+            if (request.personaKey === 'lead_nurse' && hotLeads.length > 0) {
+              const reply = output.reply ?? '';
+              const replyLower = reply.toLowerCase();
+              const names = hotLeads
+                .map((lead) => {
+                  const first = typeof lead.firstName === 'string' ? lead.firstName.trim() : '';
+                  const last = typeof lead.lastName === 'string' ? lead.lastName.trim() : '';
+                  return [first, last].filter(Boolean).join(' ').trim();
+                })
+                .filter((value) => value.length > 0);
+
+              const matched = names.filter((name) => replyLower.includes(name.toLowerCase())).length;
+
+              if (matched < Math.min(topN, names.length)) {
+                const lines = hotLeads.slice(0, topN).map((lead) => {
+                  const firstName = typeof lead.firstName === 'string' ? lead.firstName.trim() : '';
+                  const lastName = typeof lead.lastName === 'string' ? lead.lastName.trim() : '';
+                  const name = [firstName, lastName].filter(Boolean).join(' ') || 'Lead';
+                  const greeting = firstName ? `Hi ${firstName},` : 'Hi there,';
+                  const text = `${greeting} quick check-in — any updates on your home search? I can send a couple fresh options or set up a quick 5‑minute call.`;
+                  return `- ${name}: ${text}`;
+                });
+                results.push({
+                  ...output,
+                  reply: `Here are the outreach texts:\n\n${lines.join('\n')}`
+                });
+                continue;
+              }
+            }
+
+            results.push(output);
+          } catch (error) {
+            results.push({
+              personaKey: request.personaKey,
+              personaName: WORKFLOW_PERSONAS.find((p) => p.key === request.personaKey)?.name ?? request.personaKey,
+              employeeInstanceId: 'unknown',
+              reply: error instanceof Error ? `Error: ${error.message}` : 'Error delegating request'
+            });
+          }
+        }
+
+        return { results };
+      }
+    } satisfies AiToolDefinition);
   }
 
   private async fetchListing(tenantId: string, listingId: string) {

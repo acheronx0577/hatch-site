@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 
 import { CopilotPanel } from './CopilotPanel';
 import { PersonaSelector } from './PersonaSelector';
+import { AiPersonaFace } from '@/components/ai/AiPersonaFace';
 import { useAiEmployees, type AiPersona } from '@/hooks/useAiEmployees';
 import { useAiActions } from '@/hooks/useAiActions';
 import { useToast } from '@/components/ui/use-toast';
@@ -14,6 +15,7 @@ import type {
   AiEmployeeUsageStats
 } from '@/lib/api/hatch';
 import { getAiEmployeeUsageStats } from '@/lib/api/hatch';
+import { ApiError } from '@/lib/api/errors';
 import type { CopilotContext } from '@/lib/copilot/events';
 import { PERSONAS, type PersonaConfig, type PersonaId } from '@/lib/ai/aiPersonas';
 import { cn, resolveUserIdentity } from '@/lib/utils';
@@ -54,7 +56,14 @@ export function CopilotDock({ debug = false }: { debug?: boolean }) {
   const [context, setContext] = useState<CopilotContext | undefined>(undefined);
   const [usageStats, setUsageStats] = useState<AiEmployeeUsageStats[] | null>(null);
   const [selectedKey, setSelectedKey] = useState<PersonaId | null>(PERSONAS[0]?.id ?? null);
-  const hatchPersona = useMemo(() => PERSONAS.find((p) => p.id === 'hatch_assistant'), []);
+  const [chatMode, setChatMode] = useState<'team' | 'direct'>('team');
+  const [lastDirectKey, setLastDirectKey] = useState<PersonaId>(() => {
+    const fallback = PERSONAS.find((persona) => persona.id !== 'hatch_assistant')?.id;
+    return fallback ?? 'hatch_assistant';
+  });
+  const [prefillMessage, setPrefillMessage] = useState<string | null>(null);
+  const [dockSize, setDockSize] = useState({ width: 520, height: 600 });
+  const [isResizing, setIsResizing] = useState(false);
   const {
     personas,
     loading: personaLoading,
@@ -70,7 +79,7 @@ export function CopilotDock({ debug = false }: { debug?: boolean }) {
     rejectAction
   } = useAiActions();
   const { toast } = useToast();
-  const { session, user } = useAuth();
+  const { session, user, activeMembership } = useAuth();
 
   const senderName = useMemo(() => {
     const { displayName } = resolveUserIdentity(session?.profile ?? {}, user?.email ?? undefined, 'Your Account');
@@ -139,29 +148,9 @@ export function CopilotDock({ debug = false }: { debug?: boolean }) {
   }, [open, showDetails]);
 
   useEffect(() => {
-    let isMounted = true;
-    getAiEmployeeUsageStats()
-      .then((data) => {
-        if (isMounted) {
-          setUsageStats(
-            data.map((stat) => ({
-              ...stat,
-              personaKey: normalizePersonaKey(stat.personaKey)
-            }))
-          );
-        }
-      })
-      .catch((error) => {
-        if (!isMounted) {
-          return;
-        }
-        console.error('Failed to load AI usage stats', error);
-        setUsageStats([]);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    // Disable usage stats entirely to avoid 403 noise in dev/demo.
+    setUsageStats([]);
+  }, [activeMembership?.role, session?.user?.globalRole]);
 
   useEffect(() => {
     if (selectedKey) {
@@ -179,6 +168,19 @@ export function CopilotDock({ debug = false }: { debug?: boolean }) {
     refreshPersonas();
     refreshActions();
   }, [refreshPersonas, refreshActions]);
+
+  const switchToTeam = useCallback(() => {
+    if (selectedKey) {
+      setLastDirectKey(selectedKey);
+    }
+    setChatMode('team');
+    setSelectedKey('hatch_assistant');
+  }, [selectedKey]);
+
+  const switchToDirect = useCallback(() => {
+    setChatMode('direct');
+    setSelectedKey(lastDirectKey);
+  }, [lastDirectKey]);
 
   const notifyExecution = useCallback(
     (action: AiEmployeeAction) => {
@@ -264,74 +266,188 @@ export function CopilotDock({ debug = false }: { debug?: boolean }) {
     return usageStats.find((stat) => stat.personaKey === selectedConfig.id);
   }, [selectedConfig, usageStats]);
 
+  // Resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = window.innerWidth - e.clientX;
+      const newHeight = window.innerHeight - e.clientY;
+      setDockSize({
+        width: Math.max(400, Math.min(800, newWidth)),
+        height: Math.max(400, Math.min(window.innerHeight * 0.9, newHeight))
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
   return (
     <>
       {!open && (
         <button
           type="button"
           aria-label="Open Hatch Copilot"
-          className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg transition hover:scale-[1.02]"
+          className="fixed bottom-4 sm:bottom-6 right-4 sm:right-6 z-40 flex h-14 sm:h-12 items-center gap-2 rounded-full bg-[#1F5FFF] px-4 sm:px-4 text-sm font-medium text-white shadow-lg antialiased transition-all duration-200 scale-100 hover:scale-105 active:scale-95"
           onClick={() => setOpen(true)}
         >
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-full text-lg font-semibold tracking-tight animate-pulse"
-            style={{ backgroundColor: hatchPersona?.avatarBg ?? 'rgba(37,99,235,0.14)', color: hatchPersona?.color ?? 'white' }}
-          >
-            {hatchPersona?.avatarEmoji ?? '🤖'}
-          </span>
+          <AiPersonaFace personaId="hatch_assistant" size="sm" animated />
+          <span className="hidden sm:inline">Open Copilot</span>
         </button>
       )}
 
       {open && (
-        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/30" onClick={() => setOpen(false)}>
-          <div className="pointer-events-auto w-full max-w-3xl px-4 pb-8" onClick={(event) => event.stopPropagation()}>
-            <div className="flex max-h-[80vh] flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-2xl">
-              <ChatHeader
-                persona={selectedPersona}
-                personaConfig={selectedConfig ?? undefined}
-                context={context}
-                onClose={() => setOpen(false)}
-                onRefresh={refreshAll}
-                onViewDetails={() => setShowDetails(true)}
-                isRefreshing={isRefreshing}
-                personaError={personaError}
-              />
+        <div className="fixed bottom-0 right-0 left-0 sm:left-auto sm:bottom-6 sm:right-6 z-40 flex flex-col items-end" onClick={() => setOpen(false)}>
+          <div
+            className="pointer-events-auto w-full sm:w-auto px-0 sm:px-0 pb-0 relative"
+            style={{
+              width: window.innerWidth < 640 ? '100%' : `${dockSize.width}px`,
+              height: window.innerWidth < 640 ? '100vh' : `${dockSize.height}px`
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="relative h-full min-h-0 overflow-hidden rounded-t-2xl sm:rounded-[28px] border border-white/25 bg-white/55 shadow-[0_24px_80px_rgba(15,23,42,0.28)] backdrop-blur-xl">
+              {/* Glass highlights */}
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/40 via-white/10 to-white/0" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(59,130,246,0.18),transparent_55%)]" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_110%_40%,rgba(236,72,153,0.12),transparent_45%)]" />
 
-              <>
-                <div className="border-b border-slate-100 bg-slate-50/40 px-5 py-3 min-w-0">
-                  <PersonaSelector
-                    activeId={selectedConfig?.id ?? null}
-                    onSelect={(id) => setSelectedKey(id)}
-                    statuses={personaStatuses}
-                  />
+              <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+              {/* Resize handle */}
+              <div
+                className="hidden sm:block absolute left-0 top-0 w-4 h-4 cursor-nwse-resize z-50 hover:bg-white/25 transition-colors"
+                onMouseDown={handleResizeStart}
+                style={{
+                  borderTopLeftRadius: '28px'
+                }}
+              >
+                <svg
+                  className="absolute left-1 top-1 w-2 h-2 text-slate-400"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                >
+                  <circle cx="2" cy="2" r="1.5" />
+                  <circle cx="8" cy="2" r="1.5" />
+                  <circle cx="2" cy="8" r="1.5" />
+                </svg>
+              </div>
+
+              {/* Compact header */}
+              <div className="flex-none border-b border-white/20 bg-white/25 px-3 py-1.5 backdrop-blur-xl">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center rounded-full border border-white/20 bg-white/25 p-0.5 text-[12px] backdrop-blur-xl">
+                    <button
+                      type="button"
+                      onClick={switchToDirect}
+                      className={cn(
+                        'rounded-full px-3 py-1 font-semibold transition',
+                        chatMode === 'direct'
+                          ? 'bg-white/45 text-slate-900 shadow-sm'
+                          : 'text-slate-700 hover:bg-white/25'
+                      )}
+                      title="Single agent chat"
+                    >
+                      Single
+                    </button>
+                    <button
+                      type="button"
+                      onClick={switchToTeam}
+                      className={cn(
+                        'rounded-full px-3 py-1 font-semibold transition',
+                        chatMode === 'team'
+                          ? 'bg-white/45 text-slate-900 shadow-sm'
+                          : 'text-slate-700 hover:bg-white/25'
+                      )}
+                      title="Team chat (mention personas with @)"
+                    >
+                      Team
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {isRefreshing && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                    <button onClick={refreshAll} className="rounded-full p-1 hover:bg-white/30" title="Refresh">
+                      <RefreshCw className="h-3 w-3" />
+                    </button>
+                    <button onClick={() => setOpen(false)} className="rounded-full p-1 hover:bg-white/30" title="Close">
+                      <span className="text-xs">✕</span>
+                    </button>
+                  </div>
                 </div>
+              </div>
 
-                {context && <ContextBanner context={context} />}
-                {personaUsage && <PersonaStatsStrip usage={personaUsage} />}
+              {/* Compact persona selector */}
+              <div className="flex-none border-b border-white/20 bg-white/15 px-2 py-1.5 backdrop-blur-xl">
+                <div className="flex gap-2 overflow-x-auto scrollbar-thin py-1">
+                  {PERSONAS.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        if (chatMode === 'team') {
+                          setSelectedKey('hatch_assistant');
+                          if (p.id !== 'hatch_assistant') {
+                            setPrefillMessage(`@${p.shortName} `);
+                          } else {
+                            setPrefillMessage(null);
+                          }
+                          return;
+                        }
+                        setSelectedKey(p.id);
+                        setLastDirectKey(p.id);
+                      }}
+                      className={cn(
+                        'flex-none flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold transition whitespace-nowrap border',
+                        (chatMode === 'team' ? selectedConfig?.id === p.id && p.id === 'hatch_assistant' : selectedConfig?.id === p.id)
+                          ? "border-white/30 bg-white/30 text-slate-900 shadow-sm"
+                          : "border-white/20 bg-white/10 text-slate-700 hover:bg-white/20"
+                      )}
+                    >
+                      <AiPersonaFace
+                        personaId={p.id}
+                        size="md"
+                        animated
+                        active={chatMode === 'team' ? selectedConfig?.id === p.id && p.id === 'hatch_assistant' : selectedConfig?.id === p.id}
+                      />
+                      {p.shortName}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-                <div className="flex-1 overflow-hidden px-4 pb-4 pt-2">
-                  {selectedPersona && selectedConfig ? (
-                    <CopilotPanel
-                      persona={selectedPersona}
-                      personaConfig={selectedConfig}
-                      context={context}
-                      className="h-full"
+              {/* Chat area - priority */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                {selectedPersona && selectedConfig ? (
+                  <CopilotPanel
+                    persona={selectedPersona}
+                    personaConfig={selectedConfig}
+                    allPersonas={personas}
+                    context={context}
+                    className="h-full"
                     senderName={senderName}
+                    chatMode={chatMode}
+                    prefill={prefillMessage}
+                    onPrefillConsumed={() => setPrefillMessage(null)}
                   />
-                  ) : (
-                    <EmptyState loading={personaLoading} />
-                  )}
-                </div>
-
-                <div className="border-t border-slate-100 px-4 py-3 text-[11px] text-slate-500">
-                  <p>Agent Copilot may make mistakes. Verify important details before acting.</p>
-                  {debug && selectedPersona && (
-                    <div className="mt-2">
-                      <PromptDebug persona={selectedPersona} />
-                    </div>
-                  )}
-                </div>
-              </>
+                ) : (
+                  <EmptyState loading={personaLoading} />
+                )}
+              </div>
+              </div>
             </div>
           </div>
         </div>

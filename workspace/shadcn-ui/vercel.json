@@ -25,15 +25,11 @@
     },
     {
       "src": "/favicon.ico",
-      "dest": "favicon.png"
+      "dest": "Hatch Icon.jpg"
     },
     {
       "src": "/favicon.png",
-      "dest": "favicon.png"
-    },
-    {
-      "src": "/apple-touch-icon.png",
-      "dest": "apple-touch-icon.png"
+      "dest": "Hatch Icon.jpg"
     },
     {
       "src": "/robots.txt",

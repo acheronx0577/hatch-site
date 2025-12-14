@@ -5,7 +5,9 @@ import {
   Mail,
   Plus,
   Filter,
-  Search
+  Search,
+  ArrowRight,
+  Briefcase
 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 
@@ -24,7 +26,8 @@ import {
   createContact,
   deleteContact,
   listContacts,
-  updateContact
+  updateContact,
+  convertContactToOpportunity
 } from '@/lib/api/hatch'
 
 const TENANT_ID = import.meta.env.VITE_TENANT_ID || 'tenant-hatch'
@@ -43,6 +46,21 @@ const stageColor = (stage: string) => {
       return 'bg-red-100 text-red-800'
     default:
       return 'bg-gray-100 text-gray-800'
+  }
+}
+
+const scoreTierColor = (tier: string) => {
+  switch (tier?.toUpperCase()) {
+    case 'A':
+      return 'bg-emerald-100 text-emerald-800 border-emerald-300'
+    case 'B':
+      return 'bg-blue-100 text-blue-800 border-blue-300'
+    case 'C':
+      return 'bg-amber-100 text-amber-800 border-amber-300'
+    case 'D':
+      return 'bg-gray-100 text-gray-800 border-gray-300'
+    default:
+      return 'bg-gray-100 text-gray-600 border-gray-300'
   }
 }
 
@@ -71,6 +89,9 @@ const LeadsPage = () => {
   const [formState, setFormState] = useState<LeadFormState>(emptyFormState)
   const [searchTerm, setSearchTerm] = useState('')
   const [searchParams, setSearchParams] = useSearchParams()
+  const [convertDialogOpen, setConvertDialogOpen] = useState(false)
+  const [selectedLeadForConversion, setSelectedLeadForConversion] = useState<ContactListItem | null>(null)
+  const [isConverting, setIsConverting] = useState(false)
 
   const stageFilters = ['ALL', 'NEW', 'ACTIVE', 'UNDER_CONTRACT', 'CLOSED', 'NURTURE', 'LOST'] as const
   type StageFilter = (typeof stageFilters)[number]
@@ -231,6 +252,41 @@ const LeadsPage = () => {
     }
   }
 
+  const handleConvertLead = (lead: ContactListItem) => {
+    setSelectedLeadForConversion(lead)
+    setConvertDialogOpen(true)
+  }
+
+  const handleConfirmConversion = async () => {
+    if (!selectedLeadForConversion) return
+
+    setIsConverting(true)
+    try {
+      const fullName = `${selectedLeadForConversion.firstName || ''} ${selectedLeadForConversion.lastName || ''}`.trim()
+      const result = await convertContactToOpportunity(selectedLeadForConversion.id, {
+        opportunityName: `${fullName} - Opportunity`,
+        accountName: fullName || 'Unnamed Account'
+      })
+
+      setLeads((prev) => prev.filter((item) => item.id !== selectedLeadForConversion.id))
+      setConvertDialogOpen(false)
+      setSelectedLeadForConversion(null)
+
+      toast({
+        title: 'Lead converted to opportunity',
+        description: result.message
+      })
+    } catch (error) {
+      toast({
+        title: 'Failed to convert lead',
+        description: error instanceof Error ? error.message : 'Unexpected error',
+        variant: 'destructive'
+      })
+    } finally {
+      setIsConverting(false)
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -379,46 +435,95 @@ const LeadsPage = () => {
               </Button>
             </div>
           ) : (
-            visibleLeads.map((lead) => (
-              <Card key={lead.id} className="p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold">
-                      {[lead.firstName, lead.lastName].filter(Boolean).join(' ') || 'Unnamed contact'}
-                    </h3>
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <Mail className="w-3 h-3" />
-                        {lead.primaryEmail ?? 'No email'}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Phone className="w-3 h-3" />
-                        {lead.primaryPhone ?? 'No phone'}
-                      </span>
+            visibleLeads.map((lead) => {
+              const scoreTier = (lead as any).scoreTier
+              const leadScore = (lead as any).leadScore
+
+              return (
+                <Card key={lead.id} className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="font-semibold">
+                          {[lead.firstName, lead.lastName].filter(Boolean).join(' ') || 'Unnamed contact'}
+                        </h3>
+                        {scoreTier && (
+                          <Badge className={`${scoreTierColor(scoreTier)} border font-bold px-2`} variant="outline">
+                            {scoreTier.toUpperCase()}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                        <span className="flex items-center gap-1">
+                          <Mail className="w-3 h-3" />
+                          {lead.primaryEmail ?? 'No email'}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Phone className="w-3 h-3" />
+                          {lead.primaryPhone ?? 'No phone'}
+                        </span>
+                        {typeof leadScore === 'number' && (
+                          <span className="text-[11px] text-slate-600">
+                            Score: <strong>{Math.round(leadScore)}</strong>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <Badge className={stageColor(lead.stage)}>{lead.stage.replace(/_/g, ' ').toLowerCase()}</Badge>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="bg-emerald-600 hover:bg-emerald-700"
+                          onClick={() => handleConvertLead(lead)}
+                        >
+                          <Briefcase className="w-3 h-3 mr-1" />
+                          Convert
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => handleStageChange(lead, 'ACTIVE')}>
+                          Move to Active
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleDeleteLead(lead)}>
+                          Remove
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <Badge className={stageColor(lead.stage)}>{lead.stage.replace(/_/g, ' ').toLowerCase()}</Badge>
-                    {typeof (lead as any).aiScore === 'number' ? (
-                      <span className="text-[11px] text-slate-600">
-                        AI Score: <strong>{Math.round((lead as any).aiScore)}</strong>
-                      </span>
-                    ) : null}
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => handleStageChange(lead, 'ACTIVE')}>
-                        Move to Active
-                      </Button>
-                      <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleDeleteLead(lead)}>
-                        Remove
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))
+                </Card>
+              )
+            })
           )}
         </CardContent>
       </Card>
+
+      {/* Conversion Confirmation Dialog */}
+      <Dialog open={convertDialogOpen} onOpenChange={setConvertDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Convert Lead to Opportunity</DialogTitle>
+            <DialogDescription>
+              This will create a new opportunity and account for{' '}
+              <strong>
+                {selectedLeadForConversion
+                  ? `${selectedLeadForConversion.firstName || ''} ${selectedLeadForConversion.lastName || ''}`.trim() ||
+                    'this lead'
+                  : 'this lead'}
+              </strong>
+              . The lead will be moved to the Opportunities pipeline.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setConvertDialogOpen(false)} disabled={isConverting}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmConversion} disabled={isConverting} className="bg-emerald-600 hover:bg-emerald-700">
+              <ArrowRight className="w-4 h-4 mr-2" />
+              {isConverting ? 'Converting...' : 'Convert to Opportunity'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

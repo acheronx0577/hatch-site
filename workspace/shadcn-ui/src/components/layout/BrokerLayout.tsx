@@ -47,16 +47,23 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
     async ({
       text,
       personaId,
-      history
+      history,
+      forceCurrentPersona
     }: {
       text: string
       personaId: PersonaId
       history: HatchAIMessage[]
+      forceCurrentPersona?: boolean
     }) => {
       const response = await chatAiPersona({
         text,
         currentPersonaId: personaId,
-        history: history.map<PersonaChatMessage>(({ role, content }) => ({ role, content }))
+        forceCurrentPersona,
+        history: history.map<PersonaChatMessage>(({ role, content, personaId: msgPersonaId }) => ({
+          role,
+          content,
+          personaId: msgPersonaId
+        }))
       })
 
       const memoryToast = buildMemoryToastPayload(response.memoryLog)
@@ -69,7 +76,7 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
       const replies =
         response.messages?.map<HatchAIMessage>((message) => {
           if (message.role !== 'assistant') {
-            return { id: crypto.randomUUID(), role: message.role, content: message.content }
+            return { id: crypto.randomUUID(), role: message.role, content: message.content, personaId: message.personaId }
           }
           const msgPersonaId = message.personaId ?? (firstAssistantSeen ? response.activePersonaId : personaId)
           firstAssistantSeen = true
@@ -171,5 +178,3 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
     </div>
   )
 }
-
-

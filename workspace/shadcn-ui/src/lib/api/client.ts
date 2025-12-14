@@ -1,6 +1,8 @@
 import axios from 'axios'
 import { supabase, supabaseAnonKey } from '../supabase'
 
+const AUTH_STORAGE_KEY = 'hatch_auth_tokens'
+
 const ensurePrefix = (prefix: string) => (prefix.startsWith('/') ? prefix : `/${prefix}`)
 const withApiPrefix = (base: string, prefix: string) => {
   const normalizedBase = base.replace(/\/+$/, '')
@@ -34,6 +36,17 @@ export type RequestOptions = {
   headers?: Record<string, string>
 }
 
+const readAuthFromStorage = () => {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as { accessToken?: string; refreshToken?: string; user?: { id?: string; role?: string } }
+  } catch {
+    return null
+  }
+}
+
 export const buildHeaders = async (options?: RequestOptions) => {
   const headers: Record<string, string> = {
     apikey: supabaseAnonKey,
@@ -47,13 +60,33 @@ export const buildHeaders = async (options?: RequestOptions) => {
     headers['Content-Type'] = 'application/json'
   }
 
-  const { data } = await supabase.auth.getSession()
-  const token = data?.session?.access_token
+  const stored = readAuthFromStorage()
+  const storedToken = stored?.accessToken
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  } else if (supabaseAnonKey) {
-    headers.Authorization = `Bearer ${supabaseAnonKey}`
+  if (stored?.user?.id && !headers['x-user-id']) {
+    headers['x-user-id'] = stored.user.id
+  }
+  if (!headers['x-user-role']) {
+    headers['x-user-role'] = (stored?.user?.role ?? 'BROKER').toUpperCase()
+  }
+  if (!headers['x-tenant-id']) {
+    headers['x-tenant-id'] = import.meta.env.VITE_TENANT_ID || 'tenant-hatch'
+  }
+  if (!headers['x-org-id']) {
+    headers['x-org-id'] = import.meta.env.VITE_ORG_ID || 'org-hatch'
+  }
+
+  if (storedToken) {
+    headers.Authorization = `Bearer ${storedToken}`
+  } else {
+    const { data } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`
+    } else if (supabaseAnonKey) {
+      headers.Authorization = `Bearer ${supabaseAnonKey}`
+    }
   }
 
   return headers
@@ -112,20 +145,12 @@ export const apiClient = axios.create({
   withCredentials: true,
 })
 
-const DEFAULT_TOKEN = import.meta.env.VITE_API_TOKEN
-const DEFAULT_ORG = import.meta.env.VITE_ORG_ID || 'org-hatch'
-const DEFAULT_TENANT = import.meta.env.VITE_TENANT_ID || 'tenant-hatch'
-const DEFAULT_USER = import.meta.env.VITE_USER_ID || 'user-broker'
+// NOTE: All authentication headers must come from real user sessions
+// No default headers are injected to prevent unauthorized access
 
 apiClient.interceptors.request.use((config) => {
   config.headers = config.headers ?? {}
-  if (DEFAULT_TOKEN && !config.headers['Authorization']) {
-    config.headers['Authorization'] = `Bearer ${DEFAULT_TOKEN}`
-  }
-  if (!config.headers['x-user-id']) config.headers['x-user-id'] = DEFAULT_USER
-  if (!config.headers['x-tenant-id']) config.headers['x-tenant-id'] = DEFAULT_TENANT
-  if (!config.headers['x-org-id']) config.headers['x-org-id'] = DEFAULT_ORG
-  if (!config.headers['x-user-role']) config.headers['x-user-role'] = 'BROKER'
+  // Headers must be provided by the application's auth system
   return config
 })
 

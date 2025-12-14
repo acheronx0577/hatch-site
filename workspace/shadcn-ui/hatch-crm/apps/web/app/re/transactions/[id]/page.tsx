@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation';
 
 import TransactionClient from '@/components/re/transaction-client';
-import { CopilotContextEmitter } from '@/components/copilot/CopilotContextEmitter';
+import { PersonaContextEmitter } from '@/components/personas/PersonaContextEmitter';
 import { getReTransaction, getTransactionCommission } from '@/lib/api/re.transactions';
 
 interface TransactionPageProps {
@@ -19,7 +19,7 @@ export default async function TransactionPage({ params }: TransactionPageProps) 
       getTransactionCommission(id).catch(() => null)
     ]);
 
-    const copilotContext = {
+    const personaContext = {
       surface: 'transaction' as const,
       entityType: 'transaction' as const,
       entityId: transaction.id,
@@ -34,7 +34,7 @@ export default async function TransactionPage({ params }: TransactionPageProps) 
 
     return (
       <>
-        <CopilotContextEmitter context={copilotContext} />
+        <PersonaContextEmitter context={personaContext} />
         <div className="space-y-6">
           <header className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
             <h1 className="text-2xl font-semibold text-slate-900">Transaction</h1>

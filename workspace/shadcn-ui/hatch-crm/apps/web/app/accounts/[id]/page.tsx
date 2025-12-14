@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 
 import AccountOpportunitiesTable from '@/components/account-opportunities-table';
 import AttachmentsPanel from '@/components/files/attachments-panel';
-import { ReindexEntityButton } from '@/components/copilot/ReindexEntityButton';
+import { ReindexEntityButton } from '@/components/personas/ReindexEntityButton';
 import { applyLayout } from '@/lib/layouts/applyLayout';
 import { resolveLayout } from '@/lib/api/admin.layouts';
 import { FIELD_MAP } from '@hatch/shared/layout';

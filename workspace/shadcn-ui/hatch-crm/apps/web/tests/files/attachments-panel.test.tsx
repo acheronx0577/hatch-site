@@ -8,7 +8,8 @@ vi.mock('@/lib/api/files', (): Record<string, unknown> => ({
   listFilesForRecord: vi.fn(),
   createUploadUrl: vi.fn(),
   linkFile: vi.fn(),
-  deleteFile: vi.fn()
+  deleteFile: vi.fn(),
+  getFileDownloadUrl: vi.fn((id: string) => `/files/${id}`)
 }));
 
 // eslint-disable-next-line import/first

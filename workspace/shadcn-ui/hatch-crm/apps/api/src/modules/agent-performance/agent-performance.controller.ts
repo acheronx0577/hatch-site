@@ -1,8 +1,7 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common'
+import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common'
 import { AgentPerformanceService } from './agent-performance.service'
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard'
 import { RolesGuard } from '@/auth/roles.guard'
-import { UseGuards } from '@nestjs/common'
 
 @Controller('organizations/:orgId/agent-performance')
 @UseGuards(JwtAuthGuard, RolesGuard)

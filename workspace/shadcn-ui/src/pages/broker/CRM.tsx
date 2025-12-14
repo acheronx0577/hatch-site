@@ -146,14 +146,19 @@ export default function BrokerCRMPage() {
         const response = await chatAiPersona({
           text,
           currentPersonaId: personaId,
-          history: history.map<PersonaChatMessage>(({ role, content }) => ({ role, content }))
+          history: history.map<PersonaChatMessage>(({ role, content, personaId: msgPersonaId }) => ({
+            role,
+            content,
+            personaId: msgPersonaId
+          }))
         });
         setCopilotPersonaId(response.activePersonaId);
         if (response.messages?.length) {
           const assistant = response.messages.map<AgentCopilotMessage>((message) => ({
             id: createMessageId(),
             role: message.role,
-            content: message.content
+            content: message.content,
+            personaId: message.personaId
           }));
           setCopilotMessages((prev) => [...prev, ...assistant]);
         }

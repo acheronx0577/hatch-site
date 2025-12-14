@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { AiService } from '../ai.service';
 import { PERSONAS, ROUTER_SYSTEM_PROMPT } from './ai-personas.config';
@@ -11,24 +11,33 @@ type RouterResult = {
 
 @Injectable()
 export class AiPersonaRouterService {
+  private readonly log = new Logger(AiPersonaRouterService.name);
+
   constructor(private readonly ai: AiService) {}
 
   async routeMessage(currentPersonaId: PersonaId, message: string): Promise<RouterResult> {
     const text = (message || '').toLowerCase();
     const hasAny = (needles: string[]) => needles.some((w) => text.includes(w));
 
-    // Hard guard: any forms/contracts/documents/location follow-ups stay with Hatch
+    this.log.debug(`[ROUTING] Query: "${message}"`);
+    this.log.debug(`[ROUTING] Current persona: ${currentPersonaId}`);
+
+    // Hard guard: any forms/contracts/documents follow-ups stay with Hatch
     if (
-      hasAny(['form', 'forms', 'contract', 'contracts', 'document', 'documents', 'paperwork', 'naples', 'florida'])
+      hasAny(['form', 'forms', 'contract', 'contracts', 'document', 'documents', 'paperwork'])
     ) {
-      return { targetPersonaId: 'hatch_assistant', reason: 'forms/location intent detected' };
+      this.log.debug('[ROUTING] Hard guard triggered: forms/contracts');
+      return { targetPersonaId: 'hatch_assistant', reason: 'forms/contracts intent detected' };
     }
 
     // Lightweight keyword routing to avoid extra turns for obvious intents
     const quick = this.quickRoute(currentPersonaId, message);
     if (quick) {
+      this.log.debug(`[ROUTING] Quick route matched: ${quick.targetPersonaId} - ${quick.reason}`);
       return quick;
     }
+
+    this.log.debug('[ROUTING] No quick route match, using LLM router');
 
     const payload = {
       currentPersonaId,
@@ -68,16 +77,6 @@ export class AiPersonaRouterService {
 
     const hasAny = (needles: string[]) => needles.some((w) => text.includes(w));
 
-    // Always keep Florida/Naples follow-ups on Hatch so it can surface localized forms instead of delegating
-    if (hasAny(['naples', 'florida'])) {
-      return { targetPersonaId: 'hatch_assistant', reason: 'location-specific forms intent detected' };
-    }
-
-    // Keep follow-up location clarifications with Hatch when we're already in forms/contracts context
-    if (currentPersonaId === 'hatch_assistant' && hasAny(['naples', 'florida'])) {
-      return { targetPersonaId: 'hatch_assistant', reason: 'location-specific forms intent detected' };
-    }
-
     // Route general forms/contracts/documents questions to Hatch so it can surface knowledge-base + S3 forms
     if (hasAny(['form', 'forms', 'contract', 'contracts', 'document', 'documents', 'paperwork'])) {
       return { targetPersonaId: 'hatch_assistant', reason: 'forms/contracts intent detected' };
@@ -96,15 +95,16 @@ export class AiPersonaRouterService {
       return { targetPersonaId: 'lead_nurse', reason: 'outreach/email intent detected' };
     }
 
+    // Check market analysis BEFORE listing keywords to prioritize Atlas
+    if (hasAny(['pricing', 'price', 'comps', 'valuation', 'market', 'trend', 'analyze'])) {
+      return { targetPersonaId: 'market_analyst', reason: 'pricing/market intent detected' };
+    }
+
     if (hasAny(['listing', 'description', 'marketing', 'copy', 'feature', 'social'])) {
       return { targetPersonaId: 'listing_concierge', reason: 'listing/marketing intent detected' };
     }
 
-    if (hasAny(['pricing', 'price', 'comps', 'valuation', 'market', 'trend'])) {
-      return { targetPersonaId: 'market_analyst', reason: 'pricing/market intent detected' };
-    }
-
-    if (hasAny(['checklist', 'dates', 'deadline', 'contingency', 'contingencies', 'closing', 'contract'])) {
+    if (hasAny(['transaction', 'transactions', 'deal', 'deals', 'checklist', 'dates', 'deadline', 'contingency', 'contingencies', 'closing', 'contract'])) {
       return { targetPersonaId: 'transaction_coordinator', reason: 'transaction intent detected' };
     }
 

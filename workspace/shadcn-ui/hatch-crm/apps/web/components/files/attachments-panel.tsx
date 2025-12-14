@@ -80,7 +80,7 @@ export function AttachmentsPanel({
           mimeType: file.type,
           byteSize: file.size
         });
-        // TODO: integrate actual upload to storage provider using upload.uploadUrl.
+        await uploadToSignedUrl(upload.uploadUrl, file);
         await linkFile({
           fileId: upload.fileId,
           object,
@@ -190,5 +190,20 @@ const formatFileSize = (bytes: number) => {
   const gb = mb / 1024;
   return `${gb.toFixed(1)} GB`;
 };
+
+async function uploadToSignedUrl(url: string, file: File) {
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream'
+    },
+    body: file
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Upload failed: ${res.status} ${res.statusText}${text ? ` - ${text}` : ''}`);
+  }
+}
 
 export default AttachmentsPanel;

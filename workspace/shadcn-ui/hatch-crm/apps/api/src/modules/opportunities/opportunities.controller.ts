@@ -10,7 +10,15 @@ import {
   Req,
   UseInterceptors
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiExtraModels,
+  ApiOkResponse,
+  ApiParam,
+  ApiQuery,
+  ApiTags
+} from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
 import { AuditInterceptor } from '../../platform/audit/audit.interceptor';
@@ -19,6 +27,7 @@ import { resolveRequestContext } from '../common/request-context';
 import { OpportunitiesService } from './opportunities.service';
 import {
   CreateOpportunityDto,
+  OpportunityListResponseDto,
   OpportunityResponseDto,
   UpdateOpportunityDto
 } from './dto';
@@ -39,6 +48,7 @@ const parseLimit = (value?: string) => {
 
 @ApiTags('Opportunities')
 @ApiBearerAuth()
+@ApiExtraModels(OpportunityListResponseDto)
 @Controller('opportunities')
 @UseInterceptors(AuditInterceptor)
 export class OpportunitiesController {
@@ -65,7 +75,7 @@ export class OpportunitiesController {
     schema: { type: 'integer', minimum: 1, maximum: 200 }
   })
   @ApiQuery({ name: 'cursor', required: false, description: 'Cursor for pagination' })
-  @ApiOkResponse({ type: OpportunityResponseDto, isArray: true })
+  @ApiOkResponse({ type: OpportunityListResponseDto })
   async list(
     @Req() req: FastifyRequest,
     @Query('q') q?: string,
@@ -75,13 +85,14 @@ export class OpportunitiesController {
     @Query('cursor') cursor?: string
   ): Promise<OpportunitiesListResult> {
     const ctx = resolveRequestContext(req);
-    return this.service.list(ctx, {
+    const { items, nextCursor } = await this.service.list(ctx, {
       q,
       stage: stage ?? undefined,
       accountId: accountId ?? undefined,
       limit: parseLimit(limit),
       cursor: cursor ?? undefined
     });
+    return { items, nextCursor };
   }
 
   @Get(':id')

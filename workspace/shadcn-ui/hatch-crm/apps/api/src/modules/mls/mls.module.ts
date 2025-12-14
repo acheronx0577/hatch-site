@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 
-import { OutboxModule } from '../outbox/outbox.module';
-import { MlsController } from './mls.controller';
-import { MlsService } from './mls.service';
+import { PrismaModule } from '@/modules/prisma/prisma.module';
+
+import { MlsImporterService } from './mls-importer.service';
 
 @Module({
-  imports: [OutboxModule],
-  controllers: [MlsController],
-  providers: [MlsService]
+  imports: [PrismaModule],
+  providers: [MlsImporterService],
+  exports: [MlsImporterService]
 })
 export class MlsModule {}

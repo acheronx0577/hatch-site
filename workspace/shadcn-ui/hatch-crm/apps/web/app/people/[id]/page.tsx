@@ -21,8 +21,8 @@ import { FIELD_MAP } from '@hatch/shared/layout';
 
 import ActivityFeed, { type ActivityItem } from '@/components/activity/activity-feed';
 import ContactActions from '@/components/contact-actions';
-import { ReindexEntityButton } from '@/components/copilot/ReindexEntityButton';
-import { CopilotContextEmitter } from '@/components/copilot/CopilotContextEmitter';
+import { ReindexEntityButton } from '@/components/personas/ReindexEntityButton';
+import { PersonaContextEmitter } from '@/components/personas/PersonaContextEmitter';
 import { Section } from '@/components/ui/section';
 import { type LeadDetail, type LeadStageSummary, getLead, getPipelines } from '@/lib/api';
 import { resolveLayout } from '@/lib/api/admin.layouts';
@@ -162,7 +162,7 @@ export default async function LeadProfilePage({ params }: { params: { id: string
           .join(' · ')
       : 'No consent captured';
 
-  const leadCopilotContext = {
+  const leadPersonaContext = {
     surface: 'lead' as const,
     entityType: 'lead' as const,
     entityId: lead.id,
@@ -306,7 +306,7 @@ export default async function LeadProfilePage({ params }: { params: { id: string
 
   return (
     <>
-      <CopilotContextEmitter context={leadCopilotContext} />
+      <PersonaContextEmitter context={leadPersonaContext} />
       <div className="space-y-8">
       <header className="sticky top-0 z-10 overflow-hidden rounded-3xl bg-gradient-to-r from-[#1F5FFF] via-[#396CFF] to-[#2A47FF] px-6 py-7 text-white/95 shadow-none">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.22),transparent_52%)]" />

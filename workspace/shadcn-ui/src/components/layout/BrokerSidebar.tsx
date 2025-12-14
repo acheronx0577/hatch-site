@@ -8,9 +8,10 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  DollarSign,
+  FileText,
   GitBranch,
   Handshake,
-  FileText,
   Globe,
   LogOut,
   Lock,
@@ -21,13 +22,12 @@ import {
   Settings,
   ShieldCheck,
   Shuffle,
-  Sparkles,
   TrendingUp,
-  Wallet,
-  Activity,
   UserCheck,
   Users,
-  Home as HomeIcon
+  Home as HomeIcon,
+  Briefcase,
+  Activity
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { HatchLogo } from '@/components/HatchLogo'
@@ -56,11 +56,11 @@ type NavSection = {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: 'BROKERAGE',
+    label: 'MAIN',
     groups: [
       {
-        key: 'mission-control',
-        label: 'Mission Control',
+        key: 'home',
+        label: 'Home',
         icon: Radar,
         path: '/broker/mission-control',
         roles: ['BROKER', 'AGENT', 'ADMIN']
@@ -68,30 +68,64 @@ const NAV_SECTIONS: NavSection[] = [
     ]
   },
   {
-    label: 'OPERATIONS',
+    label: 'WORK',
     groups: [
       {
-        key: 'people',
-        label: 'People',
+        key: 'clients',
+        label: 'Clients',
         icon: Users,
         roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
-          { icon: UserCheck, label: 'Agents & Teams', path: '/broker/team', roles: ['BROKER', 'AGENT', 'ADMIN'] }
+          { icon: NotebookPen, label: 'Leads & CRM', path: '/broker/crm', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Building2, label: 'Accounts', path: '/broker/accounts', roles: ['BROKER', 'ADMIN'] }
         ]
       },
       {
-        key: 'business',
-        label: 'Business',
-        icon: Building2,
+        key: 'properties',
+        label: 'Properties',
+        icon: HomeIcon,
         roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
-          { icon: HomeIcon, label: 'Properties', path: '/broker/properties', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: Shuffle, label: 'Transactions', path: '/broker/transactions', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: Handshake, label: 'Offer Intents', path: '/broker/offer-intents', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: FileText, label: 'Contracts', path: '/broker/contracts', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: Wallet, label: 'Financials', path: '/broker/financials', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: HomeIcon, label: 'Active Listings', path: '/broker/properties', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: FileText, label: 'Draft Listings', path: '/broker/draft-listings', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: Percent, label: 'Commission Plans', path: '/broker/commission-plans', roles: ['BROKER', 'AGENT', 'ADMIN'] }
+          { icon: Handshake, label: 'Offer Intents', path: '/broker/offer-intents', roles: ['BROKER', 'AGENT', 'ADMIN'] }
+        ]
+      },
+      {
+        key: 'deals',
+        label: 'Deals',
+        icon: Briefcase,
+        roles: ['BROKER', 'AGENT', 'ADMIN'],
+        children: [
+          { icon: TrendingUp, label: 'Opportunities', path: '/broker/opportunities', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Shuffle, label: 'Transactions', path: '/broker/transactions', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: FileText, label: 'Contracts', path: '/broker/contracts', roles: ['BROKER', 'AGENT', 'ADMIN'] }
+        ]
+      },
+      {
+        key: 'earnings',
+        label: 'Earnings',
+        icon: DollarSign,
+        roles: ['BROKER', 'AGENT', 'ADMIN'],
+        children: [
+          { icon: DollarSign, label: 'Financials', path: '/broker/financials', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Percent, label: 'Commission Plans', path: '/broker/commission-plans', roles: ['BROKER', 'ADMIN'] }
+        ]
+      }
+    ]
+  },
+  {
+    label: 'TEAM',
+    groups: [
+      {
+        key: 'team',
+        label: 'Team',
+        icon: UserCheck,
+        roles: ['BROKER', 'ADMIN'],
+        children: [
+          { icon: UserCheck, label: 'Agents & Teams', path: '/broker/team', roles: ['BROKER', 'ADMIN'] },
+          { icon: GitBranch, label: 'Lead Routing', path: '/broker/lead-routing', roles: ['BROKER', 'ADMIN'] },
+          { icon: ShieldCheck, label: 'Compliance Hub', path: '/broker/compliance', roles: ['BROKER', 'AGENT', 'ADMIN'] }
         ]
       }
     ]
@@ -105,40 +139,24 @@ const NAV_SECTIONS: NavSection[] = [
         icon: TrendingUp,
         roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
-          { icon: NotebookPen, label: 'Leads & CRM', path: '/broker/crm', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: GitBranch, label: 'Lead Routing', path: '/broker/lead-routing', roles: ['BROKER', 'ADMIN'] },
           { icon: Megaphone, label: 'Marketing', path: '/broker/marketing', roles: ['BROKER', 'ADMIN'] },
-          { icon: BarChart3, label: 'Analytics', path: '/broker/analytics', roles: ['BROKER', 'ADMIN'] },
-          { icon: Activity, label: 'Live Activity', path: '/broker/live-activity', roles: ['BROKER', 'ADMIN'] }
+          { icon: BarChart3, label: 'Analytics', path: '/broker/analytics', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Activity, label: 'Live Activity', path: '/broker/live-activity', roles: ['BROKER', 'AGENT', 'ADMIN'] }
         ]
       }
     ]
   },
   {
-    label: 'RISK',
+    label: 'SETTINGS',
     groups: [
       {
-        key: 'risk',
-        label: 'Risk & Compliance',
-        icon: ShieldCheck,
-        roles: ['BROKER', 'AGENT', 'ADMIN'],
-        children: [
-          { icon: ShieldCheck, label: 'Compliance Hub', path: '/broker/compliance', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: Lock, label: 'Audit Log', path: '/broker/audit-log', roles: ['BROKER', 'ADMIN'] }
-        ]
-      }
-    ]
-  },
-  {
-    label: 'ADMIN',
-    groups: [
-      {
-        key: 'admin',
-        label: 'Admin',
+        key: 'settings',
+        label: 'Settings',
         icon: Settings,
         roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
-          { icon: Settings, label: 'Settings', path: '/broker/settings', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Settings, label: 'Preferences', path: '/broker/settings', roles: ['BROKER', 'AGENT', 'ADMIN'] },
+          { icon: Lock, label: 'Audit Log', path: '/broker/audit-log', roles: ['BROKER', 'ADMIN'] },
           { icon: Bell, label: 'Notifications', path: '/broker/notifications', roles: ['BROKER', 'AGENT', 'ADMIN'] },
           { icon: Globe, label: 'View Public Site', path: '/', roles: ['BROKER', 'AGENT', 'ADMIN'] }
         ]
@@ -269,9 +287,14 @@ export default function BrokerSidebar() {
       {!isCollapsed && <p className="px-4 text-sm text-gray-500 mt-1">Broker Portal</p>}
 
       {/* Navigation Menu */}
-      <nav className="flex-1 p-3 space-y-3">
+      <nav className="flex-1 p-3 space-y-3 overflow-y-auto">
         {sections.map((section) => (
           <div key={section.label} className="space-y-1">
+            {!isCollapsed && (
+              <div className="px-3 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                {section.label}
+              </div>
+            )}
             <div className="space-y-1">
               {section.groups.map((group) => {
                 const isGroupActive =

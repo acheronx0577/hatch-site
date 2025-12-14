@@ -27,6 +27,21 @@ export class MissionControlService {
 
   constructor(private readonly prisma: PrismaService, private readonly presence: PresenceService) {}
 
+  private isConnectionLimitError(error: unknown) {
+    const message = (error as Error | undefined)?.message?.toLowerCase() ?? '';
+    return message.includes('too many database connections opened') || message.includes('too many clients already');
+  }
+
+  private async runInBatches<T>(tasks: Array<() => Promise<T>>, batchSize = 5): Promise<T[]> {
+    const results: T[] = [];
+    for (let i = 0; i < tasks.length; i += batchSize) {
+      const batch = tasks.slice(i, i + batchSize);
+      const batchResults = await Promise.all(batch.map((task) => task()));
+      results.push(...batchResults);
+    }
+    return results;
+  }
+
   private buildAgentProfileWhere(orgId: string, scope?: MissionControlScope): Prisma.AgentProfileWhereInput {
     const where: Prisma.AgentProfileWhereInput = { organizationId: orgId };
     if (scope?.officeId) {
@@ -182,7 +197,7 @@ export class MissionControlService {
     try {
       return await query();
     } catch (error) {
-      if (this.isMissingSchemaError(error)) {
+      if (this.isMissingSchemaError(error) || this.isConnectionLimitError(error)) {
         this.logger.warn(`mission-control optional query skipped: ${context}`);
         return fallback;
       }
@@ -224,6 +239,260 @@ export class MissionControlService {
     const transactionAccountingWhere = this.buildTransactionAccountingWhere(orgId, scope);
     const rentalLeaseAccountingWhere = this.buildRentalLeaseAccountingWhere(orgId, scope);
     const orgFileWhere = this.buildOrgFileWhere(orgId, scope);
+
+    const overviewQueryTasks: Array<() => Promise<any>> = [
+      () =>
+        (this.prisma as any).agentProfile.groupBy({
+          by: ['isCompliant', 'requiresAction', 'riskLevel'] as const,
+          where: agentProfileWhere,
+          _count: { _all: true }
+        }),
+      () => this.prisma.agentInvite.count({ where: { organizationId: orgId, status: 'PENDING' } }),
+      () =>
+        (this.prisma as any).orgFile.groupBy({
+          by: ['category'] as const,
+          where: { orgId: orgId },
+          _count: { _all: true }
+        }),
+      () => this.prisma.orgConversation.count({ where: { organizationId: orgId, type: 'CHANNEL' } }),
+      () => this.prisma.orgConversation.count({ where: { organizationId: orgId, type: 'DIRECT' } }),
+      () => this.prisma.orgMessage.count({ where: { organizationId: orgId, createdAt: { gte: new Date(Date.now() - DAYS_7_MS) } } }),
+      () =>
+        this.prisma.orgEvent.findMany({
+          where: { organizationId: orgId },
+          orderBy: { createdAt: 'desc' },
+          take: 20
+        }),
+      () => this.prisma.agentTrainingModule.count({ where: { organizationId: orgId } }),
+      () => this.prisma.agentTrainingModule.count({ where: { organizationId: orgId, required: true } }),
+      () => this.prisma.agentTrainingProgress.count({ where: { agentProfile: agentProfileWhere } }),
+      () =>
+        this.prisma.agentTrainingProgress.count({
+          where: { agentProfile: agentProfileWhere, status: 'COMPLETED' }
+        }),
+      () => this.prisma.orgListing.count({ where: listingWhere }),
+      () => this.prisma.orgListing.count({ where: { ...listingWhere, status: 'ACTIVE' } }),
+      () => this.prisma.orgListing.count({ where: { ...listingWhere, status: 'PENDING_BROKER_APPROVAL' } }),
+      () =>
+        this.prisma.orgListing.count({
+          where: {
+            ...listingWhere,
+            status: 'ACTIVE',
+            expiresAt: { not: null, lte: listingExpiringThreshold }
+          }
+        }),
+      () => this.prisma.orgTransaction.count({ where: transactionWhere }),
+      () =>
+        this.prisma.orgTransaction.count({
+          where: { ...transactionWhere, status: { in: ['UNDER_CONTRACT', 'CONTINGENT'] } }
+        }),
+      () =>
+        this.prisma.orgTransaction.count({
+          where: {
+            ...transactionWhere,
+            closingDate: { not: null, gte: new Date(), lte: listingExpiringThreshold }
+          }
+        }),
+      () =>
+        this.prisma.orgTransaction.count({
+          where: {
+            ...transactionWhere,
+            OR: [{ isCompliant: false }, { requiresAction: true }]
+          }
+        }),
+      () =>
+        this.prisma.orgEvent.findMany({
+          where: {
+            organizationId: orgId,
+            type: { in: ['ORG_LISTING_EVALUATED', 'ORG_TRANSACTION_EVALUATED'] },
+            createdAt: { gte: aiWindowStart }
+          },
+          select: { type: true, payload: true }
+        }),
+      () => this.prisma.agentProfile.count({ where: { ...agentProfileWhere, lifecycleStage: 'ONBOARDING' } }),
+      () => this.prisma.agentProfile.count({ where: { ...agentProfileWhere, lifecycleStage: 'OFFBOARDING' } }),
+      () =>
+        this.prisma.agentWorkflowTask.count({
+          where: {
+            ...workflowTaskWhere,
+            type: 'ONBOARDING',
+            status: { in: ['PENDING', 'IN_PROGRESS'] }
+          }
+        }),
+      () =>
+        this.prisma.agentWorkflowTask.count({
+          where: {
+            ...workflowTaskWhere,
+            type: 'ONBOARDING',
+            status: 'COMPLETED'
+          }
+        }),
+      () =>
+        this.prisma.agentWorkflowTask.count({
+          where: {
+            ...workflowTaskWhere,
+            type: 'OFFBOARDING',
+            status: { in: ['PENDING', 'IN_PROGRESS'] }
+          }
+        }),
+      () =>
+        (this.prisma as any).lead.groupBy({
+          by: ['status'] as const,
+          where: leadWhere,
+          _count: { _all: true }
+        }),
+      () =>
+        (this.prisma as any).offerIntent.groupBy({
+          by: ['status'] as const,
+          where: offerIntentWhere,
+          _count: { _all: true }
+        }),
+      () =>
+        this.prisma.offerIntent.findMany({
+          where: offerIntentWhere,
+          select: {
+            status: true,
+            listing: { select: { agentProfileId: true } }
+          }
+        }),
+      () =>
+        this.prisma.rentalProperty.count({
+          where: {
+            organizationId: orgId,
+            status: { in: ['UNDER_MGMT', 'ACTIVE'] }
+          }
+        }),
+      () =>
+        this.prisma.rentalLease.count({
+          where: {
+            ...rentalLeaseWhere,
+            endDate: { gte: now }
+          }
+        }),
+      () =>
+        this.prisma.rentalLease.count({
+          where: {
+            ...rentalLeaseWhere,
+            tenancyType: 'SEASONAL',
+            endDate: { gte: now }
+          }
+        }),
+      () =>
+        this.prisma.rentalTaxSchedule.count({
+          where: {
+            ...rentalTaxScheduleWhere,
+            status: 'PENDING',
+            dueDate: { gte: now, lte: rentalTaxWindowEnd }
+          }
+        }),
+      () =>
+        this.prisma.rentalTaxSchedule.count({
+          where: {
+            ...rentalTaxScheduleWhere,
+            status: 'OVERDUE'
+          }
+        }),
+      () =>
+        this.prisma.transactionAccountingRecord.count({
+          where: { ...transactionAccountingWhere, syncStatus: 'SYNCED' }
+        }),
+      () =>
+        this.prisma.transactionAccountingRecord.count({
+          where: { ...transactionAccountingWhere, syncStatus: 'FAILED' }
+        }),
+      () =>
+        this.prisma.rentalLeaseAccountingRecord.count({
+          where: { ...rentalLeaseAccountingWhere, syncStatus: 'SYNCED' }
+        }),
+      () =>
+        this.prisma.rentalLeaseAccountingRecord.count({
+          where: { ...rentalLeaseAccountingWhere, syncStatus: 'FAILED' }
+        }),
+      // Some older databases may not have complianceStatus on OrgFile; count documents defensively.
+      () =>
+        this.optionalQuery(
+          () =>
+            (this.prisma as any).orgFile.groupBy({
+              by: ['complianceStatus'],
+              where: orgFileWhere,
+              _count: { _all: true }
+            }),
+          [],
+          'orgFileCompliance'
+        ),
+      () => this.optionalQuery(() => this.prisma.mlsFeedConfig.findUnique({ where: { organizationId: orgId } }), null, 'mlsFeedConfig'),
+      () =>
+        this.optionalQuery(
+          () => this.prisma.listingSearchIndex.count({ where: { organizationId: orgId } }),
+          0,
+          'listingSearchIndex.total'
+        ),
+      () =>
+        this.optionalQuery(
+          () =>
+            this.prisma.listingSearchIndex.count({
+              where: { organizationId: orgId, isActive: true, isRental: false }
+            }),
+          0,
+          'listingSearchIndex.activeForSale'
+        ),
+      () =>
+        this.optionalQuery(
+          () =>
+            this.prisma.listingSearchIndex.count({
+              where: { organizationId: orgId, isActive: true, isRental: true }
+            }),
+          0,
+          'listingSearchIndex.activeRentals'
+        ),
+      () =>
+        this.optionalQuery(
+          () =>
+            (this.prisma as any).savedSearch.groupBy({
+              by: ['frequency', 'alertsEnabled'] as const,
+              where: { organizationId: orgId },
+              _count: { _all: true }
+            }),
+          [] as Prisma.SavedSearchGroupByOutputType[],
+          'savedSearch.groupBy'
+        ),
+      () =>
+        this.optionalQuery(
+          () => this.prisma.savedListing.count({ where: { organizationId: orgId } }),
+          0,
+          'savedListing.count'
+        ),
+      () =>
+        this.prisma.orgTransaction.findMany({
+          where: { ...transactionWhere, status: 'CLOSED' },
+          select: {
+            id: true,
+            listing: {
+              select: { listPrice: true }
+            }
+          }
+        }),
+      () =>
+        this.prisma.rentalLease.aggregate({
+          where: {
+            ...rentalLeaseWhere,
+            endDate: { gte: now },
+            rentAmount: { not: null }
+          },
+          _sum: { rentAmount: true }
+        })
+    ];
+
+    let overviewResults: any[];
+    try {
+      overviewResults = await this.runInBatches(overviewQueryTasks, 6);
+    } catch (error) {
+      if (this.isConnectionLimitError(error)) {
+        this.logger.warn('mission-control overview skipped due to connection limit');
+        return overview;
+      }
+      throw error;
+    }
 
     const [
       agentsSummary,
@@ -272,224 +541,7 @@ export class MissionControlService {
       savedListingCount,
       closedTransactionsForGci,
       activeLeaseRentAggregate
-    ] = await Promise.all([
-      this.prisma.agentProfile.groupBy({
-        by: ['isCompliant', 'requiresAction', 'riskLevel'],
-        where: agentProfileWhere,
-        _count: { _all: true }
-      }),
-      this.prisma.agentInvite.count({ where: { organizationId: orgId, status: 'PENDING' } }),
-      this.prisma.orgFile.groupBy({
-        by: ['category'],
-        where: { orgId: orgId },
-        _count: { _all: true }
-      }),
-      this.prisma.orgConversation.count({ where: { organizationId: orgId, type: 'CHANNEL' } }),
-      this.prisma.orgConversation.count({ where: { organizationId: orgId, type: 'DIRECT' } }),
-      this.prisma.orgMessage.count({ where: { organizationId: orgId, createdAt: { gte: new Date(Date.now() - DAYS_7_MS) } } }),
-      this.prisma.orgEvent.findMany({
-        where: { organizationId: orgId },
-        orderBy: { createdAt: 'desc' },
-        take: 20
-      }),
-      this.prisma.agentTrainingModule.count({ where: { organizationId: orgId } }),
-      this.prisma.agentTrainingModule.count({ where: { organizationId: orgId, required: true } }),
-      this.prisma.agentTrainingProgress.count({ where: { agentProfile: agentProfileWhere } }),
-      this.prisma.agentTrainingProgress.count({
-        where: { agentProfile: agentProfileWhere, status: 'COMPLETED' }
-      }),
-      this.prisma.orgListing.count({ where: listingWhere }),
-      this.prisma.orgListing.count({ where: { ...listingWhere, status: 'ACTIVE' } }),
-      this.prisma.orgListing.count({ where: { ...listingWhere, status: 'PENDING_BROKER_APPROVAL' } }),
-      this.prisma.orgListing.count({
-        where: {
-          ...listingWhere,
-          status: 'ACTIVE',
-          expiresAt: { not: null, lte: listingExpiringThreshold }
-        }
-      }),
-      this.prisma.orgTransaction.count({ where: transactionWhere }),
-      this.prisma.orgTransaction.count({
-        where: { ...transactionWhere, status: { in: ['UNDER_CONTRACT', 'CONTINGENT'] } }
-      }),
-      this.prisma.orgTransaction.count({
-        where: {
-          ...transactionWhere,
-          closingDate: { not: null, gte: new Date(), lte: listingExpiringThreshold }
-        }
-      }),
-      this.prisma.orgTransaction.count({
-        where: {
-          ...transactionWhere,
-          OR: [{ isCompliant: false }, { requiresAction: true }]
-        }
-      }),
-      this.prisma.orgEvent.findMany({
-        where: {
-          organizationId: orgId,
-          type: { in: ['ORG_LISTING_EVALUATED', 'ORG_TRANSACTION_EVALUATED'] },
-          createdAt: { gte: aiWindowStart }
-        },
-        select: { type: true, payload: true }
-      }),
-      this.prisma.agentProfile.count({
-        where: { ...agentProfileWhere, lifecycleStage: 'ONBOARDING' }
-      }),
-      this.prisma.agentProfile.count({
-        where: { ...agentProfileWhere, lifecycleStage: 'OFFBOARDING' }
-      }),
-      this.prisma.agentWorkflowTask.count({
-        where: {
-          ...workflowTaskWhere,
-          type: 'ONBOARDING',
-          status: { in: ['PENDING', 'IN_PROGRESS'] }
-        }
-      }),
-      this.prisma.agentWorkflowTask.count({
-        where: {
-          ...workflowTaskWhere,
-          type: 'ONBOARDING',
-          status: 'COMPLETED'
-        }
-      }),
-      this.prisma.agentWorkflowTask.count({
-        where: {
-          ...workflowTaskWhere,
-          type: 'OFFBOARDING',
-          status: { in: ['PENDING', 'IN_PROGRESS'] }
-        }
-      }),
-      this.prisma.lead.groupBy({
-        by: ['status'],
-        where: leadWhere,
-        _count: { _all: true }
-      }),
-      this.prisma.offerIntent.groupBy({
-        by: ['status'],
-        where: offerIntentWhere,
-        _count: { _all: true }
-      }),
-      this.prisma.offerIntent.findMany({
-        where: offerIntentWhere,
-        select: {
-          status: true,
-          listing: { select: { agentProfileId: true } }
-        }
-      }),
-      this.prisma.rentalProperty.count({
-        where: {
-          organizationId: orgId,
-          status: { in: ['UNDER_MGMT', 'ACTIVE'] }
-        }
-      }),
-      this.prisma.rentalLease.count({
-        where: {
-          ...rentalLeaseWhere,
-          endDate: { gte: now }
-        }
-      }),
-      this.prisma.rentalLease.count({
-        where: {
-          ...rentalLeaseWhere,
-          tenancyType: 'SEASONAL',
-          endDate: { gte: now }
-        }
-      }),
-      this.prisma.rentalTaxSchedule.count({
-        where: {
-          ...rentalTaxScheduleWhere,
-          status: 'PENDING',
-          dueDate: { gte: now, lte: rentalTaxWindowEnd }
-        }
-      }),
-      this.prisma.rentalTaxSchedule.count({
-        where: {
-          ...rentalTaxScheduleWhere,
-          status: 'OVERDUE'
-        }
-      }),
-      this.prisma.transactionAccountingRecord.count({
-        where: { ...transactionAccountingWhere, syncStatus: 'SYNCED' }
-      }),
-      this.prisma.transactionAccountingRecord.count({
-        where: { ...transactionAccountingWhere, syncStatus: 'FAILED' }
-      }),
-      this.prisma.rentalLeaseAccountingRecord.count({
-        where: { ...rentalLeaseAccountingWhere, syncStatus: 'SYNCED' }
-      }),
-      this.prisma.rentalLeaseAccountingRecord.count({
-        where: { ...rentalLeaseAccountingWhere, syncStatus: 'FAILED' }
-      }),
-      // Some older databases may not have complianceStatus on OrgFile; count documents defensively.
-      this.optionalQuery(
-        () =>
-          this.prisma.orgFile.groupBy({
-            by: ['complianceStatus'],
-            where: orgFileWhere,
-            _count: { _all: true }
-          }),
-        [],
-        'orgFileCompliance'
-      ),
-      this.optionalQuery(
-        () => this.prisma.mlsFeedConfig.findUnique({ where: { organizationId: orgId } }),
-        null,
-        'mlsFeedConfig'
-      ),
-      this.optionalQuery(
-        () => this.prisma.listingSearchIndex.count({ where: { organizationId: orgId } }),
-        0,
-        'listingSearchIndex.total'
-      ),
-      this.optionalQuery(
-        () =>
-          this.prisma.listingSearchIndex.count({
-            where: { organizationId: orgId, isActive: true, isRental: false }
-          }),
-        0,
-        'listingSearchIndex.activeForSale'
-      ),
-      this.optionalQuery(
-        () =>
-          this.prisma.listingSearchIndex.count({
-            where: { organizationId: orgId, isActive: true, isRental: true }
-          }),
-        0,
-        'listingSearchIndex.activeRentals'
-      ),
-      this.optionalQuery(
-        () =>
-          this.prisma.savedSearch.groupBy({
-            by: ['frequency', 'alertsEnabled'],
-            where: { organizationId: orgId },
-            _count: { _all: true }
-          }),
-        [] as Prisma.SavedSearchGroupByOutputType[],
-        'savedSearch.groupBy'
-      ),
-      this.optionalQuery(
-        () => this.prisma.savedListing.count({ where: { organizationId: orgId } }),
-        0,
-        'savedListing.count'
-      ),
-      this.prisma.orgTransaction.findMany({
-        where: { ...transactionWhere, status: 'CLOSED' },
-        select: {
-          id: true,
-          listing: {
-            select: { listPrice: true }
-          }
-        }
-      }),
-      this.prisma.rentalLease.aggregate({
-        where: {
-          ...rentalLeaseWhere,
-          endDate: { gte: now },
-          rentAmount: { not: null }
-        },
-        _sum: { rentAmount: true }
-      })
-    ]);
+    ] = overviewResults;
 
     const transactionsForDocs = await this.prisma.orgTransaction.findMany({
       where: transactionWhere,

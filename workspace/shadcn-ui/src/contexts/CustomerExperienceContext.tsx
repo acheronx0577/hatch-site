@@ -196,76 +196,11 @@ export const CustomerExperienceProvider: React.FC<{ children: React.ReactNode }>
       return
     }
 
-    if (DISABLE_REMOTE_PREFS) {
-      setIsLoading(false)
-      return
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from('Profile')
-        .select('metadata')
-        .eq('id', userId)
-        .maybeSingle()
-
-      if (error) throw error
-
-      const metadata = (data?.metadata as RemoteProfileMetadata | null) ?? {}
-      setRemoteMetadata(metadata)
-
-      const remotePrefs = normalisePreferences(metadata.customer_portal as CustomerPreferences | undefined)
-
-      // Merge with any locally stored guest preferences so users retain selections after login.
-      let merged = remotePrefs
-      if (remotePrefs.recentlyViewed.length < preferences.recentlyViewed.length || Object.keys(remotePrefs.favorites).length === 0) {
-        const leadSet = new Set<string>()
-        const mergedLeads = [...remotePrefs.leadRequests, ...preferences.leadRequests]
-          .reduce<LeadRequest[]>((acc, request) => {
-            if (!leadSet.has(request.id)) {
-              leadSet.add(request.id)
-              acc.push(request)
-            }
-            return acc
-          }, [])
-          .slice(0, 50)
-
-        merged = {
-          ...remotePrefs,
-          favorites: { ...remotePrefs.favorites, ...preferences.favorites },
-          recentlyViewed: [...preferences.recentlyViewed, ...remotePrefs.recentlyViewed]
-            .reduce<PropertySummary[]>((acc, item) => {
-              if (!acc.find((existing) => existing.id === item.id)) {
-                acc.push(item)
-              }
-              return acc
-            }, [])
-            .slice(0, 50),
-          savedSearches: remotePrefs.savedSearches.length >= preferences.savedSearches.length
-            ? remotePrefs.savedSearches
-            : preferences.savedSearches,
-          leadRequests: mergedLeads,
-        }
-      }
-
-      setPreferences(merged)
-      hasHydratedRemoteRef.current = true
-      writeToStorage(merged)
-    } catch (error) {
-      const errorCode = (error as { code?: string })?.code
-      const errorMessage = error instanceof Error ? error.message : undefined
-      if (errorCode === '42P17' || (errorMessage && errorMessage.includes('42P17'))) {
-        console.warn('Customer preferences remote hydration skipped due to policy recursion', error)
-        policyRecursionRef.current = true
-        setRemoteMetadata({})
-        hasHydratedRemoteRef.current = true
-        writeToStorage(preferences)
-      } else {
-        console.error('Failed to hydrate customer preferences from Supabase', error)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }, [preferences.favorites, preferences.recentlyViewed, preferences.savedSearches, preferences.leadRequests, userId, writeToStorage])
+    // Remote hydration disabled (Supabase not in use).
+    setRemoteMetadata({})
+    hasHydratedRemoteRef.current = true
+    setIsLoading(false)
+  }, [userId])
 
   useEffect(() => {
     if (!userId) {
@@ -280,57 +215,18 @@ export const CustomerExperienceProvider: React.FC<{ children: React.ReactNode }>
     writeToStorage(preferences)
   }, [preferences, userId, writeToStorage])
 
-  const syncToRemote = useCallback(async (next: CustomerPreferences) => {
-    if (!userId || policyRecursionRef.current) return
-    try {
-      setIsSyncing(true)
-      const updatedMetadata: RemoteProfileMetadata = {
-        ...remoteMetadata,
-        customer_portal: next,
-      }
-
-      const { error } = await supabase
-        .from('Profile')
-        .update({ metadata: updatedMetadata })
-        .eq('id', userId)
-
-      if (error) throw error
-
-      setRemoteMetadata(updatedMetadata)
-      writeToStorage(next)
-    } catch (error) {
-      const errorCode = (error as { code?: string })?.code
-      const errorMessage = error instanceof Error ? error.message : undefined
-      if (errorCode === '42P17' || (errorMessage && errorMessage.includes('42P17'))) {
-        policyRecursionRef.current = true
-        console.warn('Skipping customer preference sync due to policy recursion', error)
-      } else {
-        console.error('Failed to sync customer preferences to Supabase', error)
-      }
-    } finally {
-      setIsSyncing(false)
-    }
-  }, [remoteMetadata, userId, writeToStorage])
+  const syncToRemote = useCallback(async (_next: CustomerPreferences) => {
+    // Remote sync disabled (Supabase not in use).
+    return
+  }, [])
 
   useEffect(() => {
-    if (!userId) return
-    if (!hasHydratedRemoteRef.current) return
-
+    // Remote sync disabled; keep local storage only.
     if (syncTimeoutRef.current) {
       window.clearTimeout(syncTimeoutRef.current)
+      syncTimeoutRef.current = null
     }
-
-    syncTimeoutRef.current = window.setTimeout(() => {
-      void syncToRemote(preferences)
-    }, 800)
-
-    return () => {
-      if (syncTimeoutRef.current) {
-        window.clearTimeout(syncTimeoutRef.current)
-        syncTimeoutRef.current = null
-      }
-    }
-  }, [preferences, userId, syncToRemote])
+  }, [preferences, userId])
 
   const toggleFavorite = useCallback(async (summary: PropertySummary) => {
     setPreferences((prev) => {

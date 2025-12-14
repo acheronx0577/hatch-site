@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 
-import { Prisma } from '@hatch/db';
+import { Prisma, type Account } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestContext } from '../common/request-context';
@@ -18,10 +18,11 @@ export class AccountsService {
 
   async list(ctx: RequestContext, options: ListOptions = {}) {
     if (!ctx.orgId) {
-      return [];
+      return { items: [], nextCursor: null };
     }
     const { q, limit = 50, cursor } = options;
-    const items = await this.prisma.account.findMany({
+    const take = Math.min(Math.max(limit, 1), 200);
+    const records = await this.prisma.account.findMany({
       where: {
         orgId: ctx.orgId,
         deletedAt: null,
@@ -35,17 +36,15 @@ export class AccountsService {
           : {})
       },
       orderBy: { updatedAt: 'desc' },
-      take: limit,
+      take,
       skip: cursor ? 1 : 0,
       cursor: cursor ? { id: cursor } : undefined
     });
 
-    return Promise.all(
-      items.map(async (item) => {
-        const filtered = await this.fls.filterRead(ctx, 'accounts', item);
-        return { id: item.id, ...filtered };
-      })
-    );
+    const items = await Promise.all(records.map((record) => this.toResponse(ctx, record)));
+    const nextCursor = records.length === take ? records[records.length - 1]?.id ?? null : null;
+
+    return { items, nextCursor };
   }
 
   async get(ctx: RequestContext, id: string) {
@@ -64,8 +63,7 @@ export class AccountsService {
       return null;
     }
 
-    const filtered = await this.fls.filterRead(ctx, 'accounts', record);
-    return { id: record.id, ...filtered };
+    return this.toResponse(ctx, record);
   }
 
   async create(ctx: RequestContext, dto: Record<string, unknown>) {
@@ -94,8 +92,7 @@ export class AccountsService {
       data: createData
     });
 
-    const filtered = await this.fls.filterRead(ctx, 'accounts', created);
-    return { id: created.id, ...filtered };
+    return this.toResponse(ctx, created);
   }
 
   async update(ctx: RequestContext, id: string, dto: Record<string, unknown>) {
@@ -135,8 +132,7 @@ export class AccountsService {
       data: writableRecord as Prisma.AccountUncheckedUpdateInput
     });
 
-    const filtered = await this.fls.filterRead(ctx, 'accounts', updated);
-    return { id: updated.id, ...filtered };
+    return this.toResponse(ctx, updated);
   }
 
   async softDelete(ctx: RequestContext, id: string) {
@@ -159,5 +155,23 @@ export class AccountsService {
       data: { deletedAt: new Date() }
     });
     return { id };
+  }
+
+  private async toResponse(ctx: RequestContext, record: Account) {
+    const filtered = await this.fls.filterRead(ctx, 'accounts', record);
+    const response: Record<string, unknown> = { id: record.id, ...(filtered ?? {}) };
+
+    if ('annualRevenue' in response) {
+      response.annualRevenue =
+        record.annualRevenue !== null && record.annualRevenue !== undefined
+          ? Number(record.annualRevenue)
+          : null;
+    }
+
+    if ('ownerId' in response || 'owner' in response) {
+      response.owner = record.ownerId ? { id: record.ownerId } : null;
+    }
+
+    return response;
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { PERSONAS, type PersonaId } from '@/lib/ai/aiPersonas';
+import { AiPersonaFace } from '@/components/ai/AiPersonaFace';
 import { cn } from '@/lib/utils';
 
 type PersonaSelectorProps = {
@@ -30,12 +31,7 @@ export function PersonaSelector({ activeId, onSelect, statuses }: PersonaSelecto
             }}
           >
             <div className="flex items-center gap-2">
-              <div
-                className="flex h-7 w-7 items-center justify-center rounded-full text-base"
-                style={{ backgroundColor: persona.avatarBg }}
-              >
-                {persona.avatarEmoji}
-              </div>
+              <AiPersonaFace personaId={persona.id} size="sm" animated active={isActive} />
 
               <div className="flex flex-col">
                 <span className="text-sm font-semibold">{persona.shortName}</span>

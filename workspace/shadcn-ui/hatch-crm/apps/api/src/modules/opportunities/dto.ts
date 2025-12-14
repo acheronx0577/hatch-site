@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PartialType } from '@nestjs/mapped-types';
 import { IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateOpportunityDto {
@@ -31,7 +32,7 @@ export class CreateOpportunityDto {
   closeDate?: string;
 }
 
-export class UpdateOpportunityDto extends CreateOpportunityDto {}
+export class UpdateOpportunityDto extends PartialType(CreateOpportunityDto) {}
 
 export class OpportunityAccountSummaryDto {
   @ApiProperty({ description: 'Account identifier' })
@@ -47,6 +48,14 @@ export class OpportunityTransactionSummaryDto {
 
   @ApiPropertyOptional({ description: 'Current transaction stage' })
   stage?: string | null;
+}
+
+export class OpportunityOwnerSummaryDto {
+  @ApiProperty({ description: 'Owner user identifier' })
+  id!: string;
+
+  @ApiPropertyOptional({ description: 'Owner display name' })
+  name?: string | null;
 }
 
 export class OpportunityResponseDto {
@@ -85,4 +94,15 @@ export class OpportunityResponseDto {
 
   @ApiPropertyOptional({ type: () => OpportunityTransactionSummaryDto })
   transaction?: OpportunityTransactionSummaryDto | null;
+
+  @ApiPropertyOptional({ type: () => OpportunityOwnerSummaryDto })
+  owner?: OpportunityOwnerSummaryDto | null;
+}
+
+export class OpportunityListResponseDto {
+  @ApiProperty({ type: () => OpportunityResponseDto, isArray: true })
+  items!: OpportunityResponseDto[];
+
+  @ApiPropertyOptional({ description: 'Cursor for pagination', nullable: true })
+  nextCursor!: string | null;
 }

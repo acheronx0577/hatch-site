@@ -13,7 +13,8 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { deleteBrokerProperty, fetchBrokerProperties, type BrokerPropertyRow } from '@/lib/api/properties';
+import { deleteBrokerProperty, type BrokerPropertyRow } from '@/lib/api/properties';
+import { fetchOrgListings, type OrgListingRecord } from '@/lib/api/org-listings';
 import { Separator } from '@/components/ui/separator';
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
@@ -60,7 +61,7 @@ function PropertiesView({ orgId }: { orgId: string }) {
   const [filter, setFilter] = useState<PropertiesFilter>(() => parseFilter(searchParams.get('filter')));
   const { data, isLoading, error } = useQuery({
     queryKey: ['broker', 'properties', orgId],
-    queryFn: () => fetchBrokerProperties(),
+    queryFn: () => fetchOrgListings(orgId),
     staleTime: 30_000
   });
   const queryClient = useQueryClient();
@@ -73,7 +74,7 @@ function PropertiesView({ orgId }: { orgId: string }) {
   });
 
   const listings = data ?? [];
-  const [selectedListing, setSelectedListing] = useState<BrokerPropertyRow | null>(null);
+  const [selectedListing, setSelectedListing] = useState<OrgListingRecord | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const summary = useMemo(() => {
@@ -210,11 +211,16 @@ function PropertiesView({ orgId }: { orgId: string }) {
                         <Badge className={getStatusTone(listing.status)}>{formatStatus(listing.status)}</Badge>
                       </td>
                       <td className="px-4 py-3">
-                        <p className="text-xs text-slate-500">Unassigned</p>
+                        <p className="text-xs text-slate-500">
+                          {listing.agentProfile?.user ?
+                            `${listing.agentProfile.user.firstName ?? ''} ${listing.agentProfile.user.lastName ?? ''}`.trim() ||
+                            listing.agentProfile.user.email :
+                            'Unassigned'}
+                        </p>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{listing.mls_number ?? '—'}</td>
+                      <td className="px-4 py-3 text-slate-600">{listing.mlsNumber ?? '—'}</td>
                       <td className="px-4 py-3 font-medium text-slate-900">
-                        {listing.list_price ? currencyFormatter.format(Number(listing.list_price)) : '—'}
+                        {listing.listPrice ? currencyFormatter.format(Number(listing.listPrice)) : '—'}
                       </td>
                       <td className="px-4 py-3 text-slate-600">
                         — 
@@ -271,12 +277,12 @@ function PropertiesView({ orgId }: { orgId: string }) {
             <div className="space-y-4">
               {(() => {
                 const photos = (selectedListing.photos ?? []).filter(Boolean);
-                const cover = selectedListing.cover_photo_url || photos[0] || placeholderImg;
+                const cover = selectedListing.coverPhotoUrl || photos[0] || placeholderImg;
                 return (
                   <div className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
                     <img
                       src={cover}
-                      alt={selectedListing.address_line}
+                      alt={selectedListing.addressLine1}
                       className="h-56 w-full object-cover"
                       loading="lazy"
                       referrerPolicy="no-referrer"
@@ -292,23 +298,23 @@ function PropertiesView({ orgId }: { orgId: string }) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="text-2xl font-semibold text-slate-900">
-                    {selectedListing.list_price ? currencyFormatter.format(Number(selectedListing.list_price)) : 'Price TBD'}
+                    {selectedListing.listPrice ? currencyFormatter.format(Number(selectedListing.listPrice)) : 'Price TBD'}
                   </p>
                   <p className="text-sm text-slate-600">
-                    {[selectedListing.address_line, selectedListing.city, selectedListing.state_code, selectedListing.zip_code]
+                    {[selectedListing.addressLine1, selectedListing.city, selectedListing.state, selectedListing.postalCode]
                       .filter(Boolean)
                       .join(', ')}
                   </p>
                   <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
                     <Badge variant="outline">{formatStatus(selectedListing.status)}</Badge>
-                    {selectedListing.mls_number && <span>MLS #{selectedListing.mls_number}</span>}
+                    {selectedListing.mlsNumber && <span>MLS #{selectedListing.mlsNumber}</span>}
                   </div>
                 </div>
                 <div className="text-right text-sm text-slate-500">
                   <p>Expires: {selectedListing.expiresAt ? new Date(selectedListing.expiresAt).toLocaleDateString() : '—'}</p>
                   <p>
                     Type:{' '}
-                    {[selectedListing.property_type, selectedListing.property_sub_type]
+                    {[selectedListing.propertyType, selectedListing.propertySubType]
                       .filter(Boolean)
                       .join(' • ') || '—'}
                   </p>
@@ -316,26 +322,21 @@ function PropertiesView({ orgId }: { orgId: string }) {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm text-slate-700">
-                <PreviewStat label="Bedrooms" value={selectedListing.bedrooms_total ?? '—'} />
+                <PreviewStat label="Bedrooms" value={selectedListing.bedrooms ?? '—'} />
                 <PreviewStat
                   label="Bathrooms"
-                  value={
-                    selectedListing.bathrooms_total ??
-                    selectedListing.bathrooms_full ??
-                    selectedListing.bathrooms_half ??
-                    '—'
-                  }
+                  value={selectedListing.bathrooms ?? '—'}
                 />
                 <PreviewStat
                   label="Square Feet"
-                  value={selectedListing.living_area_sq_ft ? selectedListing.living_area_sq_ft.toLocaleString() : '—'}
+                  value={selectedListing.squareFeet ? selectedListing.squareFeet.toLocaleString() : '—'}
                 />
                 <PreviewStat
                   label="Price / SqFt"
                   value={
-                    selectedListing.list_price && selectedListing.living_area_sq_ft
+                    selectedListing.listPrice && selectedListing.squareFeet
                       ? currencyFormatter.format(
-                          Number(selectedListing.list_price) / Math.max(Number(selectedListing.living_area_sq_ft), 1)
+                          Number(selectedListing.listPrice) / Math.max(Number(selectedListing.squareFeet), 1)
                         )
                       : '—'
                   }
@@ -343,28 +344,28 @@ function PropertiesView({ orgId }: { orgId: string }) {
                 <PreviewStat
                   label="Lot"
                   value={
-                    selectedListing.lot_size_acres
-                      ? `${selectedListing.lot_size_acres} ac`
-                      : selectedListing.lot_size_sq_ft
-                        ? `${selectedListing.lot_size_sq_ft.toLocaleString()} sqft`
+                    selectedListing.lotSizeAcres
+                      ? `${selectedListing.lotSizeAcres} ac`
+                      : selectedListing.lotSizeSqFt
+                        ? `${selectedListing.lotSizeSqFt.toLocaleString()} sqft`
                         : '—'
                   }
                 />
-                <PreviewStat label="Year built" value={selectedListing.year_built ?? '—'} />
+                <PreviewStat label="Year built" value={selectedListing.yearBuilt ?? '—'} />
                 <PreviewStat label="County" value={selectedListing.county ?? '—'} />
-                <PreviewStat label="Parcel ID" value={selectedListing.parcel_id ?? '—'} />
+                <PreviewStat label="Parcel ID" value={selectedListing.parcelId ?? '—'} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-slate-700">
-                <PreviewStat label="Garage" value={selectedListing.garage_spaces ?? '—'} />
-                <PreviewStat label="View" value={selectedListing.property_view ?? '—'} />
-                <PreviewStat label="Water" value={selectedListing.water_source ?? '—'} />
-                <PreviewStat label="Sewer" value={selectedListing.sewer_system ?? '—'} />
+                <PreviewStat label="Garage" value={selectedListing.garageSpaces ?? '—'} />
+                <PreviewStat label="View" value={selectedListing.propertyView ?? '—'} />
+                <PreviewStat label="Water" value={selectedListing.waterSource ?? '—'} />
+                <PreviewStat label="Sewer" value={selectedListing.sewerSystem ?? '—'} />
                 <PreviewStat label="Cooling" value={selectedListing.cooling ?? '—'} />
                 <PreviewStat label="Heating" value={selectedListing.heating ?? '—'} />
-                <PreviewStat label="Parking" value={selectedListing.parking_features ?? '—'} />
-                <PreviewStat label="Exterior" value={selectedListing.exterior_features ?? '—'} />
-                <PreviewStat label="Interior" value={selectedListing.interior_features ?? '—'} />
+                <PreviewStat label="Parking" value={selectedListing.parkingFeatures ?? '—'} />
+                <PreviewStat label="Exterior" value={selectedListing.exteriorFeatures ?? '—'} />
+                <PreviewStat label="Interior" value={selectedListing.interiorFeatures ?? '—'} />
                 <PreviewStat label="Appliances" value={selectedListing.appliances ?? '—'} />
                 <PreviewStat
                   label="Taxes"
@@ -376,29 +377,29 @@ function PropertiesView({ orgId }: { orgId: string }) {
                 />
               </div>
 
-              {(selectedListing.public_remarks || selectedListing.private_remarks || selectedListing.showing_instructions) && (
+              {(selectedListing.publicRemarks || selectedListing.privateRemarks || selectedListing.showingInstructions) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {selectedListing.public_remarks && (
+                  {selectedListing.publicRemarks && (
                     <div className="space-y-1">
                       <p className="text-xs uppercase tracking-wide text-slate-500">Remarks</p>
                       <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                        {selectedListing.public_remarks}
+                        {selectedListing.publicRemarks}
                       </p>
                     </div>
                   )}
-                  {selectedListing.private_remarks && (
+                  {selectedListing.privateRemarks && (
                     <div className="space-y-1">
                       <p className="text-xs uppercase tracking-wide text-slate-500">Private remarks</p>
                       <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                        {selectedListing.private_remarks}
+                        {selectedListing.privateRemarks}
                       </p>
                     </div>
                   )}
-                  {selectedListing.showing_instructions && (
+                  {selectedListing.showingInstructions && (
                     <div className="space-y-1">
                       <p className="text-xs uppercase tracking-wide text-slate-500">Showing instructions</p>
                       <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
-                        {selectedListing.showing_instructions}
+                        {selectedListing.showingInstructions}
                       </p>
                     </div>
                   )}

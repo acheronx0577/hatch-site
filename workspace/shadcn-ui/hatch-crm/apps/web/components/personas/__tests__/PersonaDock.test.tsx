@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CopilotDock } from '../CopilotDock';
+import { PersonaDock } from '../PersonaDock';
 
 const persona = {
   template: {
@@ -37,15 +37,15 @@ vi.mock('@/lib/api/ai-employees', async () => {
   };
 });
 
-vi.mock('@/components/copilot/CopilotPanel', () => ({
-  CopilotPanel: () => <div data-testid="mock-copilot-panel" />
+vi.mock('@/components/personas/PersonaChatPanel', () => ({
+  PersonaChatPanel: () => <div data-testid="mock-persona-panel" />
 }));
 
 vi.mock('@/components/ui/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() })
 }));
 
-describe('CopilotDock (Next.js)', () => {
+describe('PersonaDock (Next.js)', () => {
   beforeEach(() => {
     refreshPersonas.mockClear();
     refreshActions.mockClear();
@@ -78,12 +78,12 @@ describe('CopilotDock (Next.js)', () => {
     });
   });
 
-  it('renders context banner when copilot context is emitted', async () => {
-    render(<CopilotDock debug={false} />);
+  it('renders context banner when persona context is emitted', async () => {
+    render(<PersonaDock debug={false} />);
 
     act(() => {
       window.dispatchEvent(
-        new CustomEvent('copilot:context', {
+        new CustomEvent('persona:context', {
           detail: {
             surface: 'listing',
             summary: '123 Main St – Active'
@@ -106,8 +106,8 @@ describe('CopilotDock (Next.js)', () => {
       refresh: refreshPersonas,
       disabled: true
     });
-    render(<CopilotDock debug={false} />);
+    render(<PersonaDock debug={false} />);
 
-    expect(screen.getByText(/AI Employees are disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI Personas are disabled/i)).toBeInTheDocument();
   });
 });

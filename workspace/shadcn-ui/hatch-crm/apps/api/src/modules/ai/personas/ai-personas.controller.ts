@@ -52,14 +52,16 @@ export class AiPersonasController {
   async chat(@Body() dto: PersonaChatDto, @Req() req: FastifyRequest) {
     const ctx = resolveRequestContext(req);
     const text = dto.text?.toLowerCase() ?? '';
+    // Only force Hatch for actual contract/form queries, not geography mentions
     const forceHatch =
       ['form', 'forms', 'contract', 'contracts', 'document', 'documents', 'paperwork'].some((kw) =>
         text.includes(kw)
-      ) || text.includes('naples') || text.includes('florida') || /\bfl\b/.test(text);
+      );
     const currentPersonaId = forceHatch ? 'hatch_assistant' : dto.currentPersonaId;
     const forceCurrentPersona = forceHatch ? true : dto.forceCurrentPersona ?? false;
     return this.personas.handleChatMessage({
       tenantId: ctx.tenantId,
+      orgId: ctx.orgId,
       text: dto.text,
       currentPersonaId,
       history: dto.history ?? [],
