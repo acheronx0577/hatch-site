@@ -10,7 +10,15 @@ import {
   Req,
   UseInterceptors
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiExtraModels,
+  ApiOkResponse,
+  ApiParam,
+  ApiQuery,
+  ApiTags
+} from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
 import { AuditInterceptor } from '../../platform/audit/audit.interceptor';
@@ -18,7 +26,12 @@ import { Permit } from '../../platform/security/permit.decorator';
 import { resolveRequestContext } from '../common/request-context';
 import type { RequestContext } from '../common/request-context';
 import { AccountsService } from './accounts.service';
-import { AccountResponseDto, CreateAccountDto, UpdateAccountDto } from './dto';
+import {
+  AccountListResponseDto,
+  AccountResponseDto,
+  CreateAccountDto,
+  UpdateAccountDto
+} from './dto';
 
 type AccountsListResult = Awaited<ReturnType<AccountsService['list']>>;
 type AccountResult = Awaited<ReturnType<AccountsService['get']>>;
@@ -35,6 +48,7 @@ const parseLimit = (value?: string) => {
 
 @ApiTags('Accounts')
 @ApiBearerAuth()
+@ApiExtraModels(AccountListResponseDto)
 @Controller('accounts')
 @UseInterceptors(AuditInterceptor)
 export class AccountsController {
@@ -50,7 +64,7 @@ export class AccountsController {
     schema: { type: 'integer', minimum: 1, maximum: 200 }
   })
   @ApiQuery({ name: 'cursor', required: false, description: 'Cursor for pagination' })
-  @ApiOkResponse({ type: AccountResponseDto, isArray: true })
+  @ApiOkResponse({ type: AccountListResponseDto })
   async list(
     @Req() req: FastifyRequest,
     @Query('q') q?: string,
@@ -58,11 +72,12 @@ export class AccountsController {
     @Query('cursor') cursor?: string
   ): Promise<AccountsListResult> {
     const ctx = resolveRequestContext(req);
-    return this.service.list(ctx, {
+    const { items, nextCursor } = await this.service.list(ctx, {
       q,
       limit: parseLimit(limit),
       cursor: cursor ?? undefined
     });
+    return { items, nextCursor };
   }
 
   @Get(':id')

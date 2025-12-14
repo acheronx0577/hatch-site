@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { OidcStrategy } from './oidc.strategy';
 import { TokensService } from './tokens.service';
+import { CognitoService } from '../../modules/auth/cognito.service';
 
 @Module({
   imports: [
@@ -13,8 +14,8 @@ import { TokensService } from './tokens.service';
       session: false
     })
   ],
-  providers: [OidcStrategy, TokensService],
+  providers: [OidcStrategy, TokensService, CognitoService],
   controllers: [AuthController],
-  exports: [TokensService]
+  exports: [TokensService, CognitoService]
 })
 export class AuthModule {}

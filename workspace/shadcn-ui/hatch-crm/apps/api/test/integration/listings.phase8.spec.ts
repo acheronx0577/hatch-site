@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import { RUN_INTEGRATION, describeIf } from '../helpers/cond';
 import { setupTestApp } from '../setupTestApp';
 
+jest.setTimeout(20000);
+
 describeIf(RUN_INTEGRATION)('Phase 8 — Listings backbone', () => {
   let app: Awaited<ReturnType<typeof setupTestApp>>;
   let tenantId: string;

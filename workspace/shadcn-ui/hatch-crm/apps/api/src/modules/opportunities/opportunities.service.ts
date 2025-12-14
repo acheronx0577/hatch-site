@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 
-import { Prisma } from '@hatch/db';
+import { Prisma, type Opportunity } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
 import type { RequestContext } from '../common/request-context';
@@ -26,10 +26,11 @@ export class OpportunitiesService {
 
   async list(ctx: RequestContext, options: ListOptions = {}) {
     if (!ctx.orgId) {
-      return [];
+      return { items: [], nextCursor: null };
     }
     const { q, stage, accountId, limit = 50, cursor } = options;
-    const items = await this.prisma.opportunity.findMany({
+    const take = Math.min(Math.max(limit, 1), 200);
+    const records = await this.prisma.opportunity.findMany({
       where: {
         orgId: ctx.orgId,
         deletedAt: null,
@@ -45,17 +46,31 @@ export class OpportunitiesService {
         ...(accountId ? { accountId } : {})
       },
       orderBy: { updatedAt: 'desc' },
-      take: limit,
+      take,
       skip: cursor ? 1 : 0,
-      cursor: cursor ? { id: cursor } : undefined
+      cursor: cursor ? { id: cursor } : undefined,
+      include: {
+        account: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            stage: true
+          }
+        }
+      }
     });
 
-    return Promise.all(
-      items.map(async (item) => {
-        const filtered = await this.fls.filterRead(ctx, 'opportunities', item);
-        return { id: item.id, ...filtered };
-      })
-    );
+    const items = await Promise.all(records.map((record) => this.toResponse(ctx, record)));
+    const nextCursor = records.length === take ? records[records.length - 1]?.id ?? null : null;
+
+    return { items, nextCursor };
   }
 
   async get(ctx: RequestContext, id: string) {
@@ -85,20 +100,7 @@ export class OpportunitiesService {
       return null;
     }
 
-    const filteredRaw = await this.fls.filterRead(ctx, 'opportunities', record);
-    const filtered = (filteredRaw ?? {}) as Record<string, unknown>;
-    const transaction = record.transactions?.[0] ?? null;
-    return {
-      id: record.id,
-      ...filtered,
-      account: record.account ? { id: record.account.id, name: record.account.name } : null,
-      transaction: transaction
-        ? {
-            id: transaction.id,
-            stage: transaction.stage
-          }
-        : null
-    };
+    return this.toResponse(ctx, record);
   }
 
   async create(ctx: RequestContext, dto: Record<string, unknown>) {
@@ -136,16 +138,16 @@ export class OpportunitiesService {
         ...writableRecord
       } as Prisma.OpportunityUncheckedCreateInput,
       include: {
-        account: { select: { id: true, name: true } }
+        account: { select: { id: true, name: true } },
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, stage: true }
+        }
       }
     });
 
-    const filtered = await this.fls.filterRead(ctx, 'opportunities', created);
-    return {
-      id: created.id,
-      ...filtered,
-      account: created.account ? { id: created.account.id, name: created.account.name } : null
-    };
+    return this.toResponse(ctx, created);
   }
 
   async update(ctx: RequestContext, id: string, dto: Record<string, unknown>) {
@@ -154,7 +156,14 @@ export class OpportunitiesService {
     }
     const current = await this.prisma.opportunity.findFirst({
       where: { id, orgId: ctx.orgId, deletedAt: null },
-      include: { account: { select: { id: true, name: true } } }
+      include: {
+        account: { select: { id: true, name: true } },
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, stage: true }
+        }
+      }
     });
     if (!current) {
       return null;
@@ -184,28 +193,23 @@ export class OpportunitiesService {
     }
 
     if (Object.keys(writableRecord).length === 0) {
-      const filteredCurrent = await this.fls.filterRead(ctx, 'opportunities', current);
-      return {
-        id: current.id,
-        ...filteredCurrent,
-        account: current.account ? { id: current.account.id, name: current.account.name } : null
-      };
+      return this.toResponse(ctx, current);
     }
 
     const updated = await this.prisma.opportunity.update({
       where: { id },
       data: writableRecord as Prisma.OpportunityUncheckedUpdateInput,
       include: {
-        account: { select: { id: true, name: true } }
+        account: { select: { id: true, name: true } },
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true, stage: true }
+        }
       }
     });
 
-    const filtered = await this.fls.filterRead(ctx, 'opportunities', updated);
-    return {
-      id: updated.id,
-      ...filtered,
-      account: updated.account ? { id: updated.account.id, name: updated.account.name } : null
-    };
+    return this.toResponse(ctx, updated);
   }
 
   async softDelete(ctx: RequestContext, id: string) {
@@ -239,5 +243,33 @@ export class OpportunitiesService {
     if (!account) {
       throw new BadRequestException('Account not found for this organisation');
     }
+  }
+
+  private async toResponse(
+    ctx: RequestContext,
+    record: Opportunity & {
+      account?: { id: string; name: string | null } | null;
+      transactions?: Array<{ id: string; stage: string | null }>;
+    }
+  ) {
+    const filteredRaw = await this.fls.filterRead(ctx, 'opportunities', record);
+    const filtered = (filteredRaw ?? {}) as Record<string, unknown>;
+    const response: Record<string, unknown> = { id: record.id, ...filtered };
+
+    if ('amount' in response) {
+      response.amount =
+        record.amount !== null && record.amount !== undefined ? Number(record.amount) : null;
+    }
+
+    if ('ownerId' in response || 'owner' in response) {
+      response.owner = record.ownerId ? { id: record.ownerId } : null;
+    }
+
+    response.account = record.account ? { id: record.account.id, name: record.account.name } : null;
+
+    const transaction = record.transactions?.[0] ?? null;
+    response.transaction = transaction ? { id: transaction.id, stage: transaction.stage } : null;
+
+    return response;
   }
 }

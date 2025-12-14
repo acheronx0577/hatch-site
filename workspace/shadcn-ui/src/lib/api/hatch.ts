@@ -4,6 +4,7 @@ import type { PersonaId } from '@/lib/ai/aiPersonas';
 
 const ensureTrailingSlash = (value: string) => (value.endsWith('/') ? value : `${value}/`);
 const DEFAULT_API_PREFIX = '/api/v1';
+const AUTH_STORAGE_KEY = 'hatch_auth_tokens';
 
 const resolveApiBaseUrl = (value?: string) => {
   const fallback = `http://localhost:4000${DEFAULT_API_PREFIX}`;
@@ -36,12 +37,23 @@ const resolveApiBaseUrl = (value?: string) => {
   }
 };
 
-const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+export const API_BASE_URL = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 const API_TOKEN = import.meta.env.VITE_API_TOKEN;
 const CHAOS_MODE = (import.meta.env.VITE_CHAOS_MODE ?? 'false').toLowerCase() === 'true';
 interface FetchOptions extends RequestInit {
   token?: string;
 }
+
+const readAuthFromStorage = () => {
+  if (typeof localStorage === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as { accessToken?: string; user?: { id?: string; role?: string } };
+  } catch {
+    return null;
+  }
+};
 
 async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const sanitizedPath = path.replace(/^\/+/, '');
@@ -56,11 +68,12 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
   const isFormData =
     typeof FormData !== 'undefined' && options.body instanceof FormData;
 
-  if (!headers.has('x-user-role')) {
-    headers.set('x-user-role', 'BROKER');
+  const stored = readAuthFromStorage();
+  if (stored?.user?.id && !headers.has('x-user-id')) {
+    headers.set('x-user-id', stored.user.id);
   }
-  if (!headers.has('x-user-id')) {
-    headers.set('x-user-id', 'user-broker');
+  if (!headers.has('x-user-role') && stored?.user?.role) {
+    headers.set('x-user-role', stored.user.role.toUpperCase());
   }
   if (!headers.has('x-tenant-id')) {
     headers.set('x-tenant-id', import.meta.env.VITE_TENANT_ID || 'tenant-hatch');
@@ -73,7 +86,8 @@ async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T>
     headers.set('Content-Type', 'application/json');
   }
 
-  const authToken = options.token ?? API_TOKEN;
+  const storedToken = stored?.accessToken;
+  const authToken = options.token ?? storedToken ?? API_TOKEN;
   if (authToken) {
     headers.set('Authorization', `Bearer ${authToken}`);
   }
@@ -749,6 +763,22 @@ export async function deleteContact(contactId: string, tenantId: string) {
 export async function restoreContact(contactId: string, tenantId: string) {
   return apiFetch<ContactDetails>(`/contacts/${contactId}/restore?tenantId=${encodeURIComponent(tenantId)}`, {
     method: 'POST'
+  });
+}
+
+export interface ConvertToOpportunityResponse {
+  opportunity: Record<string, unknown>;
+  account: Record<string, unknown>;
+  message: string;
+}
+
+export async function convertContactToOpportunity(
+  contactId: string,
+  options?: { opportunityName?: string; accountName?: string }
+) {
+  return apiFetch<ConvertToOpportunityResponse>(`/contacts/${contactId}/convert-to-opportunity`, {
+    method: 'POST',
+    body: JSON.stringify(options || {})
   });
 }
 
@@ -2010,6 +2040,9 @@ export interface AiEmployeeAction {
   errorMessage?: string | null;
   executedAt?: string | null;
   sessionId?: string | null;
+  result?: Record<string, unknown> | null;
+  replyText?: string | null;
+  dryRun?: boolean;
 }
 
 export interface AiEmployeeChatResponse {
@@ -2084,6 +2117,7 @@ export async function chatAiPersona(payload: {
   text: string;
   currentPersonaId: PersonaId;
   history?: PersonaChatMessage[];
+  forceCurrentPersona?: boolean;
 }): Promise<PersonaChatResponse> {
   return apiFetch('ai/personas/chat', {
     method: 'POST',

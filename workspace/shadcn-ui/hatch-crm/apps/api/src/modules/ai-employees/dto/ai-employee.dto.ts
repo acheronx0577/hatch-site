@@ -36,6 +36,24 @@ export class AiEmployeeTemplateDto {
 
   @ApiProperty({ type: 'array', items: { type: 'string' } })
   allowedTools!: string[];
+
+  @ApiPropertyOptional({ description: 'Normalized persona key for UI mapping (e.g., hatch_assistant, agent_copilot)' })
+  canonicalKey?: string;
+
+  @ApiPropertyOptional({ description: 'Hex color used for avatar accents' })
+  personaColor?: string;
+
+  @ApiPropertyOptional({ description: 'Avatar shape', enum: AVATAR_SHAPES })
+  avatarShape?: AvatarShape;
+
+  @ApiPropertyOptional({ description: 'Avatar icon name' })
+  avatarIcon?: string;
+
+  @ApiPropertyOptional({ description: 'Avatar initials (1-2 chars)' })
+  avatarInitial?: string;
+
+  @ApiPropertyOptional({ description: 'Suggested tone label' })
+  tone?: string;
 }
 
 export class AiEmployeeInstanceDto {
@@ -117,6 +135,12 @@ export class AiEmployeeActionDto {
 
   @ApiProperty()
   dryRun!: boolean;
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true, nullable: true })
+  result?: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({ nullable: true, description: 'Human-friendly result summary for executed tools' })
+  replyText?: string | null;
 }
 
 export class AiEmployeeChatResponseDto {

@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   Req,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
   UseGuards,
@@ -15,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiParam } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
+import { UserRole } from '@hatch/db';
 
 import { isAiEmployeesEnabled } from '@/config/ai-employees.config';
 import { ApiModule, ApiStandardErrors, OrgAdminGuard, resolveRequestContext } from '@/modules/common';
@@ -42,10 +44,13 @@ import { AiPersonaId } from './personas/registry';
 @ApiStandardErrors()
 @UseInterceptors(AuditInterceptor)
 export class AiEmployeesController {
+  private readonly log = new Logger(AiEmployeesController.name);
+
   constructor(private readonly service: AiEmployeesService) {}
 
   private ensureAiEmployeesEnabled() {
     if (!isAiEmployeesEnabled()) {
+      this.log.warn('AI Employees request blocked because the feature is disabled');
       throw new ServiceUnavailableException('AI Employees are disabled in this environment.');
     }
   }
@@ -70,7 +75,6 @@ export class AiEmployeesController {
 
   @Get('usage')
   @Permit('ai_employees', 'read')
-  @UseGuards(OrgAdminGuard)
   @ApiOkResponse({ type: AiEmployeeUsageStatsDto, isArray: true })
   async getUsage(
     @Req() req: FastifyRequest,
@@ -79,6 +83,10 @@ export class AiEmployeesController {
   ) {
     this.ensureAiEmployeesEnabled();
     const ctx = resolveRequestContext(req);
+    // Avoid 403 spam in the browser console for non-admin users. Usage stats are optional UI sugar.
+    if (ctx.role !== UserRole.BROKER) {
+      return [];
+    }
     const fromDate = from ? new Date(from) : undefined;
     const toDate = to ? new Date(to) : undefined;
     if (fromDate && Number.isNaN(fromDate.getTime())) {

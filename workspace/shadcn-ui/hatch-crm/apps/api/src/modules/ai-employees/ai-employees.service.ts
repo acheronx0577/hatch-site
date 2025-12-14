@@ -15,6 +15,7 @@ import {
 } from '@hatch/db';
 
 import { AiService } from '@/modules/ai/ai.service';
+import { AiPersonasService } from '@/modules/ai/personas/ai-personas.service';
 import { RequestContext } from '@/modules/common';
 import { PrismaService } from '@/modules/prisma/prisma.service';
 import { AuditService } from '@/modules/audit/audit.service';
@@ -112,7 +113,8 @@ export class AiEmployeesService {
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
     private readonly tools: AiToolRegistry,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly personas: AiPersonasService
   ) {
     this.collectors = new AiContextCollectors(this.prisma);
   }
@@ -133,6 +135,27 @@ export class AiEmployeesService {
   }
 
   private async ensureInstancesForTenant(ctx: RequestContext) {
+    const isProd = process.env.NODE_ENV === 'production';
+    const envAutoMode = String(process.env.AI_EMPLOYEE_DEFAULT_AUTO_MODE ?? '').trim().toLowerCase();
+    const defaultAutoMode: AiEmployeeInstance['autoMode'] =
+      envAutoMode === 'auto-run' || envAutoMode === 'requires-approval' || envAutoMode === 'suggest-only'
+        ? (envAutoMode as AiEmployeeInstance['autoMode'])
+        : isProd
+          ? 'requires-approval'
+          : 'auto-run';
+
+    // Local/dev ergonomics: keep instances usable without manual activation.
+    if (!isProd) {
+      await this.prisma.aiEmployeeInstance.updateMany({
+        where: { tenantId: ctx.tenantId, status: 'enabled' },
+        data: { status: 'active' }
+      });
+      await this.prisma.aiEmployeeInstance.updateMany({
+        where: { tenantId: ctx.tenantId, status: { not: 'deleted' }, autoMode: { not: defaultAutoMode } },
+        data: { autoMode: defaultAutoMode }
+      });
+    }
+
     const [templates, existingInstances] = await Promise.all([
       this.prisma.aiEmployeeTemplate.findMany({
         where: { isActive: true },
@@ -156,8 +179,8 @@ export class AiEmployeesService {
           data: {
             templateId: template.id,
             tenantId: ctx.tenantId,
-            status: 'enabled',
-            autoMode: 'requires-approval',
+            status: 'active',
+            autoMode: defaultAutoMode,
             settings: this.toJsonValue(template.defaultSettings),
             nameOverride: null,
             userId: null
@@ -458,6 +481,7 @@ export class AiEmployeesService {
     const session = await this.upsertSession({
       employeeInstanceId: instance.id,
       tenantId: input.tenantId,
+      orgId: input.orgId,
       userId: input.userId,
       channel: input.channel,
       contextType: input.contextType,
@@ -476,15 +500,170 @@ export class AiEmployeesService {
 
     const history = await this.loadConversationHistory(session.id);
     const allowedTools = this.extractAllowedTools(instance.template.allowedTools);
-    const systemPrompt = this.buildSystemPrompt(instance, allowedTools);
-    const completion = await this.ai.runStructuredChat({
-      systemPrompt,
-      messages: [...history, { role: 'user', content: input.message }],
-      responseFormat: 'json_object'
-    });
 
-    const plan = this.parseAssistantPlan(completion.text, allowedTools);
-    const reply = plan.reply;
+    // Check if this is a contract/forms query and delegate to personas service
+    const lowerMsg = input.message.toLowerCase();
+    const isContractQuery = ['form', 'forms', 'contract', 'contracts', 'document', 'documents', 'paperwork'].some(kw => lowerMsg.includes(kw));
+
+    let reply: string;
+    let plan: AssistantPlan;
+    if (isContractQuery && instance.template.key === 'hatch_assistant') {
+      // Delegate to personas service for grounded docs search
+      reply = await this.personas['answerWithGroundedDocs']({ tenantId: input.tenantId, query: input.message });
+      plan = { reply, actions: [] };
+    } else {
+      const systemPrompt = this.buildSystemPrompt(instance, allowedTools);
+      const completion = await this.ai.runStructuredChat({
+        systemPrompt,
+        messages: [...history, { role: 'user', content: input.message }],
+        responseFormat: 'json_object'
+      });
+
+      plan = this.parseAssistantPlan(completion.text, allowedTools);
+      reply = plan.reply;
+    }
+
+	    // Hatch orchestrator fallback: if the user explicitly mentioned other personas but the model
+	    // forgot to add the workflow tool, inject it so the delegation actually runs.
+	    if (instance.template.key === 'hatch_assistant' && allowedTools.includes('coordinate_workflow')) {
+	      const mentioned = /\b(echo|lumen|haven|atlas|nova)\b/i.test(input.message);
+	      const alreadyPlanned = plan.actions.some((action) => action.tool === 'coordinate_workflow');
+	      if (mentioned && !alreadyPlanned) {
+	        plan.actions.push({
+	          tool: 'coordinate_workflow',
+	          input: { message: input.message },
+	          requiresApproval: false
+	        });
+	      }
+
+	      const hasWorkflow = plan.actions.some((action) => action.tool === 'coordinate_workflow');
+	      if (hasWorkflow) {
+	        const replyTrimmed = (reply ?? '').trim();
+	        const looksLikePreamble =
+	          replyTrimmed.length > 0 &&
+	          replyTrimmed.length < 220 &&
+	          /\b(coordinate|workflow|loop\s+in|delegate|assign)\b/i.test(replyTrimmed) &&
+	          !/\n|- /.test(replyTrimmed);
+	        if (looksLikePreamble) {
+	          reply = '';
+	          plan.reply = '';
+	        }
+	      }
+	    }
+
+    // Echo fallback: if the user asked for lead-score prioritization but the model didn't
+    // call tools, inject get_hot_leads so we can show real CRM data.
+	    if (instance.template.key === 'agent_copilot' && allowedTools.includes('get_hot_leads')) {
+	      const message = input.message ?? '';
+	      const isMetaQuestion =
+	        /\b(what\s+(data|information|signals)|what\s+do\s+you\s+have|available\s+(data|information|signals))\b/i.test(
+	          message
+	        );
+      const asksForTargets =
+        /\b(hot\s+leads|hottest\s+leads|call\s+targets|who\s+should\s+i\s+call)\b/i.test(message) ||
+        (/\btop\s+\d+\b/i.test(message) && /\b(calls?|leads?|targets?)\b/i.test(message)) ||
+        (/\b(lead\s*score|score\s*tier)\b/i.test(message) && /\b(calls?|leads?|targets?)\b/i.test(message)) ||
+        (/\bprioritiz(e|ing)\b/i.test(message) && /\b(calls?|leads?|targets?)\b/i.test(message));
+      const wantsHotLeads = asksForTargets && !isMetaQuestion;
+
+      const topMatch = message.match(/\btop\s+(\d+)\b/i);
+      const requested = topMatch ? Number(topMatch[1]) : NaN;
+      const limit = Number.isFinite(requested) ? Math.min(50, Math.max(1, requested)) : 10;
+
+	      const alreadyPlanned = plan.actions.some((action) => action.tool === 'get_hot_leads');
+	      if (wantsHotLeads && !alreadyPlanned) {
+	        plan.actions.push({
+	          tool: 'get_hot_leads',
+	          input: { limit },
+	          requiresApproval: false
+	        });
+	      }
+
+	      if (isMetaQuestion) {
+	        reply = [
+	          '- Lead score + tier',
+	          '- Last activity (days since last touch)',
+	          '- Stage (new/active/idle)',
+	          '- Overdue/open tasks + due dates',
+	          '- Recent notes/messages (when you provide a leadId)',
+	          '- Owner/assignee (who should call)'
+	        ].join('\n');
+	        plan.reply = reply;
+	        plan.actions = [];
+	      }
+
+	      const replyLower = (reply ?? '').toLowerCase();
+	      if (wantsHotLeads && /\b(do not|don't|dont)\s+have\s+access\b|\bno\s+access\b/.test(replyLower)) {
+	        reply = `Pulling your top leads by score now.`;
+	        plan.reply = reply;
+	      }
+
+	      if (wantsHotLeads && !isMetaQuestion) {
+	        const replyTrimmed = (reply ?? '').trim();
+	        const looksLikePreamble =
+	          replyTrimmed.length > 0 &&
+	          replyTrimmed.length < 180 &&
+	          /^(i\s+will|i'?ll|retrieving|pulling|getting|fetching)\b/i.test(replyTrimmed) &&
+	          !/\n|- /.test(replyTrimmed);
+	        if (looksLikePreamble) {
+	          reply = '';
+	          plan.reply = '';
+	        }
+	      }
+	    }
+
+	    // Lumen fallback: if the user asks for follow-up texts for idle leads, inject a deterministic tool
+	    // so the response always includes draft texts (not just "I'll retrieve...").
+	    if (instance.template.key === 'lead_nurse' && allowedTools.includes('draft_idle_lead_followups')) {
+	      const message = input.message ?? '';
+	      const wantsIdleFollowups =
+	        /\bidle\b/i.test(message) &&
+	        /\bfollow[- ]?up\b/i.test(message) &&
+	        /\b(texts?|sms)\b/i.test(message) &&
+	        /\b(top\s+\d+|for\s+each|each\b|per\s+lead)\b/i.test(message);
+
+	      const topMatch = message.match(/\btop\s+(\d+)\b/i);
+	      const requested = topMatch ? Number(topMatch[1]) : NaN;
+	      const limit = Number.isFinite(requested) ? Math.min(10, Math.max(1, requested)) : 3;
+
+	      const alreadyPlanned = plan.actions.some((action) => action.tool === 'draft_idle_lead_followups');
+	      if (wantsIdleFollowups && !alreadyPlanned) {
+	        plan.actions = plan.actions.filter((action) => action.tool !== 'get_idle_leads');
+	        plan.actions.push({
+	          tool: 'draft_idle_lead_followups',
+	          input: { limit },
+	          requiresApproval: false
+	        });
+	      }
+
+	      if (wantsIdleFollowups) {
+	        reply = '';
+	        plan.reply = '';
+	      }
+	    }
+
+	    // Guard rail: prevent Lumen from running idle-lead drafting tools unless the user explicitly asked for idle leads.
+	    // This avoids unrelated "idle lead" tool outputs leaking into other requests (e.g., workflow outreach texts).
+	    if (instance.template.key === 'lead_nurse') {
+	      const msg = input.message ?? '';
+	      const mentionsIdle = /\bidle\b/i.test(msg);
+	      if (!mentionsIdle) {
+	        plan.actions = plan.actions.filter(
+	          (action) => action.tool !== 'draft_idle_lead_followups' && action.tool !== 'get_idle_leads'
+	        );
+	      }
+	    }
+
+	    const actions = await this.handlePlanActions({
+	      plan,
+	      sessionId: session.id,
+	      instance,
+      tenantId: input.tenantId,
+      orgId: input.orgId,
+      actorId: input.userId,
+      actorRole: input.actorRole ?? UserRole.AGENT,
+      allowedTools
+    });
 
     await this.recordConversationLog({
       employeeInstanceId: instance.id,
@@ -498,17 +677,6 @@ export class AiEmployeesService {
     await this.prisma.aiEmployeeSession.update({
       where: { id: session.id },
       data: { lastInteractionAt: new Date() }
-    });
-
-    const actions = await this.handlePlanActions({
-      plan,
-      sessionId: session.id,
-      instance,
-      tenantId: input.tenantId,
-      orgId: input.orgId,
-      actorId: input.userId,
-      actorRole: input.actorRole ?? UserRole.AGENT,
-      allowedTools
     });
 
     return {
@@ -595,7 +763,7 @@ export class AiEmployeesService {
       results.push(dto);
     }
 
-    return results;
+    return this.hydrateActionResults(results);
   }
 
   async executeProposedAction(params: {
@@ -647,7 +815,9 @@ export class AiEmployeesService {
     }
 
     const refreshed = await this.prisma.aiProposedAction.findUnique({ where: { id: action.id } });
-    return this.toActionDto(refreshed ?? updatedAction);
+    const dto = this.toActionDto(refreshed ?? updatedAction);
+    const [hydrated] = await this.hydrateActionResults([dto]);
+    return hydrated;
   }
 
   private async executeActionRecord(
@@ -816,11 +986,14 @@ export class AiEmployeesService {
   private async upsertSession(params: {
     employeeInstanceId: string;
     tenantId: string;
+    orgId: string;
     userId: string;
     channel: string;
     contextType?: string;
     contextId?: string;
   }) {
+    await this.ensureUserExists(params.userId, params.orgId, params.tenantId);
+
     const existing = await this.prisma.aiEmployeeSession.findFirst({
       where: {
         employeeInstanceId: params.employeeInstanceId,
@@ -846,6 +1019,46 @@ export class AiEmployeesService {
         contextId: params.contextId ?? null
       }
     });
+  }
+
+  private async ensureUserExists(userId: string, orgId: string, tenantId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user) return;
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      include: { organization: true }
+    });
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found for AI session');
+    }
+    const organization =
+      (await this.prisma.organization.findUnique({ where: { id: orgId } })) ?? tenant.organization;
+
+    const createdUser = await this.prisma.user.create({
+      data: {
+        id: userId,
+        email: `${userId}@autogen.local`,
+        firstName: 'AI',
+        lastName: 'User',
+        role: UserRole.BROKER,
+        organizationId: organization.id,
+        tenantId: tenant.id
+      }
+    });
+
+    const membership = await this.prisma.userOrgMembership.findUnique({
+      where: { userId_orgId: { userId: createdUser.id, orgId: organization.id } }
+    });
+    if (!membership) {
+      await this.prisma.userOrgMembership.create({
+        data: {
+          userId: createdUser.id,
+          orgId: organization.id,
+          isOrgAdmin: true
+        }
+      });
+    }
   }
 
   private buildSystemPrompt(instance: EmployeeWithTemplate, allowedTools: string[]): string {
@@ -1048,6 +1261,7 @@ export class AiEmployeesService {
   }
 
   private toTemplateDto(row: AiEmployeeTemplate): AiEmployeeTemplateDto {
+    const meta = this.extractPersonaMeta(row);
     return {
       id: row.id,
       key: row.key,
@@ -1055,7 +1269,13 @@ export class AiEmployeesService {
       description: row.description,
       systemPrompt: row.systemPrompt,
       defaultSettings: this.toRecord(row.defaultSettings),
-      allowedTools: this.extractAllowedTools(row.allowedTools)
+      allowedTools: this.extractAllowedTools(row.allowedTools),
+      canonicalKey: meta.canonicalKey,
+      personaColor: meta.personaColor,
+      avatarShape: meta.avatarShape,
+      avatarIcon: meta.avatarIcon,
+      avatarInitial: meta.avatarInitial,
+      tone: meta.tone
     };
   }
 
@@ -1087,8 +1307,252 @@ export class AiEmployeesService {
       errorMessage: row.errorMessage ?? null,
       executedAt: row.executedAt ? row.executedAt.toISOString() : null,
       sessionId: row.sessionId ?? null,
-      dryRun: Boolean(actionWithDryRun.dryRun)
+      dryRun: Boolean(actionWithDryRun.dryRun),
+      result: null
     };
+  }
+
+  private async hydrateActionResults(actions: AiEmployeeActionDto[]): Promise<AiEmployeeActionDto[]> {
+    const executedIds = actions.filter((a) => a.status === ACTION_STATUS.EXECUTED).map((a) => a.id);
+    if (executedIds.length === 0) return actions;
+
+    const logs = await this.prisma.aiExecutionLog.findMany({
+      where: { proposedActionId: { in: executedIds }, success: true },
+      orderBy: { createdAt: 'desc' }
+    });
+    const latestByAction = new Map<string, any>();
+    for (const log of logs) {
+      if (!log.proposedActionId) continue;
+      if (latestByAction.has(log.proposedActionId)) continue;
+      latestByAction.set(log.proposedActionId, log.output);
+    }
+    return actions.map((action) => {
+      if (action.status === ACTION_STATUS.EXECUTED && latestByAction.has(action.id)) {
+        const output = latestByAction.get(action.id);
+        const normalized =
+          output && typeof output === 'object' && !Array.isArray(output)
+            ? (output as Prisma.JsonObject)
+            : ({ value: output } as Prisma.JsonObject);
+        const pretty = this.humanizeToolResult(action.actionType, normalized);
+        const rendered = pretty ?? null;
+        return { ...action, payload: normalized, result: normalized, replyText: rendered } as AiEmployeeActionDto & {
+          replyText?: string | null;
+        };
+      }
+      return action;
+    });
+  }
+
+  private humanizeToolResult(tool: string, result: Prisma.JsonValue | null | undefined): string | null {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+      try {
+        return result ? String(result) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    const asDateString = (value: unknown): string | null => {
+      if (typeof value === 'string') return value;
+      if (value instanceof Date) return value.toISOString();
+      if (value && typeof value === 'object' && typeof (value as { toISOString?: unknown }).toISOString === 'function') {
+        try {
+          return (value as { toISOString: () => string }).toISOString();
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    };
+
+    if (tool === 'get_daily_summary') {
+      const totals = (result['totals'] as Record<string, unknown>) ?? {};
+      const tasks = (result['tasks'] as Record<string, unknown>) ?? {};
+      const newLeads = totals['newLeads'] ?? 0;
+      const idleLeads = totals['idleLeads'] ?? 0;
+      const activeLeads = totals['activeLeads'] ?? 0;
+      const openTasks = tasks['open'] ?? 0;
+      const dueSoon = tasks['dueSoon'] ?? 0;
+      return `Daily summary: ${newLeads} new leads, ${activeLeads} active, ${idleLeads} idle. Tasks: ${openTasks} open, ${dueSoon} due soon.`;
+    }
+
+    if (tool === 'get_hot_leads') {
+      const requestedLimit = typeof result['requestedLimit'] === 'number' ? result['requestedLimit'] : null;
+      const availableCount = typeof result['availableCount'] === 'number' ? result['availableCount'] : null;
+      const leads = result['leads'];
+      if (Array.isArray(leads)) {
+        const lines = leads
+          .map((lead) => {
+            if (!lead || typeof lead !== 'object' || Array.isArray(lead)) return null;
+            const record = lead as Record<string, unknown>;
+            const leadId = typeof record.id === 'string' ? record.id : null;
+            const firstName = typeof record.firstName === 'string' ? record.firstName.trim() : '';
+            const lastName = typeof record.lastName === 'string' ? record.lastName.trim() : '';
+            const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown lead';
+            const tier = typeof record.scoreTier === 'string' ? record.scoreTier : null;
+            const score = typeof record.leadScore === 'number' ? record.leadScore : null;
+            const stage = typeof record.stage === 'string' ? record.stage : null;
+            const lastActivityAt = asDateString(record.lastActivityAt);
+            const createdAt = asDateString(record.createdAt);
+            const activityTimestamp = lastActivityAt ?? createdAt;
+            const activityDate = activityTimestamp ? new Date(activityTimestamp) : null;
+            const daysSinceActivity =
+              activityDate && Number.isFinite(activityDate.getTime())
+                ? Math.max(0, Math.round((Date.now() - activityDate.getTime()) / (1000 * 60 * 60 * 24)))
+                : null;
+            const bits = [
+              leadId ? `leadId: ${leadId}` : null,
+              tier ? `Tier ${tier}` : null,
+              typeof score === 'number' ? `score ${Math.round(score)}` : null,
+              stage ? stage.replace(/[_-]+/g, ' ').toLowerCase() : null,
+              lastActivityAt ? `last activity ${new Date(lastActivityAt).toLocaleDateString()}` : null
+            ].filter((value): value is string => Boolean(value));
+            const meta = bits.length > 0 ? ` (${bits.join(', ')})` : '';
+            const intent =
+              tier ? `Tier ${tier}` : typeof score === 'number' ? `score ${Math.round(score)}` : null;
+            const recency =
+              daysSinceActivity === 0
+                ? 'active today'
+                : typeof daysSinceActivity === 'number' && daysSinceActivity > 0
+                  ? `${daysSinceActivity}d since last activity`
+                  : null;
+            const whyParts = [intent, recency].filter((value): value is string => Boolean(value));
+            const why = whyParts.length > 0 ? ` — Why: ${whyParts.join(', ')}` : '';
+            return `- ${name}${meta}${why}`;
+          })
+          .filter((line): line is string => Boolean(line));
+        if (lines.length > 0) {
+          const showingNote =
+            typeof requestedLimit === 'number' && lines.length < requestedLimit
+              ? ` (showing ${lines.length} of ${requestedLimit} requested${
+                  typeof availableCount === 'number' ? `; ${availableCount} available` : ''
+                })`
+              : '';
+          return `Hot leads${showingNote}:\n\n${lines.join('\n')}`;
+        }
+      }
+    }
+
+    if (tool === 'get_idle_leads') {
+      const leads = result['leads'];
+      if (Array.isArray(leads)) {
+        const lines = leads
+          .map((lead) => {
+            if (!lead || typeof lead !== 'object' || Array.isArray(lead)) return null;
+            const record = lead as Record<string, unknown>;
+            const firstName = typeof record.firstName === 'string' ? record.firstName.trim() : '';
+            const lastName = typeof record.lastName === 'string' ? record.lastName.trim() : '';
+            const name = [firstName, lastName].filter(Boolean).join(' ') || 'Unknown lead';
+            const tier = typeof record.scoreTier === 'string' ? record.scoreTier : null;
+            const score = typeof record.leadScore === 'number' ? record.leadScore : null;
+            const stage = typeof record.stage === 'string' ? record.stage : null;
+            const lastActivityAt = asDateString(record.lastActivityAt);
+            const createdAt = asDateString(record.createdAt);
+            const activityTimestamp = lastActivityAt ?? createdAt;
+            const activityDate = activityTimestamp ? new Date(activityTimestamp) : null;
+            const daysIdle =
+              activityDate && Number.isFinite(activityDate.getTime())
+                ? Math.max(0, Math.round((Date.now() - activityDate.getTime()) / (1000 * 60 * 60 * 24)))
+                : null;
+            const bits = [
+              tier ? `Tier ${tier}` : null,
+              typeof score === 'number' ? `score ${Math.round(score)}` : null,
+              stage ? stage.replace(/[_-]+/g, ' ').toLowerCase() : null,
+              lastActivityAt ? `last activity ${new Date(lastActivityAt).toLocaleDateString()}` : 'no recent activity',
+              typeof daysIdle === 'number' ? `${daysIdle}d idle` : null
+            ].filter((value): value is string => Boolean(value));
+            const meta = bits.length > 0 ? ` (${bits.join(', ')})` : '';
+            return `- ${name}${meta}`;
+          })
+          .filter((line): line is string => Boolean(line));
+        if (lines.length > 0) {
+          return `Idle leads:\n\n${lines.join('\n')}`;
+        }
+      }
+    }
+
+    if (tool === 'draft_idle_lead_followups') {
+      const drafts = result['drafts'];
+      if (Array.isArray(drafts)) {
+        const lines = drafts
+          .map((draft) => {
+            if (!draft || typeof draft !== 'object' || Array.isArray(draft)) return null;
+            const record = draft as Record<string, unknown>;
+            const name = typeof record.name === 'string' ? record.name.trim() : null;
+            const text = typeof record.text === 'string' ? record.text.trim() : null;
+            if (!text) return null;
+            const label = name ?? 'Lead';
+            return `- ${label}: ${text}`;
+          })
+          .filter((line): line is string => Boolean(line));
+        if (lines.length > 0) {
+          return `Follow-up texts (idle leads):\n\n${lines.join('\n')}`;
+        }
+      }
+    }
+
+    if (tool === 'get_overdue_tasks') {
+      const tasks = result['tasks'];
+      if (Array.isArray(tasks)) {
+        const firstTask = tasks.find((task) => task && typeof task === 'object' && !Array.isArray(task)) as
+          | Record<string, unknown>
+          | undefined;
+        const doFirstTitle = firstTask && typeof firstTask.title === 'string' ? firstTask.title.trim() : null;
+        const doFirstDueAt = firstTask ? asDateString(firstTask.dueAt) : null;
+        const doFirstLabel =
+          doFirstTitle && doFirstDueAt
+            ? `Do first: ${doFirstTitle} (due ${new Date(doFirstDueAt).toLocaleDateString()})`
+            : doFirstTitle
+              ? `Do first: ${doFirstTitle}`
+              : null;
+
+        const lines = tasks
+          .map((task) => {
+            if (!task || typeof task !== 'object' || Array.isArray(task)) return null;
+            const record = task as Record<string, unknown>;
+            const title = typeof record.title === 'string' ? record.title.trim() : 'Task';
+            const dueAt = asDateString(record.dueAt);
+            const dueLabel = dueAt ? ` (due ${new Date(dueAt).toLocaleDateString()})` : '';
+            return `- ${title}${dueLabel}`;
+          })
+          .filter((line): line is string => Boolean(line));
+        if (lines.length > 0) {
+          return `${doFirstLabel ? `${doFirstLabel}\n\n` : ''}Overdue tasks:\n\n${lines.join('\n')}`;
+        }
+      }
+    }
+
+    if (tool === 'delegate_to_employee') {
+      const personaName = typeof result['personaName'] === 'string' ? result['personaName'] : null;
+      const reply = typeof result['reply'] === 'string' ? result['reply'] : typeof result['value'] === 'string' ? result['value'] : null;
+      if (reply) {
+        return personaName ? `${personaName}: ${reply}` : reply;
+      }
+    }
+
+    if (tool === 'coordinate_workflow') {
+      const results = result['results'];
+      if (Array.isArray(results)) {
+        const lines = results
+          .map((entry) => {
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+            const record = entry as Record<string, unknown>;
+            const personaName = typeof record.personaName === 'string' ? record.personaName : typeof record.personaKey === 'string' ? record.personaKey : 'Teammate';
+            const reply = typeof record.reply === 'string' ? record.reply : null;
+            if (!reply) return null;
+            return `${personaName}: ${reply}`;
+          })
+          .filter((line): line is string => Boolean(line));
+        if (lines.length > 0) {
+          return lines.join('\n\n');
+        }
+      }
+      const value = typeof result['value'] === 'string' ? result['value'] : null;
+      if (value) return value;
+    }
+
+    // Avoid dumping raw JSON into the chat UI; only return summaries for tools we explicitly format.
+    return null;
   }
 
   private async logActionReview(
@@ -1134,6 +1598,74 @@ export class AiEmployeesService {
     const templateObj = this.toRecord(templateSettings);
     const instanceObj = this.toRecord(instanceSettings);
     return { ...templateObj, ...instanceObj };
+  }
+
+  private extractPersonaMeta(row: AiEmployeeTemplate) {
+    const defaults = this.toRecord(row.defaultSettings);
+    const canonicalKey = this.mapToCanonicalPersona(row.key, row.displayName);
+
+    const trim = (value: unknown): string | undefined => {
+      if (typeof value !== 'string') return undefined;
+      const v = value.trim();
+      return v.length ? v : undefined;
+    };
+
+    const canonicalDefaults: Record<
+      string,
+      Partial<Record<'personaColor' | 'avatarShape' | 'avatarIcon' | 'avatarInitial' | 'tone', string>>
+    > = {
+      hatch_assistant: { personaColor: '#2563EB', avatarShape: 'circle', avatarIcon: 'robot', avatarInitial: 'H', tone: 'professional' },
+      agent_copilot: { personaColor: '#EAB308', avatarShape: 'circle', avatarIcon: 'brain', avatarInitial: 'E', tone: 'balanced' },
+      lead_nurse: { personaColor: '#FF8A80', avatarShape: 'circle', avatarIcon: 'stethoscope', avatarInitial: 'L', tone: 'warm' },
+      listing_concierge: { personaColor: '#9B5BFF', avatarShape: 'circle', avatarIcon: 'sparkles', avatarInitial: 'H', tone: 'creative' },
+      market_analyst: { personaColor: '#FF9F43', avatarShape: 'circle', avatarIcon: 'chart-bar', avatarInitial: 'A', tone: 'analytical' },
+      transaction_coordinator: { personaColor: '#F368E0', avatarShape: 'circle', avatarIcon: 'clipboard', avatarInitial: 'N', tone: 'precise' }
+    };
+
+    const canonDefaults = canonicalKey ? canonicalDefaults[canonicalKey] ?? {} : {};
+
+    return {
+      canonicalKey,
+      personaColor: trim(defaults.personaColor) ?? (canonDefaults.personaColor as string | undefined),
+      avatarShape: (trim(defaults.avatarShape) ?? (canonDefaults.avatarShape as string | undefined)) as
+        | 'circle'
+        | 'square'
+        | 'rounded-square'
+        | 'hexagon'
+        | 'pill'
+        | undefined,
+      avatarIcon: trim(defaults.avatarIcon) ?? (canonDefaults.avatarIcon as string | undefined),
+      avatarInitial: trim(defaults.avatarInitial) ?? (canonDefaults.avatarInitial as string | undefined),
+      tone: trim(defaults.tone) ?? (canonDefaults.tone as string | undefined)
+    };
+  }
+
+  private mapToCanonicalPersona(key: string, displayName?: string | null): string | null {
+    const normalize = (value?: string | null) => (value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const candidates = [normalize(key), normalize(displayName)];
+    const map: Record<string, string> = {
+      hatchassistant: 'hatch_assistant',
+      hatch: 'hatch_assistant',
+      aibroker: 'hatch_assistant',
+      switchboard: 'hatch_assistant',
+      agentcopilot: 'agent_copilot',
+      echo: 'agent_copilot',
+      leadnurse: 'lead_nurse',
+      lumen: 'lead_nurse',
+      listingconcierge: 'listing_concierge',
+      haven: 'listing_concierge',
+      marketanalyst: 'market_analyst',
+      atlas: 'market_analyst',
+      transactioncoordinator: 'transaction_coordinator',
+      nova: 'transaction_coordinator'
+    };
+
+    for (const candidate of candidates) {
+      if (map[candidate]) return map[candidate];
+      const partial = Object.keys(map).find((keyPart) => candidate.includes(keyPart));
+      if (partial) return map[partial];
+    }
+    return null;
   }
 
   private extractAllowedTools(payload: Prisma.JsonValue | null): string[] {

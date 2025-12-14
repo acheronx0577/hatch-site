@@ -53,6 +53,8 @@ import { ViewsModule } from './modules/views/views.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { ReadModelsModule } from './modules/read-models/read-models.module';
 import { AiModule } from './modules/ai/ai.module';
+import { AiBrokerModule } from './modules/ai-broker/ai-broker.module';
+import { AiCopilotModule } from './modules/ai-copilot/ai-copilot.module';
 import { MarketingModule } from './modules/marketing/marketing.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { OutreachModule } from './modules/outreach/outreach.module';
@@ -81,6 +83,8 @@ import { QuickBooksModule } from './modules/integrations/quickbooks/quickbooks.m
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { OrgLoisModule } from './modules/org-lois/org-lois.module';
 import { AgentProfilesModule } from './modules/agent-profiles/agent-profiles.module';
+import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { AgentInvitesModule } from './modules/agent-invites/agent-invites.module';
 
 const isProd = (process.env.NODE_ENV ?? 'development') === 'production';
 const throttlerEnabled =
@@ -193,6 +197,8 @@ const throttlerTtl = Number(process.env.THROTTLER_TTL_MS ?? 60_000);
     AuditModule,
     ReadModelsModule,
     AiModule,
+    AiBrokerModule,
+    AiCopilotModule,
     MarketingModule,
     SmsModule,
     AiEmployeesModule,
@@ -218,7 +224,9 @@ const throttlerTtl = Number(process.env.THROTTLER_TTL_MS ?? 60_000);
     OrgTransactionsModule,
     QuickBooksModule,
     AccountingModule,
-    AgentProfilesModule
+    AgentProfilesModule,
+    OrganizationsModule,
+    AgentInvitesModule
   ],
   controllers: [],
   providers: [

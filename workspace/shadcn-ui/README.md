@@ -66,3 +66,5 @@ pnpm run dev
 ```shell
 pnpm run build
 ```
+
+> **Note:** The Next.js app under `workspace/shadcn-ui/hatch-crm/apps/web` is currently deprecated for active work. Keep all new work in the Vite app (`src/...`) and avoid modifying Next.js files unless explicitly requested. This prevents accidental edits in the wrong stack.

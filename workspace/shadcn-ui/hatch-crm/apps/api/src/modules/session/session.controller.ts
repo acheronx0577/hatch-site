@@ -1,4 +1,4 @@
-import { Controller, Get, Req } from '@nestjs/common';
+import { Controller, Get, Req, UnauthorizedException, NotFoundException } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
 import { UserRole } from '@hatch/db';
@@ -13,6 +13,11 @@ export class SessionController {
   @Get('me')
   async getSession(@Req() req: FastifyRequest) {
     const ctx = resolveRequestContext(req);
+
+    // Require authentication - no fallback session
+    if (!ctx.userId) {
+      throw new UnauthorizedException('Authentication required');
+    }
 
     const orgId = ctx.orgId ?? ctx.tenantId;
     const [user, tenant] = await Promise.all([
@@ -36,16 +41,21 @@ export class SessionController {
       })
     ]);
 
-    const email = user?.email ?? 'broker@hatchcrm.test';
-    const firstName = user?.firstName ?? 'Dev';
-    const lastName = user?.lastName ?? 'User';
+    // Require user exists in database
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const email = user.email;
+    const firstName = user.firstName ?? 'User';
+    const lastName = user.lastName ?? '';
 
     const membershipRole =
       ctx.role === UserRole.BROKER || ctx.role === UserRole.TEAM_LEAD ? 'BROKER_OWNER' : 'AGENT';
 
     return {
       user: {
-        id: user?.id ?? ctx.userId,
+        id: user.id,
         email,
         globalRole: 'USER'
       },
@@ -53,7 +63,7 @@ export class SessionController {
         first_name: firstName,
         last_name: lastName,
         email,
-        fallback: !user
+        fallback: false
       },
       memberships: [
         {
