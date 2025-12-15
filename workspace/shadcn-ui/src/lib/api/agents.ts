@@ -40,3 +40,36 @@ export async function inviteAgent(orgId: string, payload: InviteAgentPayload) {
     body: payload
   });
 }
+
+export type UpdateAgentProfileAdminPayload = {
+  lifecycleStage?: 'ONBOARDING' | 'ACTIVE' | 'OFFBOARDING';
+  officeId?: string | null;
+  teamId?: string | null;
+  tags?: string[];
+};
+
+export async function updateAgentProfileAdmin(orgId: string, agentProfileId: string, payload: UpdateAgentProfileAdminPayload) {
+  return apiFetch<{ id: string }>(`organizations/${orgId}/agents/profile/${agentProfileId}`, {
+    method: 'PATCH',
+    body: payload
+  });
+}
+
+export type UpdateAgentCompliancePayload = {
+  isCompliant?: boolean;
+  requiresAction?: boolean;
+  riskLevel?: 'LOW' | 'MEDIUM' | 'HIGH';
+  riskScore?: number;
+  riskFlags?: unknown;
+  ceCycleStartAt?: string;
+  ceCycleEndAt?: string;
+  ceHoursRequired?: number;
+  ceHoursCompleted?: number;
+};
+
+export async function updateAgentCompliance(orgId: string, agentProfileId: string, payload: UpdateAgentCompliancePayload) {
+  return apiFetch<{ id: string }>(`organizations/${orgId}/agents/profile/${agentProfileId}/compliance`, {
+    method: 'PATCH',
+    body: payload
+  });
+}

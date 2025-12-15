@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
-import { ComplianceStatus, DocumentType, LeadStatus, OfferIntentStatus, Prisma } from '@hatch/db';
+import { ComplianceStatus, DocumentType, LeadStatus, OfferIntentStatus, PersonStage, Prisma } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -827,8 +827,20 @@ export class MissionControlService {
     const workflowTaskWhere = this.buildWorkflowTaskWhere(orgId, scope);
     const leadWhere = this.buildLeadWhere(orgId, scope);
     const offerIntentWhere = this.buildOfferIntentWhere(orgId, scope);
+
+    const profiles = await this.prisma.agentProfile.findMany({
+      where: agentProfileWhere,
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        user: { select: { firstName: true, lastName: true, email: true } },
+        memberships: true,
+        trainingProgress: { include: { module: true } }
+      }
+    });
+    const agentProfileIds = profiles.map((profile) => profile.id);
+    const agentUserIds = profiles.map((profile) => profile.userId);
+
     const [
-      profiles,
       listingCounts,
       activeListingCounts,
       transactionCounts,
@@ -836,41 +848,34 @@ export class MissionControlService {
       complianceEvents,
       workflowTaskGroups,
       leadAssignmentGroups,
-      offerIntentAssignments
+      offerIntentAssignments,
+      closedTransactionSales,
+      clientStageGroups
     ] = await Promise.all([
-      this.prisma.agentProfile.findMany({
-        where: agentProfileWhere,
-        orderBy: { updatedAt: 'desc' },
-        include: {
-          user: { select: { firstName: true, lastName: true, email: true } },
-          memberships: true,
-          trainingProgress: { include: { module: true } }
-        }
-      }),
       this.prisma.orgListing.groupBy({
         by: ['agentProfileId'],
-        where: { ...listingWhere, agentProfileId: { not: null } },
+        where: { ...listingWhere, agentProfileId: { in: agentProfileIds } },
         _count: { _all: true }
       }),
       this.prisma.orgListing.groupBy({
         by: ['agentProfileId'],
         where: {
           ...listingWhere,
-          agentProfileId: { not: null },
+          agentProfileId: { in: agentProfileIds },
           status: 'ACTIVE'
         },
         _count: { _all: true }
       }),
       this.prisma.orgTransaction.groupBy({
         by: ['agentProfileId'],
-        where: { ...transactionWhere, agentProfileId: { not: null } },
+        where: { ...transactionWhere, agentProfileId: { in: agentProfileIds } },
         _count: { _all: true }
       }),
       this.prisma.orgTransaction.groupBy({
         by: ['agentProfileId'],
         where: {
           ...transactionWhere,
-          agentProfileId: { not: null },
+          agentProfileId: { in: agentProfileIds },
           OR: [{ isCompliant: false }, { requiresAction: true }]
         },
         _count: { _all: true }
@@ -890,7 +895,7 @@ export class MissionControlService {
       }),
       this.prisma.lead.groupBy({
         by: ['agentProfileId', 'status'],
-        where: { ...leadWhere, agentProfileId: { not: null } },
+        where: { ...leadWhere, agentProfileId: { in: agentProfileIds } },
         _count: { _all: true }
       }),
       this.prisma.offerIntent.findMany({
@@ -899,6 +904,22 @@ export class MissionControlService {
           status: true,
           listing: { select: { agentProfileId: true } }
         }
+      }),
+      this.prisma.orgTransaction.findMany({
+        where: { ...transactionWhere, status: 'CLOSED', agentProfileId: { in: agentProfileIds } },
+        select: {
+          agentProfileId: true,
+          listing: { select: { listPrice: true } }
+        }
+      }),
+      this.prisma.person.groupBy({
+        by: ['ownerId', 'stage'],
+        where: {
+          organizationId: orgId,
+          deletedAt: null,
+          ownerId: { in: agentUserIds }
+        },
+        _count: { _all: true }
       })
     ]);
 
@@ -989,6 +1010,38 @@ export class MissionControlService {
       offerIntentStats.set(agentProfileId, entry);
     }
 
+    const salesStats = new Map<
+      string,
+      { closedCount: number; closedVolume: number }
+    >();
+    for (const txn of closedTransactionSales) {
+      const agentProfileId = txn.agentProfileId ?? null;
+      if (!agentProfileId) continue;
+      const entry = salesStats.get(agentProfileId) ?? { closedCount: 0, closedVolume: 0 };
+      entry.closedCount += 1;
+      entry.closedVolume += txn.listing?.listPrice ?? 0;
+      salesStats.set(agentProfileId, entry);
+    }
+
+    const clientStats = new Map<string, { current: number; past: number }>();
+    for (const group of clientStageGroups) {
+      const ownerId = group.ownerId ?? null;
+      if (!ownerId) continue;
+      const entry = clientStats.get(ownerId) ?? { current: 0, past: 0 };
+      switch (group.stage) {
+        case PersonStage.ACTIVE:
+        case PersonStage.UNDER_CONTRACT:
+          entry.current += group._count._all;
+          break;
+        case PersonStage.CLOSED:
+          entry.past += group._count._all;
+          break;
+        default:
+          break;
+      }
+      clientStats.set(ownerId, entry);
+    }
+
     const rows: MissionControlAgentRowDto[] = profiles.map((profile) => {
       const complianceMeta = complianceMap.get(profile.id);
       const workflow = workflowStats.get(profile.id) ?? {
@@ -1002,28 +1055,34 @@ export class MissionControlService {
         qualified: 0
       };
       const loiStats = offerIntentStats.get(profile.id) ?? { total: 0, accepted: 0 };
+      const sales = salesStats.get(profile.id) ?? { closedCount: 0, closedVolume: 0 };
+      const clients = clientStats.get(profile.userId) ?? { current: 0, past: 0 };
       return {
         agentProfileId: profile.id,
         userId: profile.userId,
         name: `${profile.user.firstName} ${profile.user.lastName}`.trim(),
         email: profile.user.email,
         riskLevel: profile.riskLevel,
-      riskScore: profile.riskScore,
-      isCompliant: profile.isCompliant,
-      requiresAction: profile.requiresAction,
-      ceHoursRequired: profile.ceHoursRequired,
-      ceHoursCompleted: profile.ceHoursCompleted,
-      memberships: profile.memberships.map((m) => ({ type: m.type, name: m.name, status: m.status })),
-      trainingAssigned: profile.trainingProgress.length,
-      trainingCompleted: profile.trainingProgress.filter((p) => p.status === 'COMPLETED').length,
-      requiredTrainingAssigned: profile.trainingProgress.filter((p) => p.module.required).length,
-      requiredTrainingCompleted: profile.trainingProgress.filter(
-        (p) => p.module.required && p.status === 'COMPLETED'
-      ).length,
+        riskScore: profile.riskScore,
+        isCompliant: profile.isCompliant,
+        requiresAction: profile.requiresAction,
+        ceHoursRequired: profile.ceHoursRequired,
+        ceHoursCompleted: profile.ceHoursCompleted,
+        memberships: profile.memberships.map((m) => ({ type: m.type, name: m.name, status: m.status })),
+        trainingAssigned: profile.trainingProgress.length,
+        trainingCompleted: profile.trainingProgress.filter((p) => p.status === 'COMPLETED').length,
+        requiredTrainingAssigned: profile.trainingProgress.filter((p) => p.module.required).length,
+        requiredTrainingCompleted: profile.trainingProgress.filter(
+          (p) => p.module.required && p.status === 'COMPLETED'
+        ).length,
         listingCount: listingCountMap.get(profile.id) ?? 0,
         activeListingCount: activeListingCountMap.get(profile.id) ?? 0,
         transactionCount: transactionCountMap.get(profile.id) ?? 0,
         nonCompliantTransactionCount: nonCompliantTransactionMap.get(profile.id) ?? 0,
+        closedTransactionCount: sales.closedCount,
+        closedTransactionVolume: sales.closedVolume,
+        currentClientCount: clients.current,
+        pastClientCount: clients.past,
         openComplianceIssues: complianceMeta?.openIssues ?? 0,
         lastComplianceEvaluationAt: complianceMeta?.lastEvaluation?.toISOString(),
         lifecycleStage: profile.lifecycleStage,

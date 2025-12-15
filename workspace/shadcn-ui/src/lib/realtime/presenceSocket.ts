@@ -3,6 +3,8 @@ import { io, Socket } from 'socket.io-client'
 
 let socket: Socket | null = null
 let socketIdentity: { baseUrl: string; orgId: string; userId: string } | null = null
+let activeSubscribers = 0
+let disconnectTimer: ReturnType<typeof setTimeout> | null = null
 
 const DEFAULT_API_ORIGIN =
   typeof window !== 'undefined'
@@ -40,6 +42,7 @@ function getSocket(orgId: string, userId: string) {
 
   socketIdentity = { baseUrl: API_ORIGIN, orgId, userId }
   socket = io(`${API_ORIGIN}/presence`, {
+    autoConnect: false,
     transports: ['websocket'],
     query: { orgId, userId }
   })
@@ -66,6 +69,23 @@ export function usePresence(orgId: string | null, userId: string | null, locatio
   useEffect(() => {
     if (!orgId || !userId) return
     const s = getSocket(orgId, userId)
+    activeSubscribers += 1
+    if (disconnectTimer) {
+      clearTimeout(disconnectTimer)
+      disconnectTimer = null
+    }
+
+    // In React StrictMode (dev), effects mount/unmount twice. Deferring the connect
+    // avoids briefly opening a websocket only to immediately close it, which triggers
+    // noisy browser console errors ("WebSocket is closed before the connection is established.").
+    let cancelled = false
+    const connectDelay = setTimeout(() => {
+      if (cancelled) return
+      if (!s.connected) {
+        s.connect()
+      }
+    }, 0)
+
     const onEntity = (payload: { location: string; viewers: Array<{ userId: string }> }) => {
       setViewers((prev) => ({ ...prev, [payload.location]: payload.viewers.map((v) => v.userId) }))
     }
@@ -80,12 +100,20 @@ export function usePresence(orgId: string | null, userId: string | null, locatio
       s.emit('presence:update', { location: locationRef.current })
     }
     return () => {
+      cancelled = true
+      clearTimeout(connectDelay)
       s.off('presence:entity', onEntity)
       clearInterval(heartbeat)
-      if (socket === s) {
-        s.disconnect()
-        socket = null
-        socketIdentity = null
+      activeSubscribers = Math.max(0, activeSubscribers - 1)
+      if (activeSubscribers === 0 && socket === s) {
+        disconnectTimer = setTimeout(() => {
+          if (activeSubscribers !== 0) return
+          if (socket !== s) return
+          s.disconnect()
+          socket = null
+          socketIdentity = null
+          disconnectTimer = null
+        }, 250)
       }
     }
   }, [orgId, userId])

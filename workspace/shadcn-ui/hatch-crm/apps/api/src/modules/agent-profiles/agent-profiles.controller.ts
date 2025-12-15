@@ -7,6 +7,7 @@ import { AgentProfilesService } from './agent-profiles.service';
 import { UpsertAgentProfileDto } from './dto/upsert-agent-profile.dto';
 import { UpdateAgentComplianceDto } from './dto/update-agent-compliance.dto';
 import { InviteAgentDto } from './dto/invite-agent.dto';
+import { UpdateAgentProfileAdminDto } from './dto/update-agent-profile-admin.dto';
 
 interface AuthedRequest { user?: { userId?: string } }
 
@@ -43,6 +44,19 @@ export class AgentProfilesController {
     const userId = req.user?.userId;
     if (!userId) throw new Error('Missing user context');
     return this.svc.updateAgentCompliance(orgId, userId, agentProfileId, dto);
+  }
+
+  @Patch('profile/:agentProfileId')
+  @UseGuards(JwtAuthGuard, RolesGuard('broker'))
+  updateProfile(
+    @Param('orgId') orgId: string,
+    @Param('agentProfileId') agentProfileId: string,
+    @Req() req: AuthedRequest,
+    @Body() dto: UpdateAgentProfileAdminDto
+  ) {
+    const userId = req.user?.userId;
+    if (!userId) throw new Error('Missing user context');
+    return this.svc.updateAgentProfileAdmin(orgId, userId, agentProfileId, dto);
   }
 
   @Get()

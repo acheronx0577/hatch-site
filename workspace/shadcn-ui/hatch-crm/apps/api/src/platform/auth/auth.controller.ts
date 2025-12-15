@@ -81,10 +81,14 @@ export class AuthController {
   }
 
   @Get('login')
-  @UseGuards(AuthGuard('oidc'))
-  // Intentionally empty: guard handles redirect.
-  login() {
-    return;
+  login(@Query('redirect') redirectTo: string | undefined, @Res() reply: FastifyReply) {
+    const normalized = this.normalizeRedirectTarget(redirectTo);
+    if (!this.cognito.isConfigured()) {
+      throw new BadRequestException('Cognito is not configured. Set COGNITO_DOMAIN, COGNITO_CLIENT_ID, and COGNITO_CALLBACK_URL.');
+    }
+
+    const url = this.cognito.generateLoginUrl(normalized);
+    return reply.redirect(url, 302);
   }
 
   @Get('callback')
@@ -116,7 +120,7 @@ export class AuthController {
   cognitoLogin(@Query('redirect') redirectTo: string | undefined, @Res() reply: FastifyReply) {
     const normalized = this.normalizeRedirectTarget(redirectTo);
     const url = this.cognito.generateLoginUrl(normalized);
-    return reply.redirect(302, url);
+    return reply.redirect(url, 302);
   }
 
   @Post('refresh')
@@ -508,6 +512,6 @@ export class AuthController {
       });
     }
 
-    return reply.redirect(302, redirectTo);
+    return reply.redirect(redirectTo, 302);
   }
 }

@@ -1,11 +1,12 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException, forwardRef } from '@nestjs/common';
-import { AgentRiskLevel, UserRole, WorkflowTaskTrigger } from '@hatch/db';
+import { AgentLifecycleStage, AgentRiskLevel, UserRole, WorkflowTaskTrigger } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { OnboardingService } from '../onboarding/onboarding.service';
 import { UpsertAgentProfileDto } from './dto/upsert-agent-profile.dto';
 import { UpdateAgentComplianceDto } from './dto/update-agent-compliance.dto';
 import { InviteAgentDto } from './dto/invite-agent.dto';
+import { UpdateAgentProfileAdminDto } from './dto/update-agent-profile-admin.dto';
 import sgMail from '@sendgrid/mail';
 
 @Injectable()
@@ -190,6 +191,71 @@ export class AgentProfilesService {
         `MEMBERSHIP:${expiredMembership.id}`,
         brokerUserId
       );
+    }
+
+    return updated;
+  }
+
+  async updateAgentProfileAdmin(orgId: string, brokerUserId: string, agentProfileId: string, dto: UpdateAgentProfileAdminDto) {
+    await this.assertBrokerInOrg(brokerUserId, orgId);
+
+    const profile = await this.prisma.agentProfile.findUnique({ where: { id: agentProfileId } });
+    if (!profile || profile.organizationId !== orgId) {
+      throw new NotFoundException('Agent profile not found');
+    }
+
+    const normalizeNullableId = (value: string | null | undefined) => {
+      if (value === undefined) return undefined;
+      if (value === null) return null;
+      const trimmed = value.trim();
+      return trimmed.length ? trimmed : null;
+    };
+
+    const nextLifecycleStage = dto.lifecycleStage
+      ? (dto.lifecycleStage.toUpperCase() as AgentLifecycleStage)
+      : undefined;
+
+    if (dto.lifecycleStage) {
+      const allowed = new Set(Object.values(AgentLifecycleStage));
+      if (!allowed.has(nextLifecycleStage!)) {
+        throw new BadRequestException('Invalid lifecycleStage');
+      }
+    }
+
+    const sanitizedTags =
+      dto.tags
+        ?.map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0) ?? [];
+    const tagsString = dto.tags !== undefined ? (sanitizedTags.length ? sanitizedTags.join(',') : null) : undefined;
+
+    const updated = await this.prisma.agentProfile.update({
+      where: { id: agentProfileId },
+      data: {
+        lifecycleStage: nextLifecycleStage,
+        officeId: normalizeNullableId(dto.officeId),
+        teamId: normalizeNullableId(dto.teamId),
+        tags: tagsString
+      }
+    });
+
+    if (nextLifecycleStage && nextLifecycleStage !== profile.lifecycleStage) {
+      if (nextLifecycleStage === AgentLifecycleStage.ONBOARDING) {
+        await this.onboarding.generateOnboardingTasksForAgent(
+          orgId,
+          updated.id,
+          WorkflowTaskTrigger.MANUAL,
+          `MANUAL:${updated.id}`,
+          brokerUserId
+        );
+      } else if (nextLifecycleStage === AgentLifecycleStage.OFFBOARDING) {
+        await this.onboarding.generateOffboardingTasksForAgent(
+          orgId,
+          updated.id,
+          WorkflowTaskTrigger.MANUAL,
+          `MANUAL:${updated.id}`,
+          brokerUserId
+        );
+      }
     }
 
     return updated;

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { Home, LineChart, ShieldCheck, Sparkles, Users } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -8,6 +9,7 @@ export interface KpiItem {
   label: string;
   value: string | number;
   helperText?: string;
+  href?: string;
 }
 
 interface MissionControlKpiRowProps {
@@ -52,31 +54,51 @@ export const MissionControlKpiRow: React.FC<MissionControlKpiRowProps> = ({ item
 
   return (
     <div className="mt-5 grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-      {items.map((item) => (
-        <article
-          key={item.id}
-          className={cn(
-            'group relative overflow-hidden rounded-[24px] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] p-4 shadow-brand backdrop-blur-[var(--hatch-card-blur)] transition-all',
-            'hover:-translate-y-0.5 hover:shadow-brand-md'
-          )}
-        >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-[#1F5FFF] via-[#38BDF8] to-[#1F5FFF]" />
-          <div className="pointer-events-none absolute -right-8 -bottom-10 h-24 w-24 rounded-full bg-sky-100/70 blur-2xl group-hover:opacity-80" />
+      {items.map((item) => {
+        const cardClassName = cn(
+          'group relative overflow-hidden rounded-[24px] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] p-4 shadow-brand backdrop-blur-[var(--hatch-card-blur)] transition-all',
+          'hover:-translate-y-0.5 hover:shadow-brand-md',
+          item.href
+            ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+            : null
+        );
 
-          <div className="relative flex flex-col gap-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{item.label}</span>
-              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-[2px] text-[10px] text-slate-600">
-                <span className="text-slate-500">{iconMap[item.id] ?? <Sparkles className="h-3 w-3" />}</span>
-              </span>
+        const content = (
+          <>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-[#1F5FFF] via-[#38BDF8] to-[#1F5FFF]" />
+            <div className="pointer-events-none absolute -right-8 -bottom-10 h-24 w-24 rounded-full bg-sky-100/70 blur-2xl group-hover:opacity-80" />
+
+            <div className="relative flex flex-col gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  {item.label}
+                </span>
+                <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-[2px] text-[10px] text-slate-600">
+                  <span className="text-slate-500">{iconMap[item.id] ?? <Sparkles className="h-3 w-3" />}</span>
+                </span>
+              </div>
+
+              <div className="text-2xl md:text-3xl font-semibold leading-tight text-slate-900">{item.value}</div>
+
+              {item.helperText ? <p className="text-[11px] text-slate-500">{item.helperText}</p> : null}
             </div>
+          </>
+        );
 
-            <div className="text-2xl md:text-3xl font-semibold leading-tight text-slate-900">{item.value}</div>
+        if (item.href) {
+          return (
+            <Link key={item.id} to={item.href} aria-label={item.label} className={cardClassName}>
+              {content}
+            </Link>
+          );
+        }
 
-            {item.helperText ? <p className="text-[11px] text-slate-500">{item.helperText}</p> : null}
-          </div>
-        </article>
-      ))}
+        return (
+          <article key={item.id} className={cardClassName}>
+            {content}
+          </article>
+        );
+      })}
     </div>
   );
 };

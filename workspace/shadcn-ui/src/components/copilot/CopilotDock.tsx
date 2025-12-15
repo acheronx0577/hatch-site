@@ -16,7 +16,7 @@ import type {
 } from '@/lib/api/hatch';
 import { getAiEmployeeUsageStats } from '@/lib/api/hatch';
 import { ApiError } from '@/lib/api/errors';
-import type { CopilotContext } from '@/lib/copilot/events';
+import type { CopilotContext, CopilotPrefillPayload } from '@/lib/copilot/events';
 import { PERSONAS, type PersonaConfig, type PersonaId } from '@/lib/ai/aiPersonas';
 import { cn, resolveUserIdentity } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -116,16 +116,37 @@ export function CopilotDock({ debug = false }: { debug?: boolean }) {
       }
       setOpen((prev) => !prev);
     };
+    const prefillHandler = (event: Event) => {
+      const detail = (event as CustomEvent<CopilotPrefillPayload | undefined>).detail;
+      if (!detail) return;
+
+      const nextMode = detail.chatMode ?? 'team';
+      const personaId = (detail.personaId ?? 'hatch_assistant') as PersonaId;
+
+      if (nextMode === 'direct') {
+        setChatMode('direct');
+        setSelectedKey(personaId);
+        setLastDirectKey(personaId);
+      } else {
+        setChatMode('team');
+        setSelectedKey('hatch_assistant');
+      }
+
+      setPrefillMessage(detail.message);
+      setOpen(true);
+    };
     const onContext = (event: Event) => {
       const detail = (event as CustomEvent<CopilotContext | undefined>).detail ?? undefined;
       setContext(detail);
     };
     window.addEventListener('copilot:context', onContext);
+    window.addEventListener('copilot:prefill', prefillHandler);
     window.addEventListener('copilot:open', openHandler);
     window.addEventListener('copilot:close', closeHandler);
     window.addEventListener('copilot:toggle', toggleHandler);
     return () => {
       window.removeEventListener('copilot:context', onContext);
+      window.removeEventListener('copilot:prefill', prefillHandler);
       window.removeEventListener('copilot:open', openHandler);
       window.removeEventListener('copilot:close', closeHandler);
       window.removeEventListener('copilot:toggle', toggleHandler);

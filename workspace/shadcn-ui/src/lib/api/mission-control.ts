@@ -150,6 +150,10 @@ export interface MissionControlAgentRow {
   activeListingCount: number;
   transactionCount: number;
   nonCompliantTransactionCount: number;
+  closedTransactionCount: number;
+  closedTransactionVolume: number;
+  currentClientCount: number;
+  pastClientCount: number;
   openComplianceIssues: number;
   lastComplianceEvaluationAt?: string;
   lifecycleStage: string;

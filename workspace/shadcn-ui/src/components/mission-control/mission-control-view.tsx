@@ -63,31 +63,36 @@ export function MissionControlView({ orgId }: MissionControlViewProps) {
         id: 'active-agents',
         label: 'Active agents',
         value: formatNumber(overview.activeAgents),
-        helperText: `${formatNumber(overview.totalAgents)} in roster`
+        helperText: `${formatNumber(overview.totalAgents)} in roster`,
+        href: '/broker/team?stage=ACTIVE'
       },
       {
         id: 'active-listings',
         label: 'Active listings',
         value: formatNumber(overview.listings.active),
-        helperText: `${formatNumber(overview.listings.pendingApproval)} pending`
+        helperText: `${formatNumber(overview.listings.pendingApproval)} pending`,
+        href: '/broker/properties?filter=ACTIVE'
       },
       {
         id: 'deals-needing-review',
         label: 'Needs review',
         value: formatNumber(overview.transactions?.nonCompliant ?? 0),
-        helperText: `${formatNumber(overview.transactions?.underContract ?? 0)} in progress`
+        helperText: `${formatNumber(overview.transactions?.underContract ?? 0)} in progress`,
+        href: '/broker/transactions?filter=ATTENTION'
       },
       {
         id: 'new-leads',
         label: 'New (7d)',
         value: formatNumber(overview.leadStats.newLeads),
-        helperText: `${formatNumber(overview.leadStats.totalLeads)} total`
+        helperText: `${formatNumber(overview.leadStats.totalLeads)} total`,
+        href: '/broker/leads?stage=NEW'
       },
       {
         id: 'compliance-flags',
         label: 'Compliance flags',
         value: formatNumber(overview.nonCompliantAgents),
-        helperText: `${formatNumber(overview.highRiskAgents)} high risk`
+        helperText: `${formatNumber(overview.highRiskAgents)} high risk`,
+        href: '/broker/compliance?filter=NONCOMPLIANT'
       }
     ];
   }, [overview]);

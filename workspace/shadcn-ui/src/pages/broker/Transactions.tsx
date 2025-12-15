@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchOrgTransactions, type OrgTransactionRecord } from '@/lib/api/org-transactions';
-import { ChatWindow } from '@/components/chat/ChatWindow';
+import { emitCopilotContext, emitCopilotPrefill } from '@/lib/copilot/events';
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
 
@@ -30,15 +30,71 @@ type TransactionsFilter = (typeof filters)[number]['id'];
 export default function BrokerTransactions() {
   const { activeOrgId } = useAuth();
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
-  const [chatOpen, setChatOpen] = useState(false);
-  const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined);
 
   const handleAskHatch = (txn: OrgTransactionRecord) => {
-    const label = txn.listing?.addressLine1 ?? txn.id;
-    setInitialPrompt(
-      `Act as my transaction coordinator. What is missing on transaction ${label} (${txn.id}) and what should we do next?`
-    );
-    setChatOpen(true);
+    const addressLine1 = txn.listing?.addressLine1?.trim();
+    const city = txn.listing?.city?.trim();
+    const state = txn.listing?.state?.trim();
+    const postalCode = txn.listing?.postalCode?.trim();
+    const statusLabel = formatStatus(txn.status);
+    const closingLabel = txn.closingDate ? new Date(txn.closingDate).toLocaleDateString() : '—';
+    const location = [city, state, postalCode].filter(Boolean).join(' ');
+    const listingLabel = [addressLine1, location].filter(Boolean).join(', ') || 'Unlinked transaction';
+    const summary = `${listingLabel} · ${statusLabel}${txn.closingDate ? ` · Closing ${closingLabel}` : ''}`;
+    const agentName = txn.agentProfile?.user
+      ? [txn.agentProfile.user.firstName, txn.agentProfile.user.lastName].filter(Boolean).join(' ')
+      : null;
+    const agentEmail = txn.agentProfile?.user?.email ?? null;
+
+    emitCopilotContext({
+      surface: 'transaction',
+      entityType: 'transaction',
+      entityId: txn.id,
+      summary,
+      contextType: 'transaction',
+      contextId: txn.id,
+      metadata: {
+        transactionId: txn.id,
+        status: txn.status,
+        listingId: txn.listingId ?? txn.listing?.id ?? null,
+        listingAddress: {
+          addressLine1: txn.listing?.addressLine1 ?? null,
+          city: txn.listing?.city ?? null,
+          state: txn.listing?.state ?? null,
+          postalCode: txn.listing?.postalCode ?? null
+        },
+        listPrice: txn.listing?.listPrice ?? null,
+        buyerName: txn.buyerName ?? null,
+        sellerName: txn.sellerName ?? null,
+        contractSignedAt: txn.contractSignedAt ?? null,
+        inspectionDate: txn.inspectionDate ?? null,
+        financingDate: txn.financingDate ?? null,
+        closingDate: txn.closingDate ?? null,
+        isCompliant: typeof txn.isCompliant === 'boolean' ? txn.isCompliant : null,
+        requiresAction: Boolean(txn.requiresAction),
+        agent: {
+          name: agentName,
+          email: agentEmail
+        }
+      }
+    });
+
+    emitCopilotPrefill({
+      personaId: 'hatch_assistant',
+      chatMode: 'team',
+      message: [
+        `Act as my transaction coordinator.`,
+        ``,
+        `Transaction: ${listingLabel} (${txn.id})`,
+        `Status: ${statusLabel}`,
+        `Closing: ${closingLabel}`,
+        agentName || agentEmail ? `Agent: ${[agentName, agentEmail].filter(Boolean).join(' · ')}` : null,
+        ``,
+        `What is missing or overdue on this transaction, and what should we do next? Please give me a prioritized checklist.`
+      ]
+        .filter(Boolean)
+        .join('\n')
+    });
   };
 
   if (!orgId) {
@@ -47,7 +103,6 @@ export default function BrokerTransactions() {
   return (
     <div className="space-y-6 p-6">
       <TransactionsView orgId={orgId} onAskHatch={handleAskHatch} />
-      <ChatWindow open={chatOpen} onClose={() => setChatOpen(false)} initialPrompt={initialPrompt} />
     </div>
   );
 }
@@ -61,6 +116,7 @@ function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (t
   };
 
   const [filter, setFilter] = useState<TransactionsFilter>(() => parseFilter(searchParams.get('filter')));
+  const [agentFilter, setAgentFilter] = useState<string | null>(() => searchParams.get('agent'));
   const { data, isLoading, error } = useQuery({
     queryKey: ['broker', 'transactions', orgId],
     queryFn: () => fetchOrgTransactions(orgId),
@@ -69,16 +125,28 @@ function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (t
 
   const transactions = data ?? [];
 
+  useEffect(() => {
+    const nextAgent = searchParams.get('agent');
+    if (nextAgent !== agentFilter) {
+      setAgentFilter(nextAgent);
+    }
+  }, [searchParams, agentFilter]);
+
+  const scopedTransactions = useMemo(() => {
+    if (!agentFilter) return transactions;
+    return transactions.filter((txn) => txn.agentProfileId === agentFilter);
+  }, [transactions, agentFilter]);
+
   const summary = useMemo(() => {
-    const underContract = transactions.filter((txn) => txn.status === 'UNDER_CONTRACT').length;
-    const contingent = transactions.filter((txn) => txn.status === 'CONTINGENT').length;
-    const closingSoon = transactions.filter((txn) => isClosingSoon(txn.closingDate)).length;
-    const requiresAction = transactions.filter((txn) => txn.requiresAction || txn.isCompliant === false).length;
-    return { total: transactions.length, underContract, contingent, closingSoon, requiresAction };
-  }, [transactions]);
+    const underContract = scopedTransactions.filter((txn) => txn.status === 'UNDER_CONTRACT').length;
+    const contingent = scopedTransactions.filter((txn) => txn.status === 'CONTINGENT').length;
+    const closingSoon = scopedTransactions.filter((txn) => isClosingSoon(txn.closingDate)).length;
+    const requiresAction = scopedTransactions.filter((txn) => txn.requiresAction || txn.isCompliant === false).length;
+    return { total: scopedTransactions.length, underContract, contingent, closingSoon, requiresAction };
+  }, [scopedTransactions]);
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((txn) => {
+    return scopedTransactions.filter((txn) => {
       switch (filter) {
         case 'UNDER_CONTRACT':
           return txn.status === 'UNDER_CONTRACT';
@@ -92,7 +160,7 @@ function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (t
           return true;
       }
     });
-  }, [transactions, filter]);
+  }, [scopedTransactions, filter]);
 
   useEffect(() => {
     const next = parseFilter(searchParams.get('filter'));
@@ -112,6 +180,19 @@ function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (t
     setSearchParams(next, { replace: true });
   };
 
+  const clearAgentFilter = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('agent');
+    setSearchParams(next, { replace: true });
+  };
+
+  const agentLabel = useMemo(() => {
+    if (!agentFilter) return null;
+    const match = transactions.find((txn) => txn.agentProfileId === agentFilter)?.agentProfile?.user;
+    const name = match ? [match.firstName, match.lastName].filter(Boolean).join(' ').trim() : null;
+    return name || agentFilter;
+  }, [agentFilter, transactions]);
+
   return (
     <>
       <Card className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -123,10 +204,22 @@ function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (t
               Watch contract milestones and compliance flags in one place. TC automation is monitoring deadlines and
               missing docs for you.
             </p>
+            {agentLabel ? (
+              <p className="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
+                Filtered to agent: <span className="font-medium text-slate-900">{agentLabel}</span>
+              </p>
+            ) : null}
           </div>
-          <Button variant="outline" asChild>
-            <Link to="/broker/mission-control">Back to Mission Control</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {agentFilter ? (
+              <Button variant="outline" onClick={clearAgentFilter}>
+                Clear agent filter
+              </Button>
+            ) : null}
+            <Button variant="outline" asChild>
+              <Link to="/broker/mission-control">Back to Mission Control</Link>
+            </Button>
+          </div>
         </div>
 
         <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">

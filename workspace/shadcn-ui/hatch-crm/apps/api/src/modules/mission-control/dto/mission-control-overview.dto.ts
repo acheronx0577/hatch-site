@@ -199,6 +199,10 @@ export class MissionControlAgentRowDto {
   activeListingCount = 0;
   transactionCount = 0;
   nonCompliantTransactionCount = 0;
+  closedTransactionCount = 0;
+  closedTransactionVolume = 0;
+  currentClientCount = 0;
+  pastClientCount = 0;
   openComplianceIssues = 0;
   lastComplianceEvaluationAt?: string;
   lifecycleStage!: string;

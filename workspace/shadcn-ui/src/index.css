@@ -38,7 +38,7 @@
     --muted: 227 100% 97%;
     --muted-foreground: 220 18% 45%;
 
-    --accent: var(--brand-green-500-hsl);
+    --accent: var(--brand-blue-600-hsl);
     --accent-foreground: 0 0% 100%;
 
     --destructive: 3 100% 59%;
