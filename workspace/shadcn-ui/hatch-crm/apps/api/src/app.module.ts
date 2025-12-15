@@ -96,7 +96,21 @@ const throttlerTtl = Number(process.env.THROTTLER_TTL_MS ?? 60_000);
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env', 'apps/api/.env.local', 'apps/api/.env'],
+      // Earlier files override later ones. (Nest Config merges env files without overwriting existing keys.)
+      envFilePath: [
+        // Prefer API-specific local overrides.
+        'apps/api/.env.local',
+        '.env.local',
+        // Allow monorepo root overrides when running from `apps/api`.
+        '../../.env.local',
+        // Allow workspace overrides (e.g. `workspace/shadcn-ui/.env.local`) for local dev.
+        '../.env.local',
+        '../../../.env.local',
+        // Base env files.
+        'apps/api/.env',
+        '.env',
+        '../../.env'
+      ],
       load: [() => ({
         app: {
           host: process.env.API_HOST ?? '0.0.0.0',

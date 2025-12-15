@@ -44,6 +44,33 @@ export class AuthController {
     private readonly cognito: CognitoService
   ) {}
 
+  private isEmailLike(value: string): boolean {
+    return value.includes('@');
+  }
+
+  private placeholderEmailForCognitoSub(cognitoSub: string): string {
+    const domain = (process.env.COGNITO_PLACEHOLDER_EMAIL_DOMAIN ?? 'cognito.local').trim() || 'cognito.local';
+    return `cognito+${cognitoSub}@${domain}`.toLowerCase();
+  }
+
+  private isCognitoAutoProvisionEnabled(): boolean {
+    const configured = (process.env.COGNITO_AUTO_PROVISION ?? '').trim();
+    if (configured) {
+      return configured.toLowerCase() === 'true';
+    }
+    return process.env.NODE_ENV !== 'production';
+  }
+
+  private resolveCognitoAutoProvisionRole(): UserRole {
+    const configured = (process.env.COGNITO_AUTO_PROVISION_ROLE ?? '').trim().toUpperCase();
+    const roleFromEnv = (UserRole as Record<string, UserRole>)[configured];
+    if (roleFromEnv) {
+      return roleFromEnv;
+    }
+    // In local/dev we usually want a fully-featured account; prod should stay conservative.
+    return process.env.NODE_ENV === 'production' ? UserRole.AGENT : UserRole.BROKER;
+  }
+
   private normalizeRedirectTarget(value?: string | null) {
     if (!value) return '/portal';
     const trimmed = value.trim();
@@ -248,8 +275,15 @@ export class AuthController {
       userInfo = await this.cognito.verifyToken(idToken);
     } else if (code) {
       const tokens = await this.cognito.exchangeCodeForTokens(code);
+      if (!tokens) {
+        throw new BadRequestException(
+          'Cognito code exchange failed. Verify COGNITO_CLIENT_SECRET and COGNITO_CALLBACK_URL are set correctly.'
+        );
+      }
       if (tokens?.idToken) {
         userInfo = await this.cognito.verifyToken(tokens.idToken);
+      } else {
+        throw new BadRequestException('Cognito code exchange returned no ID token. Ensure COGNITO_SCOPES includes openid.');
       }
     }
 
@@ -263,6 +297,7 @@ export class AuthController {
     }
 
     const normalizedEmail = userInfo.email.toLowerCase();
+    const placeholderEmail = this.placeholderEmailForCognitoSub(userInfo.sub);
 
     let user:
       | {
@@ -358,13 +393,72 @@ export class AuthController {
         data: { status: AgentInviteStatus.ACCEPTED }
       });
     } else {
-      user = await this.prisma.user.findUnique({
-        where: { email: normalizedEmail },
-        select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
-      });
+      const candidates = [normalizedEmail];
+      if (placeholderEmail !== normalizedEmail) {
+        candidates.push(placeholderEmail);
+      }
+
+      for (const emailCandidate of candidates) {
+        user = await this.prisma.user.findUnique({
+          where: { email: emailCandidate },
+          select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
+        });
+        if (user) {
+          break;
+        }
+      }
 
       if (!user) {
-        throw new UnauthorizedException('No user found for this email');
+        if (!this.isCognitoAutoProvisionEnabled()) {
+          throw new UnauthorizedException('No user found for this account');
+        }
+
+        const defaultOrgId = process.env.DEFAULT_ORG_ID ?? 'org-hatch';
+        const defaultTenantId = process.env.DEFAULT_TENANT_ID ?? 'tenant-hatch';
+
+        // Ensure default org + tenant exist for local/dev.
+        await this.prisma.organization.upsert({
+          where: { id: defaultOrgId },
+          update: {},
+          create: {
+            id: defaultOrgId,
+            name: process.env.DEFAULT_ORG_NAME ?? 'Hatch'
+          }
+        });
+        const tenant = await this.prisma.tenant.upsert({
+          where: { id: defaultTenantId },
+          update: {},
+          create: {
+            id: defaultTenantId,
+            organizationId: defaultOrgId,
+            name: process.env.DEFAULT_TENANT_NAME ?? 'Hatch',
+            slug: process.env.DEFAULT_TENANT_SLUG ?? defaultTenantId
+          }
+        });
+
+        const emailToStore = this.isEmailLike(normalizedEmail) ? normalizedEmail : placeholderEmail;
+        const baseName = normalizedEmail.split('@')[0] || 'User';
+        const role = this.resolveCognitoAutoProvisionRole();
+
+        user = await this.prisma.user.create({
+          data: {
+            email: emailToStore,
+            firstName: baseName,
+            lastName: '',
+            role,
+            organizationId: tenant.organizationId,
+            tenantId: tenant.id
+          },
+          select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
+        });
+
+        await this.prisma.userOrgMembership.create({
+          data: {
+            userId: user.id,
+            orgId: user.organizationId,
+            isOrgAdmin: false
+          }
+        });
       }
     }
 
