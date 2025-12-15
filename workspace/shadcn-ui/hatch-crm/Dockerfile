@@ -1,5 +1,7 @@
 FROM node:22-alpine
 
+ENV NODE_ENV=production
+
 # System deps and pnpm
 RUN apk add --no-cache bash openssl && npm install -g pnpm
 
