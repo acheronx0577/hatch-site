@@ -44,6 +44,41 @@ export class AuthController {
     private readonly cognito: CognitoService
   ) {}
 
+  private resolveCookieSecure(req: FastifyRequest): boolean {
+    const override = (process.env.COOKIE_SECURE ?? '').trim().toLowerCase();
+    if (override === 'true') return true;
+    if (override === 'false') return false;
+
+    const forwardedProto = req.headers['x-forwarded-proto'];
+    const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+    if (typeof proto === 'string' && proto.length > 0) {
+      return proto.split(',')[0].trim() === 'https';
+    }
+
+    const forwardedSsl = req.headers['x-forwarded-ssl'];
+    const ssl = Array.isArray(forwardedSsl) ? forwardedSsl[0] : forwardedSsl;
+    if (typeof ssl === 'string' && ssl.length > 0) {
+      return ssl.toLowerCase() === 'on';
+    }
+
+    const anyReq = req as unknown as { protocol?: string };
+    if (typeof anyReq.protocol === 'string') {
+      return anyReq.protocol === 'https';
+    }
+
+    return Boolean((req.raw as any)?.socket?.encrypted);
+  }
+
+  private cookieOptions(req: FastifyRequest, maxAgeMs: number) {
+    return {
+      httpOnly: true,
+      sameSite: 'lax' as const,
+      secure: this.resolveCookieSecure(req),
+      maxAge: maxAgeMs,
+      path: '/'
+    };
+  }
+
   private isEmailLike(value: string): boolean {
     return value.includes('@');
   }
@@ -103,13 +138,7 @@ export class AuthController {
     });
     const refreshToken = this.tokens.issueRefresh({ sub: userId });
 
-    reply.setCookie(REFRESH_TOKEN_COOKIE, refreshToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: THIRTY_DAYS_MS,
-      path: '/'
-    });
+    reply.setCookie(REFRESH_TOKEN_COOKIE, refreshToken, this.cookieOptions(req, THIRTY_DAYS_MS));
 
     return {
       accessToken
@@ -159,28 +188,22 @@ export class AuthController {
       orgId: user.organizationId
     });
 
-    reply.setCookie(ACCESS_TOKEN_COOKIE, accessToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: FIFTEEN_MINUTES_MS,
-      path: '/'
-    });
+    reply.setCookie(ACCESS_TOKEN_COOKIE, accessToken, this.cookieOptions(req, FIFTEEN_MINUTES_MS));
 
     return { accessToken };
   }
 
   @Post('logout')
-  logout(@Res({ passthrough: true }) reply: FastifyReply) {
-    const cookieOptions = {
+  logout(@Req() req: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
+    const clearOptions = {
       httpOnly: true,
       sameSite: 'lax' as const,
-      secure: process.env.NODE_ENV !== 'development',
+      secure: this.resolveCookieSecure(req),
       path: '/'
     };
 
-    reply.clearCookie(ACCESS_TOKEN_COOKIE, cookieOptions);
-    reply.clearCookie(REFRESH_TOKEN_COOKIE, cookieOptions);
+    reply.clearCookie(ACCESS_TOKEN_COOKIE, clearOptions);
+    reply.clearCookie(REFRESH_TOKEN_COOKIE, clearOptions);
 
     return { success: true };
   }
@@ -480,20 +503,8 @@ export class AuthController {
     });
     const refreshToken = this.tokens.issueRefresh({ sub: user.id });
 
-    reply.setCookie(ACCESS_TOKEN_COOKIE, accessToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: FIFTEEN_MINUTES_MS,
-      path: '/'
-    });
-    reply.setCookie(REFRESH_TOKEN_COOKIE, refreshToken, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: THIRTY_DAYS_MS,
-      path: '/'
-    });
+    reply.setCookie(ACCESS_TOKEN_COOKIE, accessToken, this.cookieOptions(req, FIFTEEN_MINUTES_MS));
+    reply.setCookie(REFRESH_TOKEN_COOKIE, refreshToken, this.cookieOptions(req, THIRTY_DAYS_MS));
 
     const accept = req.headers['accept'];
     const wantsJson = typeof accept === 'string' && accept.includes('application/json');
