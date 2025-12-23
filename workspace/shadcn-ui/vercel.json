@@ -20,6 +20,14 @@
       "dest": "https://hatch-site-production.up.railway.app/api/$1"
     },
     {
+      "src": "/socket.io",
+      "dest": "https://hatch-site-production.up.railway.app/socket.io"
+    },
+    {
+      "src": "/socket.io/(.*)",
+      "dest": "https://hatch-site-production.up.railway.app/socket.io/$1"
+    },
+    {
       "src": "/assets/(.*)",
       "dest": "assets/$1"
     },

@@ -16,6 +16,11 @@ type JwtPayload = {
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor() {
+    const secret = process.env.JWT_ACCESS_SECRET ?? process.env.API_JWT_SECRET;
+    if (!secret && process.env.NODE_ENV === 'production') {
+      throw new Error('JWT access secret is not configured (set JWT_ACCESS_SECRET)');
+    }
+
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         (req: any) => {
@@ -25,7 +30,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         ExtractJwt.fromAuthHeaderAsBearerToken()
       ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_ACCESS_SECRET ?? process.env.API_JWT_SECRET ?? 'dev-secret'
+      secretOrKey: secret ?? 'dev-secret'
     });
   }
 

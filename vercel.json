@@ -9,6 +9,14 @@
     {
       "source": "/api/:path*",
       "destination": "https://hatch-site-production.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/socket.io",
+      "destination": "https://hatch-site-production.up.railway.app/socket.io"
+    },
+    {
+      "source": "/socket.io/:path*",
+      "destination": "https://hatch-site-production.up.railway.app/socket.io/:path*"
     }
   ]
 }

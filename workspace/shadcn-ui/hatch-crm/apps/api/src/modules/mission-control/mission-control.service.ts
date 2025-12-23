@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
-import { ComplianceStatus, DocumentType, LeadStatus, OfferIntentStatus, PersonStage, Prisma } from '@hatch/db';
+import { ComplianceStatus, DocumentType, LeadType, OfferIntentStatus, PersonStage, Prisma } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -19,6 +19,8 @@ type MissionControlScope = {
   officeId?: string;
   teamId?: string;
 };
+
+type PersonStageGroup = { stage: PersonStage; _count: { _all: number } };
 
 @Injectable()
 export class MissionControlService {
@@ -40,6 +42,14 @@ export class MissionControlService {
       results.push(...batchResults);
     }
     return results;
+  }
+
+  private mapStageGroups(groups: PersonStageGroup[]) {
+    const map = new Map<PersonStage, number>();
+    for (const group of groups) {
+      map.set(group.stage, group._count._all);
+    }
+    return map;
   }
 
   private buildAgentProfileWhere(orgId: string, scope?: MissionControlScope): Prisma.AgentProfileWhereInput {
@@ -231,7 +241,6 @@ export class MissionControlService {
     const agentProfileWhere = this.buildAgentProfileWhere(orgId, scope);
     const listingWhere = this.buildOrgListingWhere(orgId, scope);
     const transactionWhere = this.buildOrgTransactionWhere(orgId, scope);
-    const leadWhere = this.buildLeadWhere(orgId, scope);
     const workflowTaskWhere = this.buildWorkflowTaskWhere(orgId, scope);
     const offerIntentWhere = this.buildOfferIntentWhere(orgId, scope);
     const rentalLeaseWhere = this.buildRentalLeaseWhere(orgId, scope);
@@ -247,7 +256,10 @@ export class MissionControlService {
           where: agentProfileWhere,
           _count: { _all: true }
         }),
-      () => this.prisma.agentInvite.count({ where: { organizationId: orgId, status: 'PENDING' } }),
+      () =>
+        this.prisma.agentInvite.count({
+          where: { organizationId: orgId, status: 'PENDING', expiresAt: { gt: now } }
+        }),
       () =>
         (this.prisma as any).orgFile.groupBy({
           by: ['category'] as const,
@@ -258,11 +270,16 @@ export class MissionControlService {
       () => this.prisma.orgConversation.count({ where: { organizationId: orgId, type: 'DIRECT' } }),
       () => this.prisma.orgMessage.count({ where: { organizationId: orgId, createdAt: { gte: new Date(Date.now() - DAYS_7_MS) } } }),
       () =>
-        this.prisma.orgEvent.findMany({
-          where: { organizationId: orgId },
-          orderBy: { createdAt: 'desc' },
-          take: 20
-        }),
+        this.optionalQuery(
+          () =>
+            this.prisma.orgEvent.findMany({
+              where: { organizationId: orgId },
+              orderBy: { createdAt: 'desc' },
+              take: 20
+            }),
+          [],
+          'orgEvent.recent'
+        ),
       () => this.prisma.agentTrainingModule.count({ where: { organizationId: orgId } }),
       () => this.prisma.agentTrainingModule.count({ where: { organizationId: orgId, required: true } }),
       () => this.prisma.agentTrainingProgress.count({ where: { agentProfile: agentProfileWhere } }),
@@ -301,14 +318,19 @@ export class MissionControlService {
           }
         }),
       () =>
-        this.prisma.orgEvent.findMany({
-          where: {
-            organizationId: orgId,
-            type: { in: ['ORG_LISTING_EVALUATED', 'ORG_TRANSACTION_EVALUATED'] },
-            createdAt: { gte: aiWindowStart }
-          },
-          select: { type: true, payload: true }
-        }),
+        this.optionalQuery(
+          () =>
+            this.prisma.orgEvent.findMany({
+              where: {
+                organizationId: orgId,
+                type: { in: ['ORG_LISTING_EVALUATED', 'ORG_TRANSACTION_EVALUATED'] },
+                createdAt: { gte: aiWindowStart }
+              },
+              select: { type: true, payload: true }
+            }),
+          [],
+          'orgEvent.aiEvaluations'
+        ),
       () => this.prisma.agentProfile.count({ where: { ...agentProfileWhere, lifecycleStage: 'ONBOARDING' } }),
       () => this.prisma.agentProfile.count({ where: { ...agentProfileWhere, lifecycleStage: 'OFFBOARDING' } }),
       () =>
@@ -336,9 +358,27 @@ export class MissionControlService {
           }
         }),
       () =>
-        (this.prisma as any).lead.groupBy({
-          by: ['status'] as const,
-          where: leadWhere,
+        (this.prisma as any).person.groupBy({
+          by: ['stage'],
+          where: { organizationId: orgId, deletedAt: null, stageId: { not: null } },
+          _count: { _all: true }
+        }),
+      () =>
+        this.prisma.person.count({
+          where: {
+            organizationId: orgId,
+            deletedAt: null,
+            stageId: { not: null },
+            OR: [
+              { pipelineStage: { name: { contains: 'appointment', mode: 'insensitive' } } },
+              { pipelineStage: { name: { contains: 'showing', mode: 'insensitive' } } }
+            ]
+          }
+        }),
+      () =>
+        (this.prisma as any).person.groupBy({
+          by: ['leadType'] as const,
+          where: { organizationId: orgId, deletedAt: null, stageId: { not: null } },
           _count: { _all: true }
         }),
       () =>
@@ -480,7 +520,13 @@ export class MissionControlService {
             rentAmount: { not: null }
           },
           _sum: { rentAmount: true }
-        })
+        }),
+      () =>
+        this.optionalQuery(
+          () => this.prisma.aiPendingAction.count({ where: { organizationId: orgId, status: 'pending' } }),
+          0,
+          'aiPendingAction.count'
+        )
     ];
 
     let overviewResults: any[];
@@ -520,7 +566,9 @@ export class MissionControlService {
       onboardingTasksOpenCount,
       onboardingTasksCompletedCount,
       offboardingTasksOpenCount,
-      leadStatusGroups,
+      leadStageGroups,
+      appointmentsSetCount,
+      leadTypeGroups,
       loiStatusGroups,
       offerIntentAssignments,
       rentalPropertiesManaged,
@@ -540,34 +588,36 @@ export class MissionControlService {
       savedSearchAggregates,
       savedListingCount,
       closedTransactionsForGci,
-      activeLeaseRentAggregate
-    ] = overviewResults;
+      activeLeaseRentAggregate,
+      pendingAiActions
+	    ] = overviewResults;
 
-    const transactionsForDocs = await this.prisma.orgTransaction.findMany({
-      where: transactionWhere,
-      select: {
-        id: true,
-        closingDate: true,
-        status: true,
-        documents: {
-          select: {
-            orgFile: {
-              select: {
-                documentType: true,
-                complianceStatus: true
-              }
-            }
-          }
-        }
-      },
-      take: 500
-    });
-
-    const totalAgents = await this.prisma.agentProfile.count({ where: agentProfileWhere });
-    overview.totalAgents = totalAgents;
-    overview.activeAgents = Math.max(0, totalAgents - agentsInOnboardingCount - agentsInOffboardingCount);
-    overview.pendingInvites = pendingInvites;
-    overview.comms.channels = channelsCount;
+	    const [transactionsForDocs, totalAgents] = await Promise.all([
+	      this.prisma.orgTransaction.findMany({
+	        where: transactionWhere,
+	        select: {
+	          id: true,
+	          closingDate: true,
+	          status: true,
+	          documents: {
+	            select: {
+	              orgFile: {
+	                select: {
+	                  documentType: true,
+	                  complianceStatus: true
+	                }
+	              }
+	            }
+	          }
+	        },
+	        take: 500
+	      }),
+	      this.prisma.agentProfile.count({ where: agentProfileWhere })
+	    ]);
+	    overview.totalAgents = totalAgents;
+	    overview.activeAgents = Math.max(0, totalAgents - agentsInOnboardingCount - agentsInOffboardingCount);
+	    overview.pendingInvites = pendingInvites;
+	    overview.comms.channels = channelsCount;
     overview.comms.directConversations = directCount;
     overview.comms.messagesLast7Days = messages7d;
     overview.training = {
@@ -636,61 +686,114 @@ export class MissionControlService {
       agentsInOffboarding: agentsInOffboardingCount,
       totalOffboardingTasksOpen: offboardingTasksOpenCount
     };
-    const leadStatusMap = new Map<string, number>();
-    for (const group of leadStatusGroups) {
-      leadStatusMap.set(group.status, group._count._all);
-    }
-    const getLeadStatusCount = (status: LeadStatus) => leadStatusMap.get(status) ?? 0;
-    const totalLeadsCount = Array.from(leadStatusMap.values()).reduce((sum, value) => sum + value, 0);
+    const leadStageMap = this.mapStageGroups(leadStageGroups);
+    const totalLeadsCount = Array.from(leadStageMap.values()).reduce((sum, value) => sum + value, 0);
     overview.leadStats = {
       totalLeads: totalLeadsCount,
-      newLeads: getLeadStatusCount(LeadStatus.NEW),
-      contactedLeads: getLeadStatusCount(LeadStatus.CONTACTED),
-      qualifiedLeads: getLeadStatusCount(LeadStatus.QUALIFIED),
-      unqualifiedLeads: getLeadStatusCount(LeadStatus.UNQUALIFIED),
-      appointmentsSet: getLeadStatusCount(LeadStatus.APPOINTMENT_SET)
+      newLeads: leadStageMap.get(PersonStage.NEW) ?? 0,
+      contactedLeads: leadStageMap.get(PersonStage.NURTURE) ?? 0,
+      qualifiedLeads: leadStageMap.get(PersonStage.ACTIVE) ?? 0,
+      unqualifiedLeads: leadStageMap.get(PersonStage.LOST) ?? 0,
+      appointmentsSet: typeof appointmentsSetCount === 'number' ? appointmentsSetCount : 0
     };
 
-    const activeDripCampaigns = await this.optionalQuery(
-      () => (this.prisma as any).dripCampaign.count({ where: { organizationId: orgId, enabled: true } }),
-      0,
-      'dripCampaign.count'
-    );
-    const leadOptimization = await this.optionalQuery(
-      async () => {
-        const scoredToday = await (this.prisma as any).leadScoreHistory.count({
-          where: { organizationId: orgId, createdAt: { gte: new Date(Date.now() - DAYS_1_MS) } }
-        })
-        const highPriority = await (this.prisma as any).lead.count({
-          where: { organizationId: orgId, aiScore: { gte: 75 } }
-        })
-        const atRisk = await (this.prisma as any).lead.count({
-          where: { organizationId: orgId, aiScore: { lte: 35 } }
-        })
-        return { scoredToday, highPriority, atRisk }
-      },
-      { scoredToday: 0, highPriority: 0, atRisk: 0 },
-      'leadOptimization'
-    )
-    overview.marketingAutomation = {
-      activeCampaigns: activeDripCampaigns,
-      leadsInDrips: 0,
-      emailsQueuedToday: 0,
-      stepsExecutedToday: 0
+    const leadTypeMap = new Map<string, number>();
+    for (const group of leadTypeGroups) {
+      leadTypeMap.set(group.leadType, group._count._all);
+    }
+    overview.leadTypeBreakdown = {
+      BUYER: leadTypeMap.get(LeadType.BUYER) ?? 0,
+      SELLER: leadTypeMap.get(LeadType.SELLER) ?? 0,
+      UNKNOWN: leadTypeMap.get(LeadType.UNKNOWN) ?? 0
+    };
+
+	    const [activeDripCampaigns, leadOptimization] = await Promise.all([
+	      this.optionalQuery(
+	        () => (this.prisma as any).dripCampaign.count({ where: { organizationId: orgId, enabled: true } }),
+	        0,
+	        'dripCampaign.count'
+	      ),
+	      this.optionalQuery(
+	        async () => {
+	          const [scoredToday, highPriority, atRisk] = await Promise.all([
+	            (this.prisma as any).leadScoreHistory.count({
+	              where: { organizationId: orgId, createdAt: { gte: new Date(Date.now() - DAYS_1_MS) } }
+	            }),
+	            (this.prisma as any).lead.count({
+	              where: { organizationId: orgId, aiScore: { gte: 75 } }
+	            }),
+	            (this.prisma as any).lead.count({
+	              where: { organizationId: orgId, aiScore: { lte: 35 } }
+	            })
+	          ]);
+	          return { scoredToday, highPriority, atRisk };
+	        },
+	        { scoredToday: 0, highPriority: 0, atRisk: 0 },
+	        'leadOptimization'
+	      )
+	    ]);
+	    overview.marketingAutomation = {
+	      activeCampaigns: activeDripCampaigns,
+	      leadsInDrips: 0,
+	      emailsQueuedToday: 0,
+	      stepsExecutedToday: 0
     };
     overview.leadOptimization = leadOptimization;
-    const loiStatusMap = new Map<string, number>();
+    const loiCounts: Record<
+      | 'DRAFT'
+      | 'SENT'
+      | 'RECEIVED'
+      | 'COUNTERED'
+      | 'ACCEPTED'
+      | 'REJECTED',
+      number
+    > = {
+      DRAFT: 0,
+      SENT: 0,
+      RECEIVED: 0,
+      COUNTERED: 0,
+      ACCEPTED: 0,
+      REJECTED: 0
+    };
+
+    const normalizeOfferIntentStatus = (raw: string) => {
+      const normalized = String(raw ?? '').toUpperCase().trim();
+      switch (normalized) {
+        case OfferIntentStatus.DRAFT:
+        case OfferIntentStatus.SENT:
+        case OfferIntentStatus.RECEIVED:
+        case OfferIntentStatus.COUNTERED:
+        case OfferIntentStatus.ACCEPTED:
+        case OfferIntentStatus.REJECTED:
+          return normalized as keyof typeof loiCounts;
+        // Legacy mappings
+        case OfferIntentStatus.SUBMITTED:
+          return 'SENT' as const;
+        case OfferIntentStatus.UNDER_REVIEW:
+          return 'RECEIVED' as const;
+        case OfferIntentStatus.DECLINED:
+        case OfferIntentStatus.WITHDRAWN:
+          return 'REJECTED' as const;
+        default:
+          return null;
+      }
+    };
+
     for (const group of loiStatusGroups) {
-      loiStatusMap.set(group.status, group._count._all);
+      const mapped = normalizeOfferIntentStatus(group.status);
+      if (!mapped) continue;
+      loiCounts[mapped] += group._count._all;
     }
-    const getLoiStatusCount = (status: OfferIntentStatus) => loiStatusMap.get(status) ?? 0;
-    const totalOfferIntents = Array.from(loiStatusMap.values()).reduce((sum, value) => sum + value, 0);
+
+    const totalOfferIntents = Object.values(loiCounts).reduce((sum, value) => sum + value, 0);
     overview.loiStats = {
       totalOfferIntents,
-      submittedOfferIntents: getLoiStatusCount(OfferIntentStatus.SUBMITTED),
-      underReviewOfferIntents: getLoiStatusCount(OfferIntentStatus.UNDER_REVIEW),
-      acceptedOfferIntents: getLoiStatusCount(OfferIntentStatus.ACCEPTED),
-      declinedOfferIntents: getLoiStatusCount(OfferIntentStatus.DECLINED)
+      draftOfferIntents: loiCounts.DRAFT,
+      sentOfferIntents: loiCounts.SENT,
+      receivedOfferIntents: loiCounts.RECEIVED,
+      counteredOfferIntents: loiCounts.COUNTERED,
+      acceptedOfferIntents: loiCounts.ACCEPTED,
+      rejectedOfferIntents: loiCounts.REJECTED
     };
     overview.rentalStats = {
       propertiesUnderManagement: rentalPropertiesManaged,
@@ -785,6 +888,7 @@ export class MissionControlService {
       }
     }
     overview.aiCompliance = aiCompliance;
+    overview.aiApprovals.pending = pendingAiActions;
 
     const byCategory: Record<string, number> = {};
     let totalFiles = 0;
@@ -825,16 +929,25 @@ export class MissionControlService {
     const listingWhere = this.buildOrgListingWhere(orgId, scope);
     const transactionWhere = this.buildOrgTransactionWhere(orgId, scope);
     const workflowTaskWhere = this.buildWorkflowTaskWhere(orgId, scope);
-    const leadWhere = this.buildLeadWhere(orgId, scope);
     const offerIntentWhere = this.buildOfferIntentWhere(orgId, scope);
 
     const profiles = await this.prisma.agentProfile.findMany({
       where: agentProfileWhere,
       orderBy: { updatedAt: 'desc' },
-      include: {
+      select: {
+        id: true,
+        userId: true,
+        riskLevel: true,
+        riskScore: true,
+        isCompliant: true,
+        requiresAction: true,
+        ceHoursRequired: true,
+        ceHoursCompleted: true,
+        ceCycleEndAt: true,
+        lifecycleStage: true,
         user: { select: { firstName: true, lastName: true, email: true } },
-        memberships: true,
-        trainingProgress: { include: { module: true } }
+        memberships: { select: { type: true, name: true, status: true } },
+        trainingProgress: { select: { status: true, module: { select: { required: true } } } }
       }
     });
     const agentProfileIds = profiles.map((profile) => profile.id);
@@ -845,12 +958,14 @@ export class MissionControlService {
       activeListingCounts,
       transactionCounts,
       nonCompliantTransactions,
+      performanceLatest,
       complianceEvents,
       workflowTaskGroups,
-      leadAssignmentGroups,
+      pipelineLeadStageGroups,
       offerIntentAssignments,
       closedTransactionSales,
-      clientStageGroups
+      clientStageGroups,
+      leadTypeGroupsByOwner
     ] = await Promise.all([
       this.prisma.orgListing.groupBy({
         by: ['agentProfileId'],
@@ -880,22 +995,56 @@ export class MissionControlService {
         },
         _count: { _all: true }
       }),
-      this.prisma.orgEvent.findMany({
-        where: {
-          organizationId: orgId,
-          type: { in: ['ORG_LISTING_EVALUATED', 'ORG_TRANSACTION_EVALUATED'] },
-          createdAt: { gte: aiWindowStart }
-        },
-        select: { payload: true, createdAt: true }
-      }),
+      this.optionalQuery(
+        () =>
+          this.prisma.agentPerformanceLatest.findMany({
+            where: {
+              organizationId: orgId,
+              modelVersion: 'API_v1' as any,
+              agentProfileId: { in: agentProfileIds }
+            } as any,
+            include: {
+              snapshot: {
+                select: {
+                  modelVersion: true,
+                  overallScore: true,
+                  confidenceBand: true,
+                  riskDragPenalty: true,
+                  topDrivers: true,
+                  createdAt: true
+                }
+              }
+            }
+          }),
+        [],
+        'agent-performance-latest'
+      ),
+      this.optionalQuery(
+        () =>
+          this.prisma.orgEvent.findMany({
+            where: {
+              organizationId: orgId,
+              type: { in: ['ORG_LISTING_EVALUATED', 'ORG_TRANSACTION_EVALUATED'] },
+              createdAt: { gte: aiWindowStart }
+            },
+            select: { payload: true, createdAt: true }
+          }),
+        [],
+        'orgEvent.aiEvaluations.agentsDashboard'
+      ),
       this.prisma.agentWorkflowTask.groupBy({
         by: ['agentProfileId', 'type', 'status'],
         where: workflowTaskWhere,
         _count: { _all: true }
       }),
-      this.prisma.lead.groupBy({
-        by: ['agentProfileId', 'status'],
-        where: { ...leadWhere, agentProfileId: { in: agentProfileIds } },
+      (this.prisma as any).person.groupBy({
+        by: ['ownerId', 'stage'],
+        where: {
+          organizationId: orgId,
+          deletedAt: null,
+          stageId: { not: null },
+          ownerId: { in: agentUserIds }
+        },
         _count: { _all: true }
       }),
       this.prisma.offerIntent.findMany({
@@ -920,6 +1069,16 @@ export class MissionControlService {
           ownerId: { in: agentUserIds }
         },
         _count: { _all: true }
+      }),
+      this.prisma.person.groupBy({
+        by: ['ownerId', 'leadType'],
+        where: {
+          organizationId: orgId,
+          deletedAt: null,
+          ownerId: { in: agentUserIds },
+          stageId: { not: null }
+        },
+        _count: { _all: true }
       })
     ]);
 
@@ -937,6 +1096,37 @@ export class MissionControlService {
     const activeListingCountMap = toMap(activeListingCounts);
     const transactionCountMap = toMap(transactionCounts);
     const nonCompliantTransactionMap = toMap(nonCompliantTransactions);
+
+    const performanceMap = new Map<
+      string,
+      {
+        modelVersion: string;
+        overallScore: number;
+        confidenceBand: string;
+        riskDragPenalty?: number;
+        topDrivers: Array<{
+          label: string;
+          direction: 'positive' | 'negative';
+          metricSummary: string;
+          deepLink?: string;
+        }>;
+        lastUpdated: string;
+      }
+    >();
+    for (const entry of performanceLatest as any[]) {
+      const agentProfileId = entry.agentProfileId ?? null;
+      const snapshot = entry.snapshot ?? null;
+      if (!agentProfileId || !snapshot) continue;
+      const topDrivers = Array.isArray(snapshot.topDrivers) ? snapshot.topDrivers.slice(0, 2) : [];
+      performanceMap.set(agentProfileId, {
+        modelVersion: snapshot.modelVersion ?? 'API_v1',
+        overallScore: Number(snapshot.overallScore ?? 0),
+        confidenceBand: String(snapshot.confidenceBand ?? 'DEVELOPING'),
+        riskDragPenalty: snapshot.riskDragPenalty === null || snapshot.riskDragPenalty === undefined ? undefined : Number(snapshot.riskDragPenalty),
+        topDrivers,
+        lastUpdated: snapshot.createdAt ? snapshot.createdAt.toISOString() : new Date().toISOString()
+      });
+    }
 
     const complianceMap = new Map<
       string,
@@ -982,17 +1172,18 @@ export class MissionControlService {
       string,
       { total: number; new: number; qualified: number }
     >();
-    for (const group of leadAssignmentGroups) {
-      if (!group.agentProfileId) continue;
-      const entry = leadAssignmentStats.get(group.agentProfileId) ?? { total: 0, new: 0, qualified: 0 };
+    for (const group of pipelineLeadStageGroups) {
+      const ownerId = group.ownerId ?? null;
+      if (!ownerId) continue;
+      const entry = leadAssignmentStats.get(ownerId) ?? { total: 0, new: 0, qualified: 0 };
       entry.total += group._count._all;
-      if (group.status === LeadStatus.NEW) {
+      if (group.stage === PersonStage.NEW) {
         entry.new += group._count._all;
       }
-      if (group.status === LeadStatus.QUALIFIED) {
+      if (group.stage === PersonStage.ACTIVE) {
         entry.qualified += group._count._all;
       }
-      leadAssignmentStats.set(group.agentProfileId, entry);
+      leadAssignmentStats.set(ownerId, entry);
     }
 
     const offerIntentStats = new Map<
@@ -1042,6 +1233,25 @@ export class MissionControlService {
       clientStats.set(ownerId, entry);
     }
 
+    const leadTypeStats = new Map<string, { buyer: number; seller: number; unknown: number }>();
+    for (const group of leadTypeGroupsByOwner) {
+      const ownerId = group.ownerId ?? null;
+      if (!ownerId) continue;
+      const entry = leadTypeStats.get(ownerId) ?? { buyer: 0, seller: 0, unknown: 0 };
+      switch (group.leadType) {
+        case LeadType.BUYER:
+          entry.buyer += group._count._all;
+          break;
+        case LeadType.SELLER:
+          entry.seller += group._count._all;
+          break;
+        default:
+          entry.unknown += group._count._all;
+          break;
+      }
+      leadTypeStats.set(ownerId, entry);
+    }
+
     const rows: MissionControlAgentRowDto[] = profiles.map((profile) => {
       const complianceMeta = complianceMap.get(profile.id);
       const workflow = workflowStats.get(profile.id) ?? {
@@ -1049,7 +1259,7 @@ export class MissionControlService {
         onboardingCompleted: 0,
         offboardingOpen: 0
       };
-      const leadStats = leadAssignmentStats.get(profile.id) ?? {
+      const leadStats = leadAssignmentStats.get(profile.userId) ?? {
         total: 0,
         new: 0,
         qualified: 0
@@ -1057,6 +1267,17 @@ export class MissionControlService {
       const loiStats = offerIntentStats.get(profile.id) ?? { total: 0, accepted: 0 };
       const sales = salesStats.get(profile.id) ?? { closedCount: 0, closedVolume: 0 };
       const clients = clientStats.get(profile.userId) ?? { current: 0, past: 0 };
+      const typeCounts = leadTypeStats.get(profile.userId) ?? { buyer: 0, seller: 0, unknown: 0 };
+      const knownTotal = typeCounts.buyer + typeCounts.seller;
+      const buyerSharePercent = knownTotal > 0 ? Math.round((typeCounts.buyer / knownTotal) * 100) : 0;
+      const buyerSellerOrientation: MissionControlAgentRowDto['buyerSellerOrientation'] =
+        knownTotal === 0
+          ? 'UNKNOWN'
+          : buyerSharePercent >= 67
+            ? 'BUYER_HEAVY'
+            : buyerSharePercent <= 33
+              ? 'SELLER_HEAVY'
+              : 'BALANCED';
       return {
         agentProfileId: profile.id,
         userId: profile.userId,
@@ -1066,8 +1287,14 @@ export class MissionControlService {
         riskScore: profile.riskScore,
         isCompliant: profile.isCompliant,
         requiresAction: profile.requiresAction,
+        buyerLeadCount: typeCounts.buyer,
+        sellerLeadCount: typeCounts.seller,
+        unknownLeadCount: typeCounts.unknown,
+        buyerSharePercent,
+        buyerSellerOrientation,
         ceHoursRequired: profile.ceHoursRequired,
         ceHoursCompleted: profile.ceHoursCompleted,
+        ceCycleEndAt: profile.ceCycleEndAt?.toISOString() ?? null,
         memberships: profile.memberships.map((m) => ({ type: m.type, name: m.name, status: m.status })),
         trainingAssigned: profile.trainingProgress.length,
         trainingCompleted: profile.trainingProgress.filter((p) => p.status === 'COMPLETED').length,
@@ -1093,7 +1320,8 @@ export class MissionControlService {
         newLeadsCount: leadStats.new,
         qualifiedLeadsCount: leadStats.qualified,
         offerIntentCount: loiStats.total,
-        acceptedOfferIntentCount: loiStats.accepted
+        acceptedOfferIntentCount: loiStats.accepted,
+        performance: performanceMap.get(profile.id) ?? null
       };
     });
 
@@ -1128,15 +1356,21 @@ export class MissionControlService {
 
   async getActivityFeed(orgId: string, brokerUserId: string, _scope?: MissionControlScope) {
     await this.assertBrokerInOrg(brokerUserId, orgId);
-    const events = await this.prisma.orgEvent.findMany({
-      where: { organizationId: orgId },
-      orderBy: { createdAt: 'desc' },
-      take: 50
-    });
+    const events = await this.optionalQuery(
+      () =>
+        this.prisma.orgEvent.findMany({
+          where: { organizationId: orgId },
+          orderBy: { createdAt: 'desc' },
+          take: 50
+        }),
+      [],
+      'orgEvent.activity'
+    );
     return events.map((event) => ({
       id: event.id,
       type: event.type,
       message: event.message,
+      payload: event.payload as any,
       createdAt: event.createdAt.toISOString()
     }));
   }

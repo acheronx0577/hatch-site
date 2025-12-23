@@ -81,6 +81,10 @@ export class MissionControlOverviewDto {
     highRiskTransactions: number;
   } = { evaluationsLast30Days: 0, highRiskListings: 0, highRiskTransactions: 0 };
 
+  aiApprovals: {
+    pending: number;
+  } = { pending: 0 };
+
   leadStats: {
     totalLeads: number;
     newLeads: number;
@@ -97,18 +101,28 @@ export class MissionControlOverviewDto {
     appointmentsSet: 0
   };
 
+  leadTypeBreakdown: {
+    BUYER: number;
+    SELLER: number;
+    UNKNOWN: number;
+  } = { BUYER: 0, SELLER: 0, UNKNOWN: 0 };
+
   loiStats: {
     totalOfferIntents: number;
-    submittedOfferIntents: number;
-    underReviewOfferIntents: number;
+    draftOfferIntents: number;
+    sentOfferIntents: number;
+    receivedOfferIntents: number;
+    counteredOfferIntents: number;
     acceptedOfferIntents: number;
-    declinedOfferIntents: number;
+    rejectedOfferIntents: number;
   } = {
     totalOfferIntents: 0,
-    submittedOfferIntents: 0,
-    underReviewOfferIntents: 0,
+    draftOfferIntents: 0,
+    sentOfferIntents: 0,
+    receivedOfferIntents: 0,
+    counteredOfferIntents: 0,
     acceptedOfferIntents: 0,
-    declinedOfferIntents: 0
+    rejectedOfferIntents: 0
   };
 
   rentalStats: {
@@ -188,6 +202,11 @@ export class MissionControlAgentRowDto {
   riskScore!: number;
   isCompliant!: boolean;
   requiresAction!: boolean;
+  buyerLeadCount = 0;
+  sellerLeadCount = 0;
+  unknownLeadCount = 0;
+  buyerSellerOrientation: 'BUYER_HEAVY' | 'BALANCED' | 'SELLER_HEAVY' | 'UNKNOWN' = 'UNKNOWN';
+  buyerSharePercent = 0;
   ceHoursRequired?: number | null;
   ceHoursCompleted?: number | null;
   memberships!: Array<{ type: string; name: string; status: string }>;
@@ -214,6 +233,19 @@ export class MissionControlAgentRowDto {
   qualifiedLeadsCount = 0;
   offerIntentCount = 0;
   acceptedOfferIntentCount = 0;
+  performance?: {
+    modelVersion: string;
+    overallScore: number;
+    confidenceBand: string;
+    riskDragPenalty?: number;
+    topDrivers: Array<{
+      label: string;
+      direction: 'positive' | 'negative';
+      metricSummary: string;
+      deepLink?: string;
+    }>;
+    lastUpdated: string;
+  } | null;
 }
 
 export class MissionControlComplianceSummaryDto {

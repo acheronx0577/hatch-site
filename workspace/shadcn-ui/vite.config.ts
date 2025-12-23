@@ -19,6 +19,11 @@ export default defineConfig(({ mode }) => ({
         target: "http://localhost:4000",
         changeOrigin: true,
       },
+      "/socket.io": {
+        target: "http://localhost:4000",
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   resolve: {

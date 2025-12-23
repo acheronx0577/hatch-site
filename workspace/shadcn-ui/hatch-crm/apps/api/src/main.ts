@@ -90,8 +90,27 @@ export async function createApp(): Promise<NestFastifyApplication> {
   const helmetOptions: FastifyHelmetOptions = { contentSecurityPolicy: false };
   await app.register(helmet as unknown as Parameters<typeof app.register>[0], helmetOptions);
 
+  const corsAllowList = (process.env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (process.env.NODE_ENV === 'production' && corsAllowList.length === 0) {
+    logger.warn(
+      { event: 'config.missing', key: 'CORS_ORIGINS' },
+      'CORS_ORIGINS is not configured; CORS will reflect request origins.'
+    );
+  }
+
   const corsOptions: FastifyCorsOptions = {
-    origin: true,
+    origin: corsAllowList.length
+      ? (origin, cb) => {
+          if (!origin) {
+            cb(null, true);
+            return;
+          }
+          cb(null, corsAllowList.includes(origin));
+        }
+      : true,
     credentials: true
   } satisfies FastifyCorsOptions;
   await app.register(
@@ -109,6 +128,24 @@ export async function createApp(): Promise<NestFastifyApplication> {
   await app.register(multipart as unknown as Parameters<typeof app.register>[0], multipartOptions);
 
   const cookieSecret = process.env.COOKIE_SECRET ?? 'local-test-cookie-secret';
+  if (process.env.NODE_ENV === 'production' && !process.env.COOKIE_SECRET) {
+    logger.warn(
+      { event: 'config.missing', key: 'COOKIE_SECRET' },
+      'COOKIE_SECRET is not configured; signed cookies will be less secure.'
+    );
+  }
+  if (process.env.NODE_ENV === 'production' && !process.env.ATTACHMENT_TOKEN_SECRET) {
+    logger.warn(
+      { event: 'config.missing', key: 'ATTACHMENT_TOKEN_SECRET' },
+      'ATTACHMENT_TOKEN_SECRET is not configured; attachment links may be forgeable.'
+    );
+  }
+  if (process.env.NODE_ENV === 'production' && metricsEnabled() && !metricsAuthRequired()) {
+    logger.warn(
+      { event: 'config.missing', key: 'METRICS_TOKEN' },
+      'METRICS_TOKEN is not configured; /metrics will be publicly accessible.'
+    );
+  }
 
   const cookieOptions: FastifyCookieOptions = {
     secret: cookieSecret,
@@ -134,13 +171,39 @@ export async function createApp(): Promise<NestFastifyApplication> {
       .setVersion('0.1.0')
       .addBearerAuth()
       .build();
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup('docs', app, document);
+    SwaggerModule.setup('docs', app, () => SwaggerModule.createDocument(app, swaggerConfig));
   }
 
   await app.init();
 
   const fastify = app.getHttpAdapter().getInstance();
+
+  // Preserve raw JSON for webhook signature validation (e.g., DocuSign Connect).
+  const jsonParser = (_request: any, payload: string, done: (err: Error | null, body?: unknown) => void) => {
+    try {
+      const shouldCaptureRaw =
+        typeof _request?.url === 'string' && _request.url.includes('/contracts/webhooks');
+      if (shouldCaptureRaw) {
+        _request.rawBody = payload;
+      }
+
+      const trimmed = typeof payload === 'string' ? payload.trim() : '';
+      if (!trimmed) {
+        done(null, {});
+        return;
+      }
+
+      done(null, JSON.parse(trimmed));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  };
+
+  if (fastify.hasContentTypeParser('application/json')) {
+    fastify.removeContentTypeParser('application/json');
+  }
+  fastify.addContentTypeParser('application/json', { parseAs: 'string' }, jsonParser);
+  fastify.addContentTypeParser(/^application\/[^;]+\+json$/, { parseAs: 'string' }, jsonParser);
 
   // Parse application/x-www-form-urlencoded bodies (e.g., Twilio webhooks)
   const urlEncodedType = 'application/x-www-form-urlencoded';
