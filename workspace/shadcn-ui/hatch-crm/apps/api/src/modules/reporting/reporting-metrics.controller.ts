@@ -1,7 +1,9 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { OrgMembershipGuard } from '@/platform/security/org-membership.guard';
 import { ApiModule, ApiStandardErrors, resolveRequestContext } from '../common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { MetricKey } from './dto';
@@ -30,6 +32,7 @@ const startOfDayUtc = (value: Date): Date =>
 @ApiModule('Reporting Metrics')
 @ApiStandardErrors()
 @Controller('reporting')
+@UseGuards(JwtAuthGuard, OrgMembershipGuard)
 export class ReportingMetricsController {
   constructor(
     private readonly prisma: PrismaService,

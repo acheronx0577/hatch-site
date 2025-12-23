@@ -104,8 +104,8 @@
 
 @layer base {
   .hatch-broker-shell {
-    --hatch-card-alpha: 0.86;
-    --hatch-card-blur: 18px;
+    --hatch-card-alpha: var(--hatch-glass-alpha-default);
+    --hatch-card-blur: var(--hatch-glass-blur);
     --hatch-card-border: var(--glass-border);
   }
 
@@ -123,7 +123,7 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-ui);
-    font-size: var(--type-body-md);
+    font-size: var(--type-body-sm);
     line-height: var(--type-line-loose);
     background-image: linear-gradient(180deg, #f8faff 0%, #eff6ff 100%);
     color: var(--text-primary);
@@ -176,7 +176,7 @@
   }
 
   p {
-    font-size: var(--type-body-md);
+    font-size: var(--type-body-sm);
     color: var(--text-secondary);
   }
 
@@ -203,6 +203,90 @@
 }
 
 @layer components {
+  :root {
+    --hatch-noise-url: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");
+  }
+
+  .hatch-glass {
+    background-color: hsl(var(--card) / var(--hatch-glass-alpha-default));
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--shadow-sm);
+    backdrop-filter: blur(var(--hatch-glass-blur));
+    -webkit-backdrop-filter: blur(var(--hatch-glass-blur));
+  }
+
+  .hatch-glass--elevated {
+    background-color: hsl(var(--card) / var(--hatch-glass-alpha-elevated));
+    box-shadow: var(--shadow-md);
+  }
+
+  .hatch-glass--recessed {
+    background-color: hsl(var(--card) / var(--hatch-glass-alpha-recessed));
+  }
+
+  .hatch-glass--info {
+    background-image: linear-gradient(0deg, var(--hatch-glass-tint-info), var(--hatch-glass-tint-info));
+  }
+
+  .hatch-glass--warning {
+    background-image: linear-gradient(0deg, var(--hatch-glass-tint-warning), var(--hatch-glass-tint-warning));
+  }
+
+  .hatch-glass--success {
+    background-image: linear-gradient(0deg, var(--hatch-glass-tint-success), var(--hatch-glass-tint-success));
+  }
+
+  .hatch-glass--danger {
+    background-image: linear-gradient(0deg, var(--hatch-glass-tint-danger), var(--hatch-glass-tint-danger));
+  }
+
+  .hatch-card-hover {
+    transition: transform var(--motion-duration-base) var(--motion-ease-standard),
+      box-shadow var(--motion-duration-base) var(--motion-ease-standard);
+  }
+
+  .hatch-card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .hatch-card-interactive:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+
+  .hatch-hero {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .hatch-hero::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-image: var(--hatch-noise-url);
+    opacity: 0.03;
+    mix-blend-mode: overlay;
+  }
+
+  .hatch-hero::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-image:
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.65), rgba(255, 255, 255, 0) 2px),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.12) 18%, rgba(255, 255, 255, 0) 58%);
+    opacity: 0.55;
+  }
+
+  .dark .hatch-hero::after {
+    opacity: 0.3;
+  }
+
   .hatch-markdown strong {
     font-weight: 600;
   }
@@ -236,6 +320,27 @@
   100% {
     box-shadow: 0 0 0 0 rgba(31, 95, 255, 0);
   }
+}
+
+@keyframes hatch-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.hatch-shimmer {
+  background-color: hsl(var(--muted) / 0.55);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.55) 45%,
+    rgba(255, 255, 255, 0) 90%
+  );
+  background-size: 200% 100%;
+  animation: hatch-shimmer 1.6s linear infinite;
 }
 
 /* Fade-in animation for scroll */

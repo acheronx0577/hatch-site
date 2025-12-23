@@ -113,10 +113,23 @@ export class ReportingService {
     const leadsClosedCount = leadStatusCounts.find((row) => row.status === LeadStatus.CLOSED)?._count._all ?? 0;
 
     const offerIntentsSubmittedCount = offerCounts
-      .filter((row) => row.status === OfferIntentStatus.SUBMITTED || row.status === OfferIntentStatus.UNDER_REVIEW)
+      .filter((row) =>
+        row.status === OfferIntentStatus.SENT ||
+        row.status === OfferIntentStatus.RECEIVED ||
+        row.status === OfferIntentStatus.COUNTERED ||
+        row.status === OfferIntentStatus.SUBMITTED ||
+        row.status === OfferIntentStatus.UNDER_REVIEW
+      )
       .reduce((sum, row) => sum + row._count._all, 0);
     const offerIntentsAcceptedCount = offerCounts.find((row) => row.status === OfferIntentStatus.ACCEPTED)?._count._all ?? 0;
-    const offerIntentsDeclinedCount = offerCounts.find((row) => row.status === OfferIntentStatus.DECLINED)?._count._all ?? 0;
+    const offerIntentsDeclinedCount =
+      offerCounts
+        .filter((row) =>
+          row.status === OfferIntentStatus.REJECTED ||
+          row.status === OfferIntentStatus.DECLINED ||
+          row.status === OfferIntentStatus.WITHDRAWN
+        )
+        .reduce((sum, row) => sum + row._count._all, 0);
 
     const transactionsClosedCount = closedTransactions.length;
     const transactionsClosedVolume = closedTransactions.reduce((sum, tx) => sum + (tx.listing?.listPrice ?? 0), 0);
@@ -260,7 +273,12 @@ export class ReportingService {
       const leadsClosed = agentLeadStatuses.find((row) => row.status === LeadStatus.CLOSED)?._count._all ?? 0;
 
       const offerSubmitted = agentOfferIntents.filter(
-        (intent) => intent.status === OfferIntentStatus.SUBMITTED || intent.status === OfferIntentStatus.UNDER_REVIEW
+        (intent) =>
+          intent.status === OfferIntentStatus.SENT ||
+          intent.status === OfferIntentStatus.RECEIVED ||
+          intent.status === OfferIntentStatus.COUNTERED ||
+          intent.status === OfferIntentStatus.SUBMITTED ||
+          intent.status === OfferIntentStatus.UNDER_REVIEW
       ).length;
       const offerAccepted = agentOfferIntents.filter((intent) => intent.status === OfferIntentStatus.ACCEPTED).length;
 

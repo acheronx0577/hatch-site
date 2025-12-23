@@ -2,7 +2,7 @@
 import 'reflect-metadata';
 import 'tsconfig-paths/register';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
-import { Test } from '@nestjs/testing';
+import { Test, type TestingModule } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { AppModule } from '../../src/app.module';
@@ -12,9 +12,10 @@ const REQUIRED_PATHS = ['/api/accounts', '/api/opportunities', '/api/reporting/m
 
 describe('OpenAPI route coverage', () => {
   let app: NestFastifyApplication;
+  let moduleRef: TestingModule;
 
   beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       imports: [AppModule]
     })
       .overrideProvider(PrismaService)
@@ -33,6 +34,7 @@ describe('OpenAPI route coverage', () => {
 
   afterAll(async () => {
     await app?.close();
+    await moduleRef?.close();
   });
 
   it('exposes key paths in the generated document', async () => {

@@ -1,8 +1,14 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Loader2, Search, Pencil, Trash2, X, Plus, Save, Check, Filter, ArrowUpDown } from 'lucide-react';
+import { Loader2, Search, Pencil, Trash2, X, Plus, Save, Filter, ArrowUpDown } from 'lucide-react';
 
 import BrokerPageHeader from '@/components/layout/BrokerPageHeader';
 import AttachmentsPanel from '@/components/files/AttachmentsPanel';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { listAccounts, createAccount, updateAccount, deleteAccount, bulkDeleteAccounts, type Account } from '@/lib/api/accounts';
 import { listOpportunities, type Opportunity } from '@/lib/api/opportunities';
 
@@ -12,8 +18,9 @@ export default function BrokerAccountsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [updating, setUpdating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [formMode, setFormMode] = useState<'create' | 'edit'>('create');
   const [searchQuery, setSearchQuery] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [form, setForm] = useState({
@@ -157,7 +164,7 @@ export default function BrokerAccountsPage() {
     }
     try {
       setError(null);
-      setEditing(true);
+      setUpdating(true);
       const annualRevenue = form.annualRevenue ? Number(form.annualRevenue) : undefined;
       if (form.annualRevenue && !Number.isFinite(annualRevenue)) {
         setError('Annual revenue must be a valid number');
@@ -172,11 +179,12 @@ export default function BrokerAccountsPage() {
       });
       setAccounts((prev) => prev.map((acc) => (acc.id === updated.id ? updated : acc)));
       setForm({ name: '', phone: '', website: '', industry: '', annualRevenue: '' });
+      setFormMode('create');
       setError(null);
     } catch (err: any) {
       setError(err?.message ?? 'Failed to update account');
     } finally {
-      setEditing(false);
+      setUpdating(false);
     }
   };
 
@@ -206,11 +214,13 @@ export default function BrokerAccountsPage() {
       industry: selectedAccount.industry ?? '',
       annualRevenue: selectedAccount.annualRevenue?.toString() ?? ''
     });
+    setFormMode('edit');
   };
 
   const cancelEdit = () => {
     setForm({ name: '', phone: '', website: '', industry: '', annualRevenue: '' });
     setError(null);
+    setFormMode('create');
   };
 
   // Load opportunities for selected account
@@ -275,166 +285,164 @@ export default function BrokerAccountsPage() {
     }
   };
 
-  const isEditing = form.name.trim().length > 0;
+  const isEditMode = formMode === 'edit';
 
   return (
     <div className="space-y-6">
       <BrokerPageHeader title="Accounts" description="Manage organization records and linked opportunities." />
 
       {/* Create/Edit Form */}
-      <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <Card className="p-6 hover:translate-y-0 hover:shadow-brand">
         <h3 className="text-sm font-semibold text-slate-700">
-          {isEditing && selectedAccount ? `Edit ${selectedAccount.name}` : 'Create New Account'}
+          {isEditMode && selectedAccount ? `Edit ${selectedAccount.name}` : 'Create New Account'}
         </h3>
-        <form className="mt-3 grid gap-3 md:grid-cols-6" onSubmit={isEditing && selectedAccount ? handleUpdate : handleCreate}>
-          <input
-            className="w-full rounded border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none md:col-span-2"
+        <form
+          className="mt-4 grid gap-3 md:grid-cols-2"
+          onSubmit={isEditMode && selectedAccount ? handleUpdate : handleCreate}
+        >
+          <Input
+            className="md:col-span-2"
             placeholder="Name *"
             value={form.name}
             onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
           />
-          <input
-            className="w-full rounded border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          <Input
             placeholder="Phone"
             value={form.phone}
             onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
           />
-          <input
-            className="w-full rounded border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          <Input
             placeholder="Website (https://)"
             value={form.website}
             onChange={(e) => setForm((prev) => ({ ...prev, website: e.target.value }))}
           />
-          <input
-            className="w-full rounded border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          <Input
             placeholder="Industry"
             value={form.industry}
             onChange={(e) => setForm((prev) => ({ ...prev, industry: e.target.value }))}
           />
-          <input
-            className="w-full rounded border border-slate-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+          <Input
             placeholder="Annual Revenue"
             type="number"
+            inputMode="numeric"
             value={form.annualRevenue}
             onChange={(e) => setForm((prev) => ({ ...prev, annualRevenue: e.target.value }))}
           />
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="flex-1 rounded bg-brand-600 px-3 py-2 text-sm font-semibold text-white shadow hover:bg-brand-700 disabled:opacity-50 flex items-center justify-center gap-1"
-              disabled={creating || editing}
-            >
-              {creating || editing ? (
+          <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
+            <Button type="submit" disabled={creating || updating}>
+              {creating || updating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
-              ) : isEditing && selectedAccount ? (
+              ) : isEditMode && selectedAccount ? (
                 <>
-                  <Save className="h-4 w-4" />
-                  Save
+                  <Save className="h-4 w-4" /> Save
                 </>
               ) : (
                 <>
-                  <Plus className="h-4 w-4" />
-                  Create
+                  <Plus className="h-4 w-4" /> Create
                 </>
               )}
-            </button>
-            {isEditing && (
-              <button
-                type="button"
-                onClick={cancelEdit}
-                className="rounded border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-              >
+            </Button>
+            {isEditMode ? (
+              <Button type="button" variant="outline" size="icon" onClick={cancelEdit} aria-label="Cancel edit">
                 <X className="h-4 w-4" />
-              </button>
-            )}
+              </Button>
+            ) : null}
           </div>
         </form>
-        {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
-      </div>
+        {error ? (
+          <div className="mt-4 rounded-xl border border-rose-200/70 bg-rose-500/10 p-4 text-sm text-rose-800">
+            {error}
+          </div>
+        ) : null}
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
         {/* Accounts List */}
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 p-4 space-y-3">
+        <Card className="overflow-hidden hover:translate-y-0 hover:shadow-brand">
+          <div className="border-b border-[color:var(--hatch-card-border)] p-6 pb-4 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-700">Accounts ({filteredAccounts.length})</h3>
-              <div className="flex gap-2">
-                <button
+              <div className="flex items-center gap-2">
+                <Button
                   type="button"
+                  variant={showFilters ? 'secondary' : 'outline'}
+                  size="icon"
+                  className="h-9 w-9"
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`rounded border p-1.5 text-sm transition-colors ${
-                    showFilters ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                  title="Toggle filters"
                 >
                   <Filter className="h-4 w-4" />
-                </button>
-                <button
+                  <span className="sr-only">Toggle filters</span>
+                </Button>
+                <Button
                   type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9"
                   onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-                  className="rounded border border-slate-200 p-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
-                  title={`Sort ${sortDirection === 'asc' ? 'descending' : 'ascending'}`}
                 >
                   <ArrowUpDown className="h-4 w-4" />
-                </button>
+                  <span className="sr-only">Toggle sort direction</span>
+                </Button>
               </div>
             </div>
 
             {showFilters && (
               <div className="space-y-2">
-                <input
-                  type="text"
+                <Input
                   placeholder="Filter by industry..."
                   value={industryFilter}
                   onChange={(e) => setIndustryFilter(e.target.value)}
-                  className="w-full rounded border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
                 />
-                <select
-                  value={sortField}
-                  onChange={(e) => setSortField(e.target.value as any)}
-                  className="w-full rounded border border-slate-200 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
-                >
-                  <option value="name">Sort by Name</option>
-                  <option value="industry">Sort by Industry</option>
-                  <option value="annualRevenue">Sort by Revenue</option>
-                </select>
+                <Select value={sortField} onValueChange={(value) => setSortField(value as any)}>
+                  <SelectTrigger className="h-10 rounded-full">
+                    <SelectValue placeholder="Sort by…" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="name">Sort by Name</SelectItem>
+                    <SelectItem value="industry">Sort by Industry</SelectItem>
+                    <SelectItem value="annualRevenue">Sort by Revenue</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
+              <Input
                 placeholder="Search accounts..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded border border-slate-200 py-2 pl-9 pr-3 text-sm focus:border-brand-500 focus:outline-none"
+                className="pl-9"
               />
             </div>
 
             {selectedIds.size > 0 && (
-              <div className="flex items-center justify-between rounded-lg bg-brand-50 p-2">
-                <span className="text-sm font-medium text-brand-900">{selectedIds.size} selected</span>
-                <button
-                  type="button"
-                  onClick={() => setShowBulkDeleteConfirm(true)}
-                  className="rounded bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700 transition-colors"
-                >
-                  Delete Selected
-                </button>
+              <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border)] bg-white/25 p-2 backdrop-blur">
+                <span className="text-sm font-medium text-slate-900">{selectedIds.size} selected</span>
+                <Button type="button" variant="destructive" size="sm" onClick={() => setShowBulkDeleteConfirm(true)}>
+                  Delete selected
+                </Button>
               </div>
             )}
           </div>
-          <div className="max-h-[600px] overflow-y-auto p-2">
+          <div className="max-h-[600px] overflow-y-auto p-3">
             {loading ? (
               <div className="flex items-center gap-2 py-6 text-sm text-slate-500 justify-center">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading…
               </div>
             ) : filteredAccounts.length === 0 ? (
-              <p className="py-4 px-2 text-sm text-slate-500 text-center">
-                {searchQuery ? 'No accounts match your search' : 'No accounts found'}
-              </p>
+              <div className="py-12 text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-blue-600/10">
+                  <Search className="h-5 w-5 text-brand-blue-600" />
+                </div>
+                <p className="text-sm font-medium text-slate-900">
+                  {searchQuery ? 'No accounts match your search' : 'No accounts found'}
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  {searchQuery ? 'Try a different keyword or clear filters.' : 'Create an account to start linking opportunities.'}
+                </p>
+              </div>
             ) : (
               <>
                 {filteredAccounts.length > 0 && (
@@ -469,11 +477,14 @@ export default function BrokerAccountsPage() {
                         <button
                           type="button"
                           className={`flex-1 rounded px-3 py-2 text-left text-sm transition-colors ${
-                            active ? 'bg-brand-50 text-brand-700' : 'hover:bg-slate-50 text-slate-700'
+                            active
+                              ? 'border border-white/20 bg-white/35 text-slate-900 shadow-brand'
+                              : 'hover:bg-white/25 text-slate-700'
                           }`}
                           onClick={() => {
                             setSelectedId(account.id);
                             cancelEdit();
+                            setShowDeleteConfirm(false);
                           }}
                         >
                           <div className="font-semibold">{account.name ?? 'Untitled account'}</div>
@@ -486,10 +497,10 @@ export default function BrokerAccountsPage() {
               </>
             )}
           </div>
-        </div>
+        </Card>
 
         {/* Account Details */}
-        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <Card className="p-6 space-y-4 hover:translate-y-0 hover:shadow-brand">
           {selectedAccount ? (
             <>
               <div className="flex items-start justify-between">
@@ -528,59 +539,45 @@ export default function BrokerAccountsPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={startEdit}
-                    className="rounded border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 transition-colors"
-                    title="Edit account"
-                  >
+                  <Button type="button" variant="outline" size="icon" className="h-9 w-9" onClick={startEdit}>
                     <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
+                    <span className="sr-only">Edit account</span>
+                  </Button>
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 text-rose-600 hover:bg-rose-500/10 hover:text-rose-700"
                     onClick={() => setShowDeleteConfirm(true)}
-                    className="rounded border border-red-200 p-2 text-red-600 hover:bg-red-50 transition-colors"
-                    title="Delete account"
                   >
                     <Trash2 className="h-4 w-4" />
-                  </button>
+                    <span className="sr-only">Delete account</span>
+                  </Button>
                 </div>
               </div>
 
               {/* Delete Confirmation Dialog */}
               {showDeleteConfirm && (
-                <div className="rounded-lg border-2 border-red-200 bg-red-50 p-4">
-                  <p className="text-sm font-semibold text-red-900">Confirm Deletion</p>
-                  <p className="mt-1 text-sm text-red-700">
+                <div className="rounded-xl border border-rose-200/70 bg-rose-500/10 p-4">
+                  <p className="text-sm font-semibold text-rose-900">Confirm deletion</p>
+                  <p className="mt-1 text-sm text-rose-800">
                     Are you sure you want to delete "{selectedAccount.name}"? This action cannot be undone.
                   </p>
                   <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleDelete}
-                      disabled={deleting}
-                      className="rounded bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-1"
-                    >
+                    <Button type="button" variant="destructive" onClick={handleDelete} disabled={deleting}>
                       {deleting ? (
                         <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Deleting…
+                          <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
                         </>
                       ) : (
                         <>
-                          <Trash2 className="h-4 w-4" />
-                          Delete
+                          <Trash2 className="h-4 w-4" /> Delete
                         </>
                       )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowDeleteConfirm(false)}
-                      disabled={deleting}
-                      className="rounded border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                    >
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={deleting}>
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -597,12 +594,10 @@ export default function BrokerAccountsPage() {
                 ) : (
                   <ul className="space-y-2">
                     {opportunities.map((opp) => (
-                      <li key={opp.id} className="rounded border border-slate-200 p-3">
+                      <li key={opp.id} className="rounded-xl border border-[var(--glass-border)] bg-white/25 p-3 backdrop-blur">
                         <div className="font-medium text-sm text-slate-900">{opp.name}</div>
                         <div className="mt-1 flex items-center gap-2 text-xs text-slate-600">
-                          <span className="inline-flex items-center rounded-full bg-brand-100 px-2 py-0.5 font-medium text-brand-800">
-                            {opp.stage}
-                          </span>
+                          <Badge variant="info">{opp.stage}</Badge>
                           {opp.amount && (
                             <span>${Number(opp.amount).toLocaleString()}</span>
                           )}
@@ -624,50 +619,44 @@ export default function BrokerAccountsPage() {
               Loading…
             </div>
           ) : (
-            <p className="text-sm text-slate-500 text-center py-12">Select an account to view details and attachments</p>
+            <div className="py-16 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-blue-600/10">
+                <Pencil className="h-5 w-5 text-brand-blue-600" />
+              </div>
+              <p className="text-sm font-medium text-slate-900">Select an account</p>
+              <p className="mt-1 text-sm text-slate-600">Details, linked opportunities, and attachments will appear here.</p>
+            </div>
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Bulk Delete Confirmation Dialog */}
-      {showBulkDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="max-w-md rounded-lg border border-slate-200 bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-red-900">Confirm Bulk Deletion</h3>
-            <p className="mt-2 text-sm text-red-700">
+      <Dialog open={showBulkDeleteConfirm} onOpenChange={setShowBulkDeleteConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm bulk deletion</DialogTitle>
+            <DialogDescription>
               Are you sure you want to delete {selectedIds.size} account{selectedIds.size > 1 ? 's' : ''}? This action cannot be undone.
-            </p>
-            <div className="mt-4 flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setShowBulkDeleteConfirm(false)}
-                disabled={bulkDeleting}
-                className="rounded border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleBulkDelete}
-                disabled={bulkDeleting}
-                className="rounded bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {bulkDeleting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Deleting…
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="h-4 w-4" />
-                    Delete {selectedIds.size} Account{selectedIds.size > 1 ? 's' : ''}
-                  </>
-                )}
-              </button>
-            </div>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setShowBulkDeleteConfirm(false)} disabled={bulkDeleting}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleBulkDelete} disabled={bulkDeleting}>
+              {bulkDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" /> Delete {selectedIds.size}
+                </>
+              )}
+            </Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

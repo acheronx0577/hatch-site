@@ -17,6 +17,7 @@ import { ApiModule, ApiStandardErrors, resolveRequestContext } from '../common';
 import { AuditInterceptor } from '../../platform/audit/audit.interceptor';
 import { Permit } from '../../platform/security/permit.decorator';
 import { RecordCtx } from '../../platform/security/record-ctx.decorator';
+import { LeadType } from '@hatch/db';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
 import { CreateLeadTaskDto } from './dto/create-lead-task.dto';
@@ -87,6 +88,7 @@ export class LeadsController {
     description: 'Filter by preapproval status'
   })
   @ApiQuery({ name: 'pipelineId', required: false })
+  @ApiQuery({ name: 'leadType', required: false, enum: LeadType, description: 'Filter by buyer/seller orientation' })
   @ApiOkResponse({ type: LeadListResponseDto })
   async listLeads(@Query() query: ListLeadsQueryDto, @Req() req: FastifyRequest) {
     const ctx = resolveRequestContext(req);

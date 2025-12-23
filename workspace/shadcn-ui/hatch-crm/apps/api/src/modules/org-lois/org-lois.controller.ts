@@ -30,7 +30,7 @@ export class OrgLoisController {
     if (!userId) {
       throw new Error('Missing user context');
     }
-    return this.orgLois.createOfferIntentForConsumer(orgId, userId, dto);
+    return this.orgLois.createOfferIntentInternal(orgId, userId, dto);
   }
 
   @UseGuards(JwtAuthGuard)

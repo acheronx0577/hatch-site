@@ -128,8 +128,40 @@ export function getApiBaseUrl() {
   return API_URL;
 }
 
-interface FetchOptions extends RequestInit {
+type BodyLike = RequestInit['body'] | object;
+
+interface FetchOptions extends Omit<RequestInit, 'body'> {
   token?: string;
+  body?: BodyLike;
+}
+
+function normalizeJsonBody(body: BodyLike, isFormData: boolean): RequestInit['body'] {
+  if (!body || isFormData) {
+    return body as RequestInit['body'];
+  }
+
+  if (typeof body === 'string') {
+    return body;
+  }
+
+  if (typeof URLSearchParams !== 'undefined' && body instanceof URLSearchParams) {
+    return body;
+  }
+
+  if (typeof Blob !== 'undefined' && body instanceof Blob) {
+    return body;
+  }
+
+  if (typeof ArrayBuffer !== 'undefined' && body instanceof ArrayBuffer) {
+    return body;
+  }
+
+  if (ArrayBuffer.isView(body)) {
+    return body as unknown as BodyInit;
+  }
+
+  // Default: assume JSON payload.
+  return JSON.stringify(body);
 }
 
 export async function apiFetch<T>(path: string, options: FetchOptions = {}): Promise<T> {
@@ -149,6 +181,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   const headers = new Headers(options.headers);
   const isFormData =
     typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const normalizedBody = normalizeJsonBody(options.body, isFormData);
 
   if (!headers.has('x-user-role')) {
     headers.set('x-user-role', 'BROKER');
@@ -180,6 +213,7 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
   const doFetch = () =>
     fetch(url, {
       ...options,
+      body: normalizedBody,
       headers,
       cache: 'no-store',
       credentials: 'include'
@@ -228,6 +262,7 @@ export async function apiFetchText(path: string, options: FetchOptions = {}): Pr
   const headers = new Headers(options.headers);
   const isFormData =
     typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const normalizedBody = normalizeJsonBody(options.body, isFormData);
 
   if (!headers.has('x-user-role')) {
     headers.set('x-user-role', 'BROKER');
@@ -259,6 +294,7 @@ export async function apiFetchText(path: string, options: FetchOptions = {}): Pr
   const doFetch = () =>
     fetch(url, {
       ...options,
+      body: normalizedBody,
       headers,
       cache: 'no-store',
       credentials: 'include'
@@ -340,6 +376,7 @@ export type LeadSummary = {
   phone: string | null;
   score: number;
   scoreTier: string;
+  leadType?: 'BUYER' | 'SELLER' | 'UNKNOWN';
   pipelineId?: string | null;
   pipelineName?: string | null;
   pipelineType?: string | null;
@@ -414,6 +451,7 @@ export interface ListLeadsParams {
   pipelineId?: string;
   stageId?: string[];
   scoreTier?: string[];
+  leadType?: 'BUYER' | 'SELLER' | 'UNKNOWN';
   lastActivityDays?: number;
   preapproved?: boolean;
   limit?: number;
@@ -434,6 +472,7 @@ export async function getLeads(params: ListLeadsParams = {}): Promise<LeadListRe
   if (rest.pipelineId) searchParams.set('pipelineId', rest.pipelineId);
   if (rest.stageId?.length) searchParams.set('stageId', rest.stageId.join(','));
   if (rest.scoreTier?.length) searchParams.set('scoreTier', rest.scoreTier.join(','));
+  if (rest.leadType) searchParams.set('leadType', rest.leadType);
   if (rest.lastActivityDays) searchParams.set('lastActivityDays', String(rest.lastActivityDays));
   if (rest.preapproved !== undefined) searchParams.set('preapproved', String(rest.preapproved));
   if (rest.limit) searchParams.set('limit', String(rest.limit));
@@ -452,6 +491,7 @@ export interface UpdateLeadPayload {
   ownerId?: string;
   pipelineId?: string;
   stageId?: string;
+  leadType?: 'BUYER' | 'SELLER' | 'UNKNOWN';
   consentEmail?: boolean;
   consentSMS?: boolean;
   doNotContact?: boolean;
@@ -460,6 +500,33 @@ export interface UpdateLeadPayload {
 export async function updateLead(id: string, payload: UpdateLeadPayload) {
   return apiFetch<LeadDetail>(`leads/${id}`, {
     method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+export interface CreateLeadPayload {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  source?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
+  gclid?: string;
+  ownerId?: string;
+  pipelineId?: string;
+  stageId?: string;
+  leadType?: 'BUYER' | 'SELLER' | 'UNKNOWN';
+  consentEmail?: boolean;
+  consentSMS?: boolean;
+  doNotContact?: boolean;
+  fit?: LeadDetail['fit'];
+}
+
+export async function createLead(payload: CreateLeadPayload) {
+  return apiFetch<LeadDetail>('leads', {
+    method: 'POST',
     body: JSON.stringify(payload)
   });
 }

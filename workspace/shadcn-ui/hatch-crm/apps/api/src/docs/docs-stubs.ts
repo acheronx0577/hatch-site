@@ -65,7 +65,7 @@ export class StubStorageAdapter {
 }
 
 export class StubOutboxService {
-  async processPending(_limit?: number) {
+  async processPending(_limit?: number, _options?: { tenantId?: string }) {
     return { processed: 0 };
   }
 

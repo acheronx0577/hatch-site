@@ -156,8 +156,16 @@ export class OrgVaultService {
         actorId: userId,
         type: OrgEventType.ORG_FILE_UPLOADED,
         message: `File "${record.name}" uploaded`,
-      payload: { fileId: record.id, name: record.name, folderId: record.folderId, category: record.category }
-    });
+        payload: {
+          fileId: record.id,
+          name: record.name,
+          folderId: record.folderId,
+          category: record.category,
+          listingId: record.listingId,
+          transactionId: record.transactionId,
+          leaseId: record.leaseId
+        }
+      });
     } catch {}
 
     void this.documents

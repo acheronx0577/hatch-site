@@ -29,7 +29,7 @@ export function LeadDrawer({ lead, pipelines, owners, onClose, onLeadUpdated }: 
   const [detail, setDetail] = useState<LeadDetail>(() => createFallbackDetail(lead));
   const [loading, setLoading] = useState(true);
   const [noteDraft, setNoteDraft] = useState('');
-  const { pending, error, clearError, changeStage, assignOwner, addNote } = useLeadActions(lead.id);
+  const { pending, error, clearError, changeStage, assignOwner, setLeadType, addNote } = useLeadActions(lead.id);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,7 +117,7 @@ export function LeadDrawer({ lead, pipelines, owners, onClose, onLeadUpdated }: 
     owners.forEach((owner) => ids.add(owner.id));
     return Array.from(ids).map((id) => {
       const option = owners.find((owner) => owner.id === id);
-      return option ?? { id, name: detail?.owner?.name ?? 'Unknown owner' };
+      return option ?? { id, name: detail?.owner?.name ?? 'Unknown agent' };
     });
   }, [owners, detail]);
 
@@ -130,6 +130,7 @@ export function LeadDrawer({ lead, pipelines, owners, onClose, onLeadUpdated }: 
   const ownerName = detail?.owner?.name ?? lead.owner?.name ?? 'Unassigned';
   const stageName = detail?.stage?.name ?? lead.stage?.name ?? 'Unassigned';
   const pipelineName = detail?.pipelineName ?? lead.pipelineName ?? detail?.stage?.pipelineName ?? lead.stage?.pipelineName;
+  const leadType = detail?.leadType ?? lead.leadType ?? 'UNKNOWN';
 
   return (
     <div className="fixed inset-0 z-40 flex">
@@ -145,7 +146,7 @@ export function LeadDrawer({ lead, pipelines, owners, onClose, onLeadUpdated }: 
             <p className="text-sm font-semibold text-slate-500">{pipelineName ?? 'Pipeline'}</p>
             <h2 className="text-xl font-semibold text-slate-900">{displayName}</h2>
             <p className="text-sm text-slate-500">
-              Stage · {stageName} · Owner · {ownerName}
+              Stage · {stageName} · Assigned agent · {ownerName}
             </p>
           </div>
           <button
@@ -228,7 +229,7 @@ export function LeadDrawer({ lead, pipelines, owners, onClose, onLeadUpdated }: 
               </section>
 
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-slate-700">Owner</h3>
+                <h3 className="text-sm font-semibold text-slate-700">Assigned agent</h3>
                 <select
                   className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
                   value={detail.owner?.id ?? ''}
@@ -241,6 +242,30 @@ export function LeadDrawer({ lead, pipelines, owners, onClose, onLeadUpdated }: 
                       {owner.name}
                     </option>
                   ))}
+                </select>
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-slate-700">Lead type</h3>
+                <select
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  value={leadType}
+                  disabled={pending === 'type'}
+                  onChange={async (event) => {
+                    const nextType = event.target.value as typeof leadType;
+                    if (!nextType || nextType === leadType) return;
+                    try {
+                      const result = await setLeadType(nextType);
+                      setDetail(result);
+                      onLeadUpdated?.(result);
+                    } catch {
+                      /* handled in hook */
+                    }
+                  }}
+                >
+                  <option value="UNKNOWN">Unknown</option>
+                  <option value="BUYER">Buyer</option>
+                  <option value="SELLER">Seller</option>
                 </select>
               </section>
 

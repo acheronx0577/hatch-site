@@ -17,7 +17,7 @@ interface Options<T> {
   initialCursor?: string | null;
 }
 
-export function useCursorPager<T>(
+export function useCursorPager<T extends Record<string, any>>(
   fetcher: CursorFetcher<T>,
   options: Options<T> = {}
 ) {

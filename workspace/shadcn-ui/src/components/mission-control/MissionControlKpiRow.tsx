@@ -18,12 +18,12 @@ interface MissionControlKpiRowProps {
   error?: string | null;
 }
 
-const iconMap: Record<string, React.ReactNode> = {
-  'active-agents': <Users className="h-4 w-4" />,
-  'active-listings': <Home className="h-4 w-4" />,
-  'deals-needing-review': <LineChart className="h-4 w-4" />,
-  'new-leads': <Sparkles className="h-4 w-4" />,
-  'compliance-flags': <ShieldCheck className="h-4 w-4" />
+const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
+  'active-agents': Users,
+  'active-listings': Home,
+  'deals-needing-review': LineChart,
+  'new-leads': Sparkles,
+  'compliance-flags': ShieldCheck
 };
 
 export const MissionControlKpiRow: React.FC<MissionControlKpiRowProps> = ({ items, loading, error }) => {
@@ -33,11 +33,11 @@ export const MissionControlKpiRow: React.FC<MissionControlKpiRowProps> = ({ item
         {Array.from({ length: 5 }).map((_, idx) => (
           <div
             key={idx}
-            className="rounded-[24px] border border-[color:var(--hatch-card-border)] bg-card/60 p-4 animate-pulse backdrop-blur-[var(--hatch-card-blur)]"
+            className="rounded-[var(--radius-lg)] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] p-5 backdrop-blur-[var(--hatch-card-blur)]"
           >
-            <div className="h-3 w-16 rounded bg-slate-200 mb-3" />
-            <div className="h-8 w-16 rounded bg-slate-300 mb-2" />
-            <div className="h-3 w-24 rounded bg-slate-200" />
+            <div className="hatch-shimmer mb-3 h-3 w-16 rounded" />
+            <div className="hatch-shimmer mb-2 h-8 w-16 rounded" />
+            <div className="hatch-shimmer h-3 w-24 rounded" />
           </div>
         ))}
       </div>
@@ -55,32 +55,28 @@ export const MissionControlKpiRow: React.FC<MissionControlKpiRowProps> = ({ item
   return (
     <div className="mt-5 grid gap-4 md:grid-cols-3 lg:grid-cols-5">
       {items.map((item) => {
+        const Icon = iconMap[item.id] ?? Sparkles;
         const cardClassName = cn(
-          'group relative overflow-hidden rounded-[24px] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] p-4 shadow-brand backdrop-blur-[var(--hatch-card-blur)] transition-all',
-          'hover:-translate-y-0.5 hover:shadow-brand-md',
+          'group relative flex min-h-[116px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] p-5 shadow-brand backdrop-blur-[var(--hatch-card-blur)]',
+          'transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-brand-md',
           item.href
-            ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+            ? 'cursor-pointer hover:scale-[1.01] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
             : null
         );
 
         const content = (
           <>
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-[#1F5FFF] via-[#38BDF8] to-[#1F5FFF]" />
-            <div className="pointer-events-none absolute -right-8 -bottom-10 h-24 w-24 rounded-full bg-sky-100/70 blur-2xl group-hover:opacity-80" />
+            <div className="pointer-events-none absolute -right-10 -bottom-12 h-28 w-28 rounded-full bg-sky-200/60 blur-2xl transition-opacity duration-200 group-hover:opacity-80 dark:bg-sky-400/15" />
+            <Icon className="pointer-events-none absolute -right-5 -top-5 h-20 w-20 text-slate-200/60 dark:text-white/10" />
 
-            <div className="relative flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                  {item.label}
-                </span>
-                <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-[2px] text-[10px] text-slate-600">
-                  <span className="text-slate-500">{iconMap[item.id] ?? <Sparkles className="h-3 w-3" />}</span>
-                </span>
-              </div>
+            <div className="relative flex flex-1 flex-col gap-2">
+              <span className="min-h-[26px] text-[11px] font-semibold uppercase tracking-[0.14em] leading-[1.1] text-slate-500">
+                {item.label}
+              </span>
 
-              <div className="text-2xl md:text-3xl font-semibold leading-tight text-slate-900">{item.value}</div>
+              <div className="text-3xl font-semibold leading-none tabular-nums text-slate-900">{item.value}</div>
 
-              {item.helperText ? <p className="text-[11px] text-slate-500">{item.helperText}</p> : null}
+              {item.helperText ? <p className="mt-auto text-[11px] text-slate-500">{item.helperText}</p> : null}
             </div>
           </>
         );

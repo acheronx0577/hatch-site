@@ -35,26 +35,14 @@ const createService = () => {
       ])
     },
     leadAnalyticsView: {
-      findMany: jest.fn().mockResolvedValue([
-        {
-          tenantId: baseContext.tenantId,
-          personId: 'lead-1',
-          touchpoints1d: 1,
-          touchpoints7d: 2,
-          touchpoints14d: 3,
-          touchpoints30d: 4,
-          touchpoints60d: 5,
-          lastTouchpointAt: now,
+      aggregate: jest.fn().mockResolvedValue({
+        _count: { _all: 1 },
+        _sum: {
           stageMovesTotal: 2,
           stageMovesForward: 1,
-          avgStageDurationMs: 60_000,
-          slaBreaches: 0,
-          avgResponseMs: 30_000,
-          bucketStart: new Date(now.getTime() - 86_400_000),
-          bucketEnd: now,
-          stageKey: 'stage-a'
+          avgStageDurationMs: 60_000
         }
-      ])
+      })
     },
     leadTouchpoint: {
       findMany: jest.fn().mockResolvedValue([])

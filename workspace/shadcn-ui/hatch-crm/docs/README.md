@@ -7,3 +7,5 @@
 - `testing.md` — testing strategy, coverage, and how to run the suites locally and in CI.
 - `compliance.md` — consent, MLS, and audit guardrails reference.
 - `release.md` — GA release checklist, spec/schema gates, observability expectations, and rollback notes.
+- `ai-providers.md` — LLM provider configuration (Gemini/OpenAI/Anthropic/Grok).
+- `ai-implementation-timeline.md` — recommended build order, quality gates, and manual QA scripts.

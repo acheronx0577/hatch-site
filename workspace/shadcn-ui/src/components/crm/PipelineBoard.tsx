@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { Link } from 'react-router-dom'
 import clsx from 'clsx'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   DndContext,
   DragEndEvent,
@@ -26,8 +27,9 @@ import {
 } from '@/lib/api/hatch'
 import { getStageDisplay } from '@/lib/stageDisplay'
 import { cn } from '@/lib/utils'
-import { useMessenger } from '@/contexts/MessengerContext'
+import { useLeadMessaging } from '@/contexts/LeadMessagingContext'
 import { useToast } from '@/components/ui/use-toast'
+import { useLeadDetailView } from '@/hooks/useLeadDetailView'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -35,7 +37,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { AlarmClock, Eye, Mail, MessageSquare, MoreHorizontal, Phone, Sparkles, Search, Rows2, Minimize2, Plus } from 'lucide-react'
+import { AlarmClock, CheckCircle, Eye, Mail, MessageSquare, MoreHorizontal, Phone, Sparkles, Search, Rows2, Minimize2, Plus } from 'lucide-react'
 import LeadDrawer from './LeadDrawer'
 
 interface PipelineBoardProps {
@@ -54,10 +56,12 @@ export default function PipelineBoard({
   onRequestAddLead
 }: PipelineBoardProps) {
   const { toast } = useToast()
-  const { openForContact } = useMessenger()
+  const queryClient = useQueryClient()
+  const { openForLead } = useLeadMessaging()
   const [leads, setLeads] = useState<LeadSummary[]>(initialLeads)
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>(pipelines[0]?.id ?? '')
   const [ownerFilter, setOwnerFilter] = useState<string>('all')
+  const [leadTypeFilter, setLeadTypeFilter] = useState<string>('all')
   const [tierFilter, setTierFilter] = useState<string>('all')
   const [activityFilter, setActivityFilter] = useState<string>('all')
   const [preapprovedOnly, setPreapprovedOnly] = useState<boolean>(false)
@@ -69,8 +73,8 @@ export default function PipelineBoard({
   const [now, setNow] = useState(() => Date.now())
   const overdueInitializedRef = useRef(false)
   const overduePreviousCountRef = useRef(0)
-  const [activeLeadId, setActiveLeadId] = useState<string | null>(null)
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const { isOpen: isDrawerOpen, leadId: activeLeadId, openLeadDetails, setIsOpen: setDrawerOpen } = useLeadDetailView({ closeDelayMs: 300 })
+  const [activeLeadSnapshot, setActiveLeadSnapshot] = useState<LeadSummary | null>(null)
 
   useEffect(() => {
     setLeads(initialLeads)
@@ -163,7 +167,10 @@ export default function PipelineBoard({
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [leads])
 
-  const activeLead = useMemo(() => (activeLeadId ? leads.find((lead) => lead.id === activeLeadId) ?? null : null), [activeLeadId, leads])
+  const activeLead = useMemo(() => {
+    if (!activeLeadId) return null
+    return leads.find((lead) => lead.id === activeLeadId) ?? activeLeadSnapshot
+  }, [activeLeadId, activeLeadSnapshot, leads])
 
   const trimmedSearch = searchQuery.trim()
   const normalizedSearch = trimmedSearch.toLowerCase()
@@ -176,6 +183,9 @@ export default function PipelineBoard({
         return false
       }
       if (ownerFilter !== 'all' && lead.owner?.id !== ownerFilter) {
+        return false
+      }
+      if (leadTypeFilter !== 'all' && (lead.leadType ?? 'UNKNOWN') !== leadTypeFilter) {
         return false
       }
       if (tierFilter !== 'all' && lead.scoreTier !== tierFilter) {
@@ -213,7 +223,7 @@ export default function PipelineBoard({
       }
       return true
     })
-  }, [leads, ownerFilter, tierFilter, activityFilter, preapprovedOnly, selectedPipeline, normalizedSearch])
+  }, [leads, ownerFilter, leadTypeFilter, tierFilter, activityFilter, preapprovedOnly, selectedPipeline, normalizedSearch])
 
   const columns = useMemo(() => {
     const map = new Map<string, LeadSummary[]>()
@@ -432,22 +442,15 @@ export default function PipelineBoard({
   )
 
   const handleSelectLead = useCallback((lead: LeadSummary) => {
-    setActiveLeadId(lead.id)
-    setIsDrawerOpen(true)
-  }, [])
-
-  const handleCloseDrawer = useCallback((open: boolean) => {
-    setIsDrawerOpen(open)
-    if (!open) {
-      setActiveLeadId(null)
-    }
-  }, [])
+    setActiveLeadSnapshot(lead)
+    openLeadDetails(lead.id)
+  }, [openLeadDetails])
 
   const handleMessageLead = useCallback(
     (leadId: string) => {
-      openForContact(leadId)
+      openForLead(leadId)
     },
-    [openForContact]
+    [openForLead]
   )
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -500,6 +503,9 @@ export default function PipelineBoard({
       try {
         await updateLead(leadId, { stageId: stage.id, pipelineId: pipeline.id })
         snapshotRef.current = null
+        queryClient.invalidateQueries({ queryKey: ['pipeline-board', 'columns'] })
+        queryClient.invalidateQueries({ queryKey: ['mission-control', 'overview'] })
+        queryClient.invalidateQueries({ queryKey: ['mission-control', 'agents'] })
         handleRefresh()
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to update lead'
@@ -536,6 +542,8 @@ export default function PipelineBoard({
           onSelectPipeline={setSelectedPipelineId}
           ownerFilter={ownerFilter}
           onOwnerFilter={setOwnerFilter}
+          leadTypeFilter={leadTypeFilter}
+          onLeadTypeFilter={setLeadTypeFilter}
           ownerOptions={owners}
           tierFilter={tierFilter}
           onTierFilter={setTierFilter}
@@ -595,7 +603,7 @@ export default function PipelineBoard({
                       leads={columns.get(stage.id) ?? []}
                       now={now}
                       onSelectLead={handleSelectLead}
-                      activeLeadId={activeLeadId}
+                      activeLeadId={isDrawerOpen ? activeLeadId : null}
                       onMessage={handleMessageLead}
                       onCall={handleCallLead}
                       compactMode={compactMode}
@@ -607,11 +615,11 @@ export default function PipelineBoard({
             </DndContext>
           )}
         </div>
-        {activeLead && (
+        {activeLeadId && activeLead && (
           <LeadDrawer
             open={isDrawerOpen}
-            onOpenChange={handleCloseDrawer}
-            leadId={activeLead.id}
+            onOpenChange={setDrawerOpen}
+            leadId={activeLeadId}
             lead={activeLead}
             pipelines={pipelines}
             owners={owners}
@@ -638,10 +646,10 @@ function FilterSelect({ label, value, onChange, options }: FilterSelectProps) {
         {label}
       </span>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="min-w-[160px] rounded-full border border-[#E2E8F0] bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-brand-200 focus:ring-2 focus:ring-brand-200">
+        <SelectTrigger className="h-9 min-w-[160px] rounded-full px-4 text-sm font-medium">
           <SelectValue placeholder={label} />
         </SelectTrigger>
-        <SelectContent className="rounded-xl border border-hatch-neutral/40 bg-white/95 shadow-xl backdrop-blur">
+        <SelectContent className="rounded-xl">
           {options.map((option) => (
             <SelectItem key={option.value} value={option.value}>
               {option.label}
@@ -688,7 +696,7 @@ function StageColumn({
     <div
       ref={setNodeRef}
       className={clsx(
-        'relative flex min-h-[24rem] flex-col rounded-3xl border border-[#E2E8F0] bg-white p-4 shadow-sm',
+        'relative flex min-h-[24rem] flex-col rounded-[var(--radius-lg)] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] p-5 shadow-brand backdrop-blur-[var(--hatch-card-blur)]',
         // Fixed width so columns never wrap; allow horizontal scroll
         'w-[340px] md:w-[360px] xl:w-[380px] shrink-0',
         // Align scrolling snaps to each column
@@ -696,11 +704,11 @@ function StageColumn({
       )}
     >
       {isOver && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-3xl border-4 border-dashed border-hatch-blue/60 bg-hatch-blue/10 text-base font-semibold text-hatch-blue">
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-[var(--radius-lg)] border-2 border-dashed border-brand-blue-600/60 bg-brand-blue-600/10 text-base font-semibold text-brand-blue-700">
           Drop lead here
         </div>
       )}
-      <div className="flex items-start justify-between rounded-2xl border border-[#E2E8F0] bg-white px-4 py-3 shadow-sm">
+      <div className="flex items-start justify-between rounded-[var(--radius-lg)] border border-white/20 bg-card/[var(--hatch-glass-alpha-recessed)] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-md">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {stage.pipelineName ?? 'Pipeline'}
@@ -711,25 +719,30 @@ function StageColumn({
             {leads.length === 1 ? 'lead' : 'leads'}
           </p>
         </div>
-        <Badge variant="secondary" className="rounded-full bg-[#F1F5F9] px-3 py-1 text-xs font-semibold text-slate-600 shadow">
-          {stageIndex + 1}/{totalStages}
-        </Badge>
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/35 text-sm font-semibold text-slate-900 shadow-brand backdrop-blur-md dark:bg-white/10 dark:text-ink-100">
+            {stageIndex + 1}
+          </div>
+          <div className="text-[11px] font-semibold text-slate-500">/{totalStages}</div>
+        </div>
       </div>
 
       <div className="mt-4 space-y-3">
         {leads.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-hatch-neutral/60 bg-hatch-background/70 p-6 text-center text-sm text-hatch-muted">
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-[var(--radius-lg)] border border-dashed border-[color:var(--hatch-card-border)] bg-white/10 p-6 text-center text-sm text-slate-600 backdrop-blur-md dark:bg-white/5 dark:text-ink-100/70">
             <Sparkles className="h-6 w-6 text-hatch-blue" />
             <p className="font-medium">No leads yet.</p>
             <p className="text-xs text-hatch-muted/80">Drag a lead here or add a new one.</p>
-            <Button
+            <button
               type="button"
-              variant="default"
-              className="rounded-full bg-gradient-to-r from-[#1F5FFF] to-[#00C6A2] text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(31,95,255,0.24)] hover:animate-[hatch-pulse_1.8s_ease-in-out]"
               onClick={() => onRequestAddLead?.()}
+              className="group inline-flex items-center justify-center rounded-full border border-dashed border-white/35 bg-white/10 px-4 py-2 text-xs font-semibold text-slate-900 backdrop-blur-md transition-colors duration-200 hover:bg-white/20 dark:border-white/15 dark:bg-white/5 dark:text-ink-100 dark:hover:bg-white/10"
             >
-              Add lead
-            </Button>
+              <Plus className="h-4 w-4" />
+              <span className="ml-2 max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[8rem] group-hover:opacity-100">
+                Add lead
+              </span>
+            </button>
           </div>
         ) : (
           leads.map((lead, index) => (
@@ -750,6 +763,21 @@ function StageColumn({
           ))
         )}
       </div>
+
+      {onRequestAddLead ? (
+        <div className="mt-auto pt-4">
+          <button
+            type="button"
+            onClick={() => onRequestAddLead?.()}
+            className="group inline-flex w-full items-center justify-center rounded-full border border-dashed border-white/35 bg-white/10 px-4 py-2 text-xs font-semibold text-slate-800 backdrop-blur-md transition-colors duration-200 hover:bg-white/20 dark:border-white/15 dark:bg-white/5 dark:text-ink-100 dark:hover:bg-white/10"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="ml-2 max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover:max-w-[8rem] group-hover:opacity-100">
+              Add lead
+            </span>
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -790,12 +818,12 @@ function DraggableLeadCard({
       style={style}
       open={expanded}
       className={cn(
-        'overflow-hidden rounded-2xl border border-[#E2E8F0] bg-white shadow-sm transition-all duration-200 [&_summary::-webkit-details-marker]:hidden',
+        'overflow-hidden rounded-[var(--radius-lg)] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] shadow-brand backdrop-blur-md transition-[transform,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-brand-md [&_summary::-webkit-details-marker]:hidden',
         isDragging && 'pointer-events-none opacity-80 shadow-lg'
       )}
     >
       <summary
-        className="flex cursor-grab items-center justify-between px-3 py-2 text-sm font-medium text-slate-700 md:cursor-grab"
+        className="flex cursor-grab items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 md:cursor-grab"
         onClick={(event) => {
           event.preventDefault()
           setExpanded((prev) => !prev)
@@ -810,31 +838,34 @@ function DraggableLeadCard({
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
-            size="sm"
-            className="text-xs text-slate-500"
+            size="icon"
+            className="h-8 w-8 text-slate-500 hover:text-slate-900"
             onClick={(event) => {
               event.preventDefault()
+              event.stopPropagation()
               onSelect(lead)
-              setExpanded(true)
             }}
           >
-            Open
+            <Eye className="h-4 w-4" />
+            <span className="sr-only">Open</span>
           </Button>
           <Button
             variant="ghost"
-            size="sm"
-            className="text-xs text-slate-500"
+            size="icon"
+            className="h-8 w-8 text-slate-500 hover:text-slate-900"
             onClick={(event) => {
               event.preventDefault()
+              event.stopPropagation()
               onMessage(lead.id)
             }}
           >
-            Message
+            <MessageSquare className="h-4 w-4" />
+            <span className="sr-only">Message</span>
           </Button>
           <span className="text-xs text-slate-400">#{sequence}</span>
         </div>
       </summary>
-      <div className="border-t border-slate-100 p-2">
+      <div className="border-t border-[color:var(--hatch-card-border)] p-3">
         <LeadCard
           lead={lead}
           stage={stage}
@@ -884,6 +915,8 @@ function LeadCard({ lead, stage, stageIndex, totalStages, now, onSelect, isActiv
   const progress = totalStages > 0 ? Math.min(100, Math.max(0, ((stageIndex + 1) / totalStages) * 100)) : 0
 
   const ownerName = lead.owner?.name ?? 'Unassigned'
+  const leadType = lead.leadType ?? 'UNKNOWN'
+  const leadTypeLabel = leadType === 'BUYER' ? 'Buyer' : leadType === 'SELLER' ? 'Seller' : null
   const ownerInitials = ownerName
     .split(' ')
     .map((part) => part.charAt(0))
@@ -891,15 +924,23 @@ function LeadCard({ lead, stage, stageIndex, totalStages, now, onSelect, isActiv
     .slice(0, 2)
     .toUpperCase() || 'LD'
 
+  const leadInitials =
+    [lead.firstName, lead.lastName]
+      .filter(Boolean)
+      .map((part) => String(part).trim().charAt(0))
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'LD'
+
   const scoreValue = typeof lead.score === 'number' ? Math.round(lead.score) : null
 
   return (
     <div
       id={`lead-card-${lead.id}`}
       className={cn(
-      'group relative cursor-pointer rounded-2xl border border-transparent bg-white/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-hatch-blue hover:shadow-[0_14px_28px_rgba(31,95,255,0.14)] focus:outline-none focus:ring-2 focus:ring-hatch-blue/35 focus:ring-offset-2 md:cursor-grab',
+      'group relative cursor-pointer rounded-[var(--radius-lg)] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-glass-alpha-elevated)] shadow-brand backdrop-blur-md transition-[transform,box-shadow,border-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-brand-blue-600/40 hover:shadow-brand-md focus:outline-none focus:ring-2 focus:ring-[color:var(--focus-ring)] focus:ring-offset-2 md:cursor-grab',
       compactMode ? 'p-3 text-xs' : 'p-4 text-sm',
-      slaBreached && 'border-rose-200/70 ring-2 ring-rose-200/60',
+      slaBreached && 'border-rose-300/60 ring-2 ring-rose-300/30',
       isDragging && 'pointer-events-none opacity-80 shadow-lg',
       !isDragging && isActive && 'ring-2 ring-[rgba(31,95,255,0.45)]'
     )}
@@ -916,7 +957,7 @@ function LeadCard({ lead, stage, stageIndex, totalStages, now, onSelect, isActiv
       <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <Avatar className={cn('border border-hatch-neutral/60 bg-hatch-background text-hatch-text shadow-sm', compactMode ? 'h-9 w-9 text-xs' : 'h-11 w-11 text-sm')}>
-              <AvatarFallback>{ownerInitials}</AvatarFallback>
+              <AvatarFallback>{leadInitials}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 space-y-1">
               <p className={cn('break-words font-semibold text-hatch-text', compactMode ? 'text-sm' : 'text-base')}>
@@ -937,6 +978,17 @@ function LeadCard({ lead, stage, stageIndex, totalStages, now, onSelect, isActiv
             </div>
           </div>
         <div className="flex flex-shrink-0 items-center gap-2">
+          {lead.preapproved ? (
+            <Badge className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <CheckCircle className="mr-1 h-3.5 w-3.5" />
+              Pre-approved
+            </Badge>
+          ) : null}
+          {leadTypeLabel ? (
+            <Badge className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-800">
+              {leadTypeLabel}
+            </Badge>
+          ) : null}
           {scoreValue !== null && (
             <Badge className={cn('rounded-full px-3 py-1 text-xs font-semibold', getTierClass(lead.scoreTier ?? ''))}>
               {lead.scoreTier ?? '—'}-{scoreValue}
@@ -1028,26 +1080,11 @@ function LeadCard({ lead, stage, stageIndex, totalStages, now, onSelect, isActiv
                     <MessageSquare className="h-4 w-4" />
                     <span className="sr-only">Message lead</span>
                   </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" align="center">
-                  Message lead
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Link
-                    to={`/broker/crm/leads/${lead.id}`}
-                    state={{ lead }}
-                    className="rounded-full p-2 text-hatch-muted transition hover:text-hatch-blue"
-                  >
-                    <Eye className="h-4 w-4" />
-                    <span className="sr-only">Open lead</span>
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="top" align="center">
-                  Open lead details
-                </TooltipContent>
-              </Tooltip>
+              </TooltipTrigger>
+              <TooltipContent side="top" align="center">
+                Message lead
+              </TooltipContent>
+            </Tooltip>
             </div>
           </div>
 
@@ -1079,9 +1116,9 @@ interface PipelineHeroProps {
 
 function PipelineHero({ pipelineName, stageCount, metrics }: PipelineHeroProps) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/25 bg-gradient-to-r from-[#1F5FFF] to-[#00C6A2] text-white shadow-[0_36px_88px_rgba(31,95,255,0.35)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_52%)]" />
-      <div className="relative flex flex-col gap-6 px-6 py-8 md:px-10 md:py-12 lg:flex-row lg:items-center lg:justify-between">
+    <div className="hatch-hero relative overflow-hidden rounded-3xl border border-white/25 bg-gradient-to-r from-[#1F5FFF] to-[#00C6A2] text-white shadow-[0_36px_88px_rgba(31,95,255,0.35)]">
+      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_52%)]" />
+      <div className="relative z-10 flex flex-col gap-6 px-6 py-8 md:px-10 md:py-12 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-3">
           <p className="text-xs uppercase tracking-[0.4em] text-white/80">CRM · Pipeline</p>
           <div>
@@ -1089,9 +1126,9 @@ function PipelineHero({ pipelineName, stageCount, metrics }: PipelineHeroProps) 
           </div>
           <p className="text-sm text-white/85">Active pipeline: <span className="font-medium text-white">{pipelineName}</span></p>
         </div>
-        <div className="grid w-full gap-4 rounded-2xl border border-white/20 bg-white/18 p-5 backdrop-blur sm:grid-cols-3 lg:max-w-xl">
+        <div className="grid w-full gap-4 rounded-2xl border border-white/20 bg-white/15 p-5 backdrop-blur sm:grid-cols-3 lg:max-w-xl">
           {metrics.map((metric) => (
-            <div key={metric.label} className="rounded-2xl bg-white/20 px-4 py-3 text-start shadow-inner">
+            <div key={metric.label} className="rounded-2xl bg-white/30 px-4 py-3 text-start shadow-inner shadow-white/20">
               <p className="text-xs uppercase tracking-wide text-white/75">{metric.label}</p>
               <p className="mt-2 text-2xl font-semibold text-white">{metric.value}</p>
             </div>
@@ -1108,6 +1145,8 @@ interface PipelineFilterBarProps {
   onSelectPipeline: (value: string) => void
   ownerFilter: string
   onOwnerFilter: (value: string) => void
+  leadTypeFilter: string
+  onLeadTypeFilter: (value: string) => void
   ownerOptions: Array<{ id: string; name: string }>
   tierFilter: string
   onTierFilter: (value: string) => void
@@ -1129,6 +1168,8 @@ function PipelineFilterBar({
   onSelectPipeline,
   ownerFilter,
   onOwnerFilter,
+  leadTypeFilter,
+  onLeadTypeFilter,
   ownerOptions,
   tierFilter,
   onTierFilter,
@@ -1145,12 +1186,12 @@ function PipelineFilterBar({
 }: PipelineFilterBarProps) {
   return (
     <div className="sticky top-0 z-30">
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 shadow-sm">
-        <div className="flex flex-1 min-w-[220px] items-center gap-2 rounded-full border border-[#E2E8F0] bg-white px-3 py-1">
-          <Search className="h-4 w-4 text-slate-400" />
+      <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-[var(--glass-background)] px-4 py-3 shadow-brand backdrop-blur-xl">
+        <div className="relative flex flex-1 min-w-[220px] items-center">
+          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400" />
           <input
-            className="flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
-            placeholder="Search leads or owners"
+            className="h-9 w-full rounded-full border border-[var(--glass-border)] bg-white/25 pl-9 pr-3 text-sm text-ink-900 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] backdrop-blur-xl outline-none placeholder:text-ink-500/80 focus-visible:ring-[3px] focus-visible:ring-[color:var(--focus-ring)] focus-visible:ring-offset-[var(--focus-ring-offset)] dark:bg-white/10 dark:text-ink-100 dark:placeholder:text-ink-100/60"
+            placeholder="Search leads or licensees"
             value={searchQuery}
             onChange={(event) => onSearch(event.target.value)}
           />
@@ -1162,10 +1203,21 @@ function PipelineFilterBar({
           options={pipelines.map((pipeline) => ({ value: pipeline.id, label: pipeline.name }))}
         />
         <FilterSelect
-          label="Owner"
+          label="Representing Licensee"
           value={ownerFilter}
           onChange={onOwnerFilter}
-          options={[{ value: 'all', label: 'All owners' }, ...ownerOptions.map((owner) => ({ value: owner.id, label: owner.name }))]}
+          options={[{ value: 'all', label: 'All licensees' }, ...ownerOptions.map((owner) => ({ value: owner.id, label: owner.name }))]}
+        />
+        <FilterSelect
+          label="Lead type"
+          value={leadTypeFilter}
+          onChange={onLeadTypeFilter}
+          options={[
+            { value: 'all', label: 'All types' },
+            { value: 'BUYER', label: 'Buyer' },
+            { value: 'SELLER', label: 'Seller' },
+            { value: 'UNKNOWN', label: 'Unknown' }
+          ]}
         />
         <FilterSelect
           label="Score Tier"
@@ -1189,45 +1241,39 @@ function PipelineFilterBar({
         />
         <Button
           type="button"
-          variant={preapprovedOnly ? 'default' : 'ghost'}
+          variant={preapprovedOnly ? 'default' : 'outline'}
           size="sm"
-          className={cn(
-            'rounded-full px-4 text-xs font-medium transition hover:shadow-[0_0_0_2px_rgba(31,95,255,0.22)]',
-            preapprovedOnly
-              ? 'bg-gradient-to-r from-[#1F5FFF] to-[#00C6A2] text-white shadow-sm hover:opacity-95'
-              : 'border border-white/30 bg-white/20 text-white/85 hover:border-white/40'
-          )}
+          className="rounded-full px-4 text-xs font-semibold"
           onClick={() => onTogglePreapproved(!preapprovedOnly)}
         >
           <Sparkles className="mr-2 h-3.5 w-3.5" />
           Preapproved only
         </Button>
-        <div className="ml-auto inline-flex items-center gap-2 rounded-full border border-[#E2E8F0] bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-          <span className="h-2 w-2 rounded-full bg-brand-500" />
+        <div className="ml-auto inline-flex items-center gap-2 rounded-full border border-[var(--glass-border)] bg-white/20 px-3 py-1 text-[11px] font-semibold text-slate-700 backdrop-blur-md dark:bg-white/10 dark:text-ink-100">
+          <span className="h-2 w-2 rounded-full bg-brand-green-500" />
           {totalLeads} in view
         </div>
         {onRequestAddLead && (
           <Button
             type="button"
             size="sm"
-            className="rounded-full bg-gradient-to-r from-[#1F5FFF] to-[#00C6A2] text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(31,95,255,0.24)]"
+            className="rounded-full"
             onClick={onRequestAddLead}
           >
             <Plus className="mr-2 h-4 w-4" />
             Add lead
           </Button>
         )}
-        <button
+        <Button
           type="button"
+          variant={compactMode ? 'secondary' : 'outline'}
+          size="sm"
+          className="rounded-full px-4 text-xs font-semibold"
           onClick={() => onToggleCompact(!compactMode)}
-          className={clsx(
-            'inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold transition',
-            compactMode ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-[#E2E8F0] bg-white text-slate-600'
-          )}
         >
           {compactMode ? <Minimize2 className="h-3.5 w-3.5" /> : <Rows2 className="h-3.5 w-3.5" />}
           {compactMode ? 'Expanded' : 'Compact'}
-        </button>
+        </Button>
       </div>
     </div>
   )

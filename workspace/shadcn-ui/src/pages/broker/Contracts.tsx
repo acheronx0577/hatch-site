@@ -1,13 +1,18 @@
-import { useEffect, useMemo, useState, type HTMLInputTypeAttribute } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { PdfDraftEditor, normalizePdfOverlay, type PdfOverlay } from '@/components/contracts/PdfDraftEditor';
+import { cn } from '@/lib/utils';
+import { fetchOrgListings } from '@/lib/api/org-listings';
+import { brokerPropertiesQueryKey } from '@/lib/queryKeys';
 import {
   listContractInstances,
   recommendContractTemplates,
@@ -30,20 +35,51 @@ export default function ContractsPage() {
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
   const [search, setSearch] = useState('');
   const [propertyId, setPropertyId] = useState('');
+  const [listingPickerOpen, setListingPickerOpen] = useState(false);
   const [templatePage, setTemplatePage] = useState(1);
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const PAGE_SIZE = 16;
 
+  const listingsQuery = useQuery({
+    queryKey: brokerPropertiesQueryKey(orgId),
+    queryFn: () => fetchOrgListings(orgId),
+    enabled: Boolean(orgId),
+    staleTime: 30_000
+  });
+
+  const listings = listingsQuery.data ?? [];
+  const selectedListing = useMemo(
+    () => listings.find((listing) => listing.id === propertyId) ?? null,
+    [listings, propertyId]
+  );
+  const templateFilters = useMemo(
+    () => ({
+      propertyType: selectedListing?.propertyType ?? undefined,
+      jurisdiction: selectedListing?.state ?? undefined
+    }),
+    [selectedListing?.propertyType, selectedListing?.state]
+  );
+
   const templatesQuery = useQuery({
-    queryKey: ['contracts', 'templates', orgId, search],
-    queryFn: () => searchContractTemplates(orgId, { query: search.trim(), includeUrl: true }),
+    queryKey: ['contracts', 'templates', orgId, search, templateFilters.propertyType, templateFilters.jurisdiction],
+    queryFn: () =>
+      searchContractTemplates(orgId, {
+        query: search.trim(),
+        includeUrl: true,
+        propertyType: templateFilters.propertyType,
+        jurisdiction: templateFilters.jurisdiction
+      }),
     enabled: Boolean(orgId)
   });
 
   const recommendationsQuery = useQuery({
-    queryKey: ['contracts', 'recommendations', orgId],
-    queryFn: () => recommendContractTemplates(orgId, {}),
+    queryKey: ['contracts', 'recommendations', orgId, templateFilters.propertyType, templateFilters.jurisdiction],
+    queryFn: () =>
+      recommendContractTemplates(orgId, {
+        propertyType: templateFilters.propertyType,
+        jurisdiction: templateFilters.jurisdiction
+      }),
     enabled: Boolean(orgId)
   });
 
@@ -96,6 +132,23 @@ export default function ContractsPage() {
   const recommendations = recommendationsQuery.data ?? [];
   const instances = instancesQuery.data ?? [];
 
+  const selectedListingLabel = useMemo(() => {
+    if (!selectedListing) return 'All listings';
+    const line1 = (selectedListing.addressLine1 ?? '').trim();
+    const locality = [selectedListing.city, selectedListing.state, selectedListing.postalCode].filter(Boolean).join(' ');
+    return [line1, locality].filter(Boolean).join(', ') || selectedListing.id;
+  }, [selectedListing]);
+
+  const sortedListings = useMemo(() => {
+    return (listings ?? [])
+      .slice()
+      .sort((a, b) => {
+        const aLine = (a.addressLine1 ?? '').toLowerCase();
+        const bLine = (b.addressLine1 ?? '').toLowerCase();
+        return aLine.localeCompare(bLine);
+      });
+  }, [listings]);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleAll = (checked: boolean) => {
@@ -127,35 +180,94 @@ export default function ContractsPage() {
   });
 
   return (
-    <div className="space-y-6 p-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Contracts</p>
-          <h1 className="text-2xl font-semibold text-slate-900">Contract Center</h1>
-          <p className="text-sm text-slate-500">Pick templates from your library and create drafts instantly.</p>
-        </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Input
-            value={propertyId}
-            onChange={(e) => setPropertyId(e.target.value)}
-            placeholder="Property / Listing ID (optional)"
-            className="w-64"
-          />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search templates"
-            className="w-64"
-          />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Contracts</p>
+          <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Contract Center</h1>
+          <p className="text-sm text-slate-600">Pick templates from your library and create drafts instantly.</p>
         </div>
       </header>
 
+      <Card className="p-4 hover:translate-y-0 hover:shadow-brand">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Listing context</p>
+            <div className="mt-1 flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setListingPickerOpen(true)}
+                className="w-full justify-between"
+                disabled={listingsQuery.isLoading}
+              >
+                <span className="truncate">{selectedListingLabel}</span>
+                <span className="text-xs text-slate-500">{listingsQuery.isLoading ? 'Loading…' : `${listings.length}`}</span>
+              </Button>
+              {propertyId ? (
+                <Button type="button" variant="outline" onClick={() => setPropertyId('')}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Optional — used for template recommendations and linking drafts to a listing.</p>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Search templates</p>
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search your library" className="mt-1" />
+          </div>
+        </div>
+      </Card>
+
+      <CommandDialog open={listingPickerOpen} onOpenChange={setListingPickerOpen}>
+        <CommandInput placeholder="Search listings..." />
+        <CommandList>
+          <CommandEmpty>No listings found.</CommandEmpty>
+          <CommandGroup heading="Listings">
+            <CommandItem
+              value="all listings"
+              onSelect={() => {
+                setPropertyId('');
+                setListingPickerOpen(false);
+              }}
+            >
+              <div className="flex flex-col">
+                <span className="font-medium">All listings</span>
+                <span className="text-xs text-slate-500">Show instances across the organization</span>
+              </div>
+            </CommandItem>
+            {sortedListings.map((listing) => {
+              const labelLine1 = (listing.addressLine1 ?? '').trim();
+              const locality = [listing.city, listing.state, listing.postalCode].filter(Boolean).join(' ');
+              const label = [labelLine1, locality].filter(Boolean).join(', ') || listing.id;
+              return (
+                <CommandItem
+                  key={listing.id}
+                  value={`${label} ${listing.mlsNumber ?? ''} ${listing.id}`}
+                  onSelect={() => {
+                    setPropertyId(listing.id);
+                    setListingPickerOpen(false);
+                  }}
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">{labelLine1 || 'Listing'}</span>
+                    <span className="text-xs text-slate-500">
+                      {locality || listing.id} {listing.mlsNumber ? `· MLS ${listing.mlsNumber}` : ''}
+                    </span>
+                  </div>
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>
+
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="col-span-2 space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Card className="col-span-2 space-y-4 p-6 hover:translate-y-0 hover:shadow-brand">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Templates</h2>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-600">
                 Browse your library. Click “Create draft” to start from a template.
               </p>
             </div>
@@ -170,13 +282,13 @@ export default function ContractsPage() {
               />
             ))}
             {templates.length === 0 && (
-              <div className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
+              <div className="rounded-xl border border-dashed border-[var(--glass-border)] bg-white/20 p-6 text-center text-sm text-slate-600 backdrop-blur">
                 {templatesQuery.isLoading ? 'Loading templates…' : 'No templates found.'}
               </div>
             )}
           </div>
           {templates.length > 0 && (
-            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <div className="flex items-center justify-between rounded-xl border border-[var(--glass-border)] bg-white/20 px-3 py-2 text-xs text-slate-600 backdrop-blur">
               <span>
                 Showing {(templatePage - 1) * PAGE_SIZE + 1}-
                 {Math.min(templatePage * PAGE_SIZE, templates.length)} of {templates.length}
@@ -206,7 +318,7 @@ export default function ContractsPage() {
           )}
         </Card>
 
-        <Card className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Card className="space-y-3 p-6 hover:translate-y-0 hover:shadow-brand [--hatch-card-alpha:var(--hatch-glass-alpha-elevated)]">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">Recommended</h2>
             <span className="text-xs text-slate-500">{recommendations.length} picks</span>
@@ -217,17 +329,17 @@ export default function ContractsPage() {
                 key={template.id}
                 type="button"
                 onClick={() => createDraft.mutate(template.id)}
-                className="flex w-full items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                className="flex w-full items-center justify-between rounded-xl border border-[var(--glass-border)] bg-white/20 px-3 py-2 text-left transition hover:bg-white/30"
               >
                 <div>
                   <p className="font-medium text-slate-900">{template.name}</p>
                   <p className="text-xs text-slate-500">{template.recommendationReason ?? 'Suggested'}</p>
                 </div>
-                <Badge variant="secondary">{template.side ?? 'ANY'}</Badge>
+                <Badge variant="neutral">{template.side ?? 'ANY'}</Badge>
               </button>
             ))}
             {recommendations.length === 0 && (
-              <p className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">
+              <p className="rounded-xl border border-dashed border-[var(--glass-border)] bg-white/20 px-3 py-6 text-center text-xs text-slate-600 backdrop-blur">
                 No recommendations yet.
               </p>
             )}
@@ -235,7 +347,7 @@ export default function ContractsPage() {
         </Card>
       </div>
 
-      <Card className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <Card className="space-y-3 p-6 hover:translate-y-0 hover:shadow-brand">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">Instances</h2>
           <div className="flex items-center gap-2">
@@ -250,81 +362,74 @@ export default function ContractsPage() {
             </Button>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-100 text-sm text-slate-700">
-            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.size === instances.length && instances.length > 0}
-                    onChange={(e) => toggleAll(e.target.checked)}
-                  />
-                </th>
-                <th className="px-3 py-2 text-left">Title</th>
-                <th className="px-3 py-2 text-left">Template</th>
-                <th className="px-3 py-2 text-left">Status</th>
-                <th className="px-3 py-2 text-left">Updated</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {instancesQuery.isLoading ? (
-                <tr>
-                  <td colSpan={6} className="px-3 py-5 text-center text-slate-400">
-                    Loading instances…
-                  </td>
-                </tr>
-              ) : instances.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-3 py-5 text-center text-slate-400">
-                    No contract drafts yet.
-                  </td>
-                </tr>
-              ) : (
-                instances.map((instance) => (
-                  <tr key={instance.id} className="hover:bg-slate-50">
-                    <td className="px-3 py-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.has(instance.id)}
-                        onChange={() => toggleOne(instance.id)}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <p className="font-medium text-slate-900">{instance.title}</p>
-                      {instance.recommendationReason ? (
-                        <p className="text-xs text-slate-500">{instance.recommendationReason}</p>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-3 text-slate-600">{instance.template?.name ?? 'Ad-hoc'}</td>
-                    <td className="px-3 py-3">
-                      <StatusBadge status={instance.status} />
-                    </td>
-                    <td className="px-3 py-3 text-xs text-slate-500">
-                      {new Date(instance.updatedAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setSelectedInstanceId(instance.id)}>
-                          Open
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => deleteOneMutation.mutate(instance.id)}
-                          disabled={deleteOneMutation.isLoading}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === instances.length && instances.length > 0}
+                  onChange={(e) => toggleAll(e.target.checked)}
+                />
+              </TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead>Template</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Updated</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {instancesQuery.isLoading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500">
+                  Loading instances…
+                </TableCell>
+              </TableRow>
+            ) : instances.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="py-10 text-center text-sm text-slate-500">
+                  No contract drafts yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              instances.map((instance) => (
+                <TableRow key={instance.id}>
+                  <TableCell>
+                    <input type="checkbox" checked={selectedIds.has(instance.id)} onChange={() => toggleOne(instance.id)} />
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-medium text-slate-900">{instance.title}</p>
+                    {instance.recommendationReason ? (
+                      <p className="text-xs text-slate-500">{instance.recommendationReason}</p>
+                    ) : null}
+                  </TableCell>
+                  <TableCell className="text-slate-600">{instance.template?.name ?? 'Ad-hoc'}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={instance.status} />
+                  </TableCell>
+                  <TableCell className="text-xs text-slate-500">{new Date(instance.updatedAt).toLocaleDateString()}</TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setSelectedInstanceId(instance.id)}>
+                        Open
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-rose-600 hover:bg-rose-500/10 hover:text-rose-700"
+                        onClick={() => deleteOneMutation.mutate(instance.id)}
+                        disabled={deleteOneMutation.isLoading}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </Card>
 
       {selectedInstanceId && instanceDetail.data ? (
@@ -340,8 +445,16 @@ export default function ContractsPage() {
 }
 
 function TemplateCard({ template, onCreate }: { template: ContractTemplate & { templateUrl?: string | null }; onCreate: () => void }) {
+  const accentClass =
+    template.side === 'BUYER'
+      ? 'from-sky-400 via-sky-200 to-sky-400'
+      : template.side === 'SELLER'
+        ? 'from-emerald-400 via-emerald-200 to-emerald-400'
+        : 'from-slate-300 via-slate-200 to-slate-300';
+
   return (
-    <div className="flex h-full flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <Card className="flex h-full flex-col justify-between p-4">
+      <div className={cn('pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r', accentClass)} />
       <div className="space-y-1">
         <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{template.code}</p>
         <h3 className="text-base font-semibold text-slate-900">{template.name}</h3>
@@ -357,7 +470,7 @@ function TemplateCard({ template, onCreate }: { template: ContractTemplate & { t
         ) : null}
       </div>
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-xs text-slate-500">{template.side ?? 'Any side'}</span>
+        <Badge variant="neutral">{template.side ?? 'ANY'}</Badge>
         <div className="flex gap-2">
           {template.templateUrl ? (
             <Button variant="ghost" size="sm" asChild>
@@ -371,20 +484,20 @@ function TemplateCard({ template, onCreate }: { template: ContractTemplate & { t
           </Button>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const tone =
+  const variant =
     status === 'SIGNED'
-      ? 'bg-emerald-100 text-emerald-700'
+      ? ('success' as const)
       : status === 'OUT_FOR_SIGNATURE'
-        ? 'bg-blue-100 text-blue-700'
+        ? ('info' as const)
         : status === 'VOIDED'
-          ? 'bg-rose-100 text-rose-700'
-          : 'bg-slate-100 text-slate-700';
-  return <span className={`rounded-full px-3 py-1 text-xs font-medium ${tone}`}>{status}</span>;
+          ? ('danger' as const)
+          : ('neutral' as const);
+  return <Badge variant={variant}>{status}</Badge>;
 }
 
 function InstanceDetail({
@@ -402,7 +515,6 @@ function InstanceDetail({
   const { toast } = useToast();
   const editableKeys = useMemo(() => instance.editableKeys ?? [], [instance.editableKeys]);
   const [title, setTitle] = useState(instance.title);
-  const [draftFields, setDraftFields] = useState<Record<string, string>>({});
   const [pdfOverlay, setPdfOverlay] = useState<PdfOverlay>(() =>
     normalizePdfOverlay((instance.fieldValues as any)?.__overlay)
   );
@@ -412,20 +524,13 @@ function InstanceDetail({
 
   useEffect(() => {
     setTitle(instance.title);
-
-    const next: Record<string, string> = {};
-    for (const key of editableKeys) {
-      const raw = instance.fieldValues?.[key];
-      next[key] = raw === null || raw === undefined ? '' : String(raw);
-    }
-    setDraftFields(next);
-
     setPdfOverlay(normalizePdfOverlay((instance.fieldValues as any)?.__overlay));
   }, [instance.id, instance.title, instance.fieldValues, editableKeys]);
 
   const overlaySaveMutation = useMutation({
     mutationFn: async () =>
       updateContractInstance(orgId, instance.id, {
+        title: title.trim().length ? title.trim() : undefined,
         fieldValues: {
           __overlay: pdfOverlay
         }
@@ -440,33 +545,6 @@ function InstanceDetail({
         variant: 'destructive',
         title: 'PDF save failed',
         description: error instanceof Error ? error.message : 'Unable to regenerate the draft PDF right now.'
-      });
-    }
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: async () => {
-      const payload: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(draftFields)) {
-        const trimmed = value.trim();
-        payload[key] = trimmed.length === 0 ? null : trimmed;
-      }
-
-      return updateContractInstance(orgId, instance.id, {
-        title: title.trim().length ? title.trim() : undefined,
-        fieldValues: payload
-      });
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['contracts', 'instances', orgId] });
-      await queryClient.invalidateQueries({ queryKey: ['contracts', 'instance', instance.id] });
-      toast({ title: 'Draft updated', description: 'Contract field values saved.' });
-    },
-    onError: (error) => {
-      toast({
-        variant: 'destructive',
-        title: 'Save failed',
-        description: error instanceof Error ? error.message : 'Unable to save contract fields right now.'
       });
     }
   });
@@ -511,7 +589,18 @@ function InstanceDetail({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{instance.template?.code ?? 'CONTRACT'}</p>
-              <h3 className="text-xl font-semibold text-slate-900">{instance.title}</h3>
+              {instance.status === 'DRAFT' ? (
+                <div className="mt-1 max-w-xl">
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="h-10 text-lg font-semibold"
+                    disabled={overlaySaveMutation.isLoading}
+                  />
+                </div>
+              ) : (
+                <h3 className="text-xl font-semibold text-slate-900">{instance.title}</h3>
+              )}
               <p className="text-sm text-slate-500">{instance.template?.name ?? 'Ad-hoc contract'}</p>
             </div>
             <div className="flex items-center gap-2">
@@ -572,54 +661,11 @@ function InstanceDetail({
             <InfoRow label="Transaction" value={instance.orgTransactionId ?? 'Not linked'} />
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Draft</p>
-                <h4 className="text-base font-semibold text-slate-900">Editable fields</h4>
-                <p className="text-xs text-slate-500">Update the auto-filled values before sending for signature.</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => queryClient.invalidateQueries({ queryKey: ['contracts', 'instance', instance.id] })}
-                  disabled={updateMutation.isLoading}
-                >
-                  Reset
-                </Button>
-                <Button size="sm" onClick={() => updateMutation.mutate()} disabled={updateMutation.isLoading}>
-                  {updateMutation.isLoading ? 'Saving…' : 'Save'}
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2 space-y-1">
-                <label className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">Title</label>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} />
-              </div>
-
-              {editableKeys.length === 0 ? (
-                <p className="text-sm text-slate-500">No editable keys were provided for this template.</p>
-              ) : (
-                editableKeys.map((key) => (
-                  <div key={key} className="space-y-1">
-                    <label className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">{key}</label>
-                    <Input
-                      type={inputTypeForKey(key)}
-                      value={draftFields[key] ?? ''}
-                      onChange={(e) =>
-                        setDraftFields((prev) => ({
-                          ...prev,
-                          [key]: e.target.value
-                        }))
-                      }
-                    />
-                  </div>
-                ))
-              )}
-            </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Draft</p>
+            <p className="mt-2 text-sm text-slate-600">
+              Use the PDF editor to place fields, override autofill, and edit text. Select a box to see autofill source/confidence, then click “Save PDF”.
+            </p>
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
@@ -683,13 +729,4 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <p className="text-sm font-medium text-slate-900">{value}</p>
     </div>
   );
-}
-
-function inputTypeForKey(key: string): HTMLInputTypeAttribute {
-  const normalized = key.toUpperCase();
-  if (normalized.includes('EMAIL')) return 'email';
-  if (normalized.includes('PHONE')) return 'tel';
-  if (normalized.includes('DATE')) return 'date';
-  if (normalized.includes('PRICE') || normalized.includes('AMOUNT')) return 'number';
-  return 'text';
 }

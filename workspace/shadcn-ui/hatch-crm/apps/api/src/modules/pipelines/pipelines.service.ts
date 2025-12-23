@@ -39,6 +39,7 @@ export class PipelinesService {
         : {};
     return this.prisma.pipeline.findMany({
       where,
+      orderBy: [{ isDefault: 'desc' }, { order: 'asc' }, { publishedAt: 'desc' }, { createdAt: 'asc' }],
       include: {
         stages: true,
         fieldSets: true,

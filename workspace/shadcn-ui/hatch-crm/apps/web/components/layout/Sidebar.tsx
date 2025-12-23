@@ -11,6 +11,7 @@ import {
   Map,
   Radar,
   Route,
+  Sparkles,
   Bell,
   FileSignature,
   Settings,
@@ -43,6 +44,7 @@ type NavItem = {
 const NAV: NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/mission-control', label: 'Mission Control', icon: Radar, roles: ['BROKER', 'AGENT', 'ADMIN'] },
+  { href: '/dashboard/onboarding', label: 'Setup Assistant', icon: Sparkles, roles: ['BROKER', 'ADMIN'] },
   { href: '/dashboard/properties', label: 'Properties', icon: Building2, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/transactions', label: 'Transactions', icon: Handshake, roles: ['BROKER', 'AGENT', 'ADMIN'] },
   { href: '/dashboard/offer-intents', label: 'Offer Intents', icon: Route, roles: ['BROKER', 'AGENT', 'ADMIN'] },

@@ -47,8 +47,8 @@ export function MlsSyncSummaryCard({ orgId, className }: { orgId: string; classN
   const statusMeta = statusStyles[status];
 
   return (
-    <Card className={cn('rounded-2xl border border-slate-100 bg-white shadow-sm', className)}>
-      <CardContent className="space-y-4 px-5 py-4">
+    <Card className={cn('hatch-glass--info', className)}>
+      <CardContent className="space-y-4 pt-6">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">MLS Sync</p>

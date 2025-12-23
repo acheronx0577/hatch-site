@@ -24,14 +24,21 @@ export interface BatchUser extends Record<string, unknown> {
 
 @Injectable()
 export class BatchClient {
-  private readonly http: AxiosInstance;
+  private readonly http?: AxiosInstance;
   private readonly logger = new Logger(BatchClient.name);
+  private readonly enabled: boolean;
 
   constructor(private readonly configService: ConfigService) {
     const token = this.configService.get<string>('BATCH_API_TOKEN') ?? process.env.BATCH_API_TOKEN;
     if (!token) {
-      throw new Error('BATCH_API_TOKEN is not configured - Batch integration cannot start');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('BATCH_API_TOKEN is not configured - Batch integration cannot start');
+      }
+      this.enabled = false;
+      this.logger.warn('BATCH_API_TOKEN is not configured; Batch integration is disabled.');
+      return;
     }
+    this.enabled = true;
     this.http = axios.create({
       baseURL: 'https://api.batchdata.com/v1',
       headers: {
@@ -42,9 +49,21 @@ export class BatchClient {
     });
   }
 
+  isEnabled(): boolean {
+    return this.enabled;
+  }
+
+  private getHttp(): AxiosInstance {
+    if (!this.http) {
+      throw new Error('Batch integration is disabled (missing BATCH_API_TOKEN).');
+    }
+    return this.http;
+  }
+
   async fetchEvents(page: number, limit: number): Promise<BatchEventsResponse> {
+    const http = this.getHttp();
     try {
-      const response = await this.http.get('/events', { params: { page, limit } });
+      const response = await http.get('/events', { params: { page, limit } });
       const data = response.data ?? {};
       const events: BatchEventDto[] = data.events ?? data.data ?? [];
 
@@ -61,8 +80,9 @@ export class BatchClient {
   }
 
   async fetchUser(userId: string): Promise<BatchUser> {
+    const http = this.getHttp();
     try {
-      const response = await this.http.get(`/users/${userId}`);
+      const response = await http.get(`/users/${userId}`);
       return response.data;
     } catch (error) {
       this.logger.error(`Failed to fetch Batch user ${userId}: ${error}`);

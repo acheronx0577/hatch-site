@@ -1,9 +1,21 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsInt, IsOptional, IsString } from 'class-validator';
 
 export class CreateOfferIntentDto {
   @IsString()
   listingId!: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  buyerName?: string;
+
+  @IsOptional()
+  @IsString()
+  sellerName?: string;
 
   @IsOptional()
   @Type(() => Number)
@@ -17,6 +29,10 @@ export class CreateOfferIntentDto {
   @IsOptional()
   @IsString()
   closingTimeline?: string;
+
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
 
   @IsOptional()
   @IsString()

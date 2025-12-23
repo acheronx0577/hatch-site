@@ -1,0 +1,39 @@
+Local migration rehearsal (fresh Postgres via Docker)
+
+Command:
+  DATABASE_URL="postgresql://postgres:postgres@localhost:54329/hatch_test?schema=public" \
+  SHADOW_DATABASE_URL="postgresql://postgres:postgres@localhost:54329/hatch_test?schema=public" \
+  pnpm -C workspace/shadcn-ui/hatch-crm db:migrate
+
+Result:
+  prisma migrate deploy completed successfully and applied all migrations.
+
+Migrations applied (in order):
+  - 20251128055305_init
+  - 20251128060608_add_contracts
+  - 20251128113008_add_contract_template_metadata
+  - 20251208_listing_offer_integrity
+  - 20251210_add_mission_control_indexes
+  - 20251214090000_add_agent_portal_config
+  - 20251215120000_org_listing_contacts_contract_entanglement
+  - 20251215131500_portal_lead_crm_link
+  - 20251215170000_add_marketing_studio
+  - 20251216140000_add_leadgen_framework
+  - 20251218130500_ai_foundations_phase0
+  - 20251219030500_platform_onboarding_state
+  - 20251219095000_user_training_progress
+  - 20251220110000_ai_generated_content_feedback
+  - 20251220120000_document_qa_property_dossier
+  - 20251220143000_add_person_lead_type
+  - 20251220152000_add_org_event_listing_activity
+  - 20251220161000_add_org_event_transaction_activity
+  - 20251220170000_chat_session_context
+  - 20251220180000_loi_statuses_and_fields
+  - 20251220180500_migrate_offer_intent_statuses
+  - 20251221120000_add_seller_opportunities_engine
+  - 20251221140000_add_org_ledger_entries
+
+LOI legacy status mapping (from `20251220180500_migrate_offer_intent_statuses/migration.sql`):
+  - SUBMITTED, UNDER_REVIEW -> RECEIVED
+  - DECLINED, WITHDRAWN -> REJECTED
+

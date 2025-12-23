@@ -659,9 +659,10 @@ export const evaluateLeadRoutingConditions = (
 export const routingConfigSchema = z.object({
   minimumScore: z.number().default(0.6),
   performanceWeight: z.number().default(0.25),
-  capacityWeight: z.number().default(0.35),
+  capacityWeight: z.number().default(0.3),
   geographyWeight: z.number().default(0.2),
-  priceBandWeight: z.number().default(0.2)
+  priceBandWeight: z.number().default(0.15),
+  leadTypeWeight: z.number().default(0.1)
 });
 
 export type RoutingConfig = z.infer<typeof routingConfigSchema>;
@@ -674,6 +675,7 @@ export interface AgentSnapshot {
   geographyFit: number; // 0 - 1
   priceBandFit: number; // 0 - 1
   keptApptRate: number; // 0 - 1
+  leadTypeFit?: number; // 0 - 1 (computed per-lead)
   consentReady: boolean;
   tenDlcReady: boolean;
   teamId?: string;
@@ -696,7 +698,7 @@ export interface AgentScore {
   fullName: string;
   score: number;
   reasons: {
-    type: 'CAPACITY' | 'PERFORMANCE' | 'GEOGRAPHY' | 'PRICE_BAND' | 'CONSENT' | 'TEN_DLC';
+    type: 'CAPACITY' | 'PERFORMANCE' | 'GEOGRAPHY' | 'PRICE_BAND' | 'LEAD_TYPE' | 'CONSENT' | 'TEN_DLC';
     description: string;
     weight: number;
   }[];
@@ -728,12 +730,14 @@ export const scoreAgent = (input: AgentSnapshot, config: RoutingConfig): AgentSc
   const performance = clamp01(input.keptApptRate);
   const geography = clamp01(input.geographyFit);
   const priceBand = clamp01(input.priceBandFit);
+  const leadType = clamp01(input.leadTypeFit ?? 0.7);
 
   const score =
     capacity * config.capacityWeight +
     performance * config.performanceWeight +
     geography * config.geographyWeight +
-    priceBand * config.priceBandWeight;
+    priceBand * config.priceBandWeight +
+    leadType * config.leadTypeWeight;
 
   const reasons: AgentScore['reasons'] = [
     {
@@ -755,6 +759,11 @@ export const scoreAgent = (input: AgentSnapshot, config: RoutingConfig): AgentSc
       type: 'PRICE_BAND',
       description: `Price-band fit ${(priceBand * 100).toFixed(0)}%`,
       weight: config.priceBandWeight
+    },
+    {
+      type: 'LEAD_TYPE',
+      description: `Buyer/seller match ${(leadType * 100).toFixed(0)}%`,
+      weight: config.leadTypeWeight
     }
   ];
 

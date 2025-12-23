@@ -44,6 +44,8 @@ export default async function LeadProfilePage({ params }: { params: { id: string
   const stageName = lead.stage?.name ?? 'Unassigned';
   const pipelineName = lead.pipelineName ?? lead.stage?.pipelineName ?? 'No pipeline';
   const ownerName = lead.owner?.name ?? 'Unassigned';
+  const leadTypeLabel =
+    lead.leadType === 'BUYER' ? 'Buyer' : lead.leadType === 'SELLER' ? 'Seller' : 'Unknown';
   const timeInStage = formatDistanceToNow(new Date(lead.stageEnteredAt ?? lead.createdAt), {
     addSuffix: true
   });
@@ -208,7 +210,8 @@ export default async function LeadProfilePage({ params }: { params: { id: string
       title: 'Ownership & source',
       icon: Users,
       items: [
-        { label: 'Owner', icon: Users, value: ownerName },
+        { label: 'Assigned agent', icon: Users, value: ownerName },
+        { label: 'Lead type', icon: Target, value: leadTypeLabel },
         { label: 'Source', icon: Target, value: leadSource ?? '—' },
         { label: 'Pipeline', icon: Sparkles, value: pipelineName }
       ]
@@ -321,7 +324,8 @@ export default async function LeadProfilePage({ params }: { params: { id: string
                 <span>Stage · {stageName}</span>
                 <span>Time in stage · {timeInStage}</span>
                 <span>Last activity · {lastActivity ?? 'No recent activity'}</span>
-                <span>Owner · {ownerName}</span>
+                <span>Assigned agent · {ownerName}</span>
+                <span>Type · {leadTypeLabel}</span>
               </div>
               <p className="mt-2 max-w-2xl text-sm text-white/80">{summaryNarrative}</p>
             </div>

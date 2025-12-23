@@ -1,10 +1,12 @@
-import { Controller, Get, Post, Patch, Delete, Param, Req, Body, Res, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Req, Body, Res, Query, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { resolveRequestContext } from '../common/request-context';
 import { PipelineBoardService } from './pipeline-board.service';
 
 @Controller('pipelines/:pipelineId/board')
+@UseGuards(JwtAuthGuard)
 export class PipelineBoardController {
   constructor(private readonly board: PipelineBoardService) {}
 

@@ -1,6 +1,8 @@
-import { BadRequestException, Controller, Get, Query, Req, Res } from '@nestjs/common';
+import { BadRequestException, Controller, ForbiddenException, Get, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyRequest, FastifyReply } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { resolveRequestContext } from '@/modules/common';
 import { QuickBooksService } from './quickbooks.service';
 
 @Controller('integrations/quickbooks')
@@ -8,12 +10,14 @@ export class QuickBooksController {
   constructor(private readonly qb: QuickBooksService) {}
 
   @Get('authorize')
+  @UseGuards(JwtAuthGuard)
   async authorize(@Req() req: FastifyRequest, @Res() res: FastifyReply) {
-    const orgId =
-      (req.query as Record<string, string | undefined>)?.orgId ||
-      (req.headers['x-org-id'] as string | undefined)?.trim() ||
-      process.env.DEFAULT_ORG_ID ||
-      'org-hatch';
+    const ctx = resolveRequestContext(req);
+    const queryOrgId = (req.query as Record<string, string | undefined>)?.orgId?.trim() || null;
+    if (queryOrgId && ctx.orgId && queryOrgId !== ctx.orgId) {
+      throw new ForbiddenException('orgId does not match authenticated organization');
+    }
+    const orgId = ctx.orgId || queryOrgId || process.env.DEFAULT_ORG_ID || 'org-hatch';
     const url = this.qb.buildAuthorizeUrl(orgId);
     return res.redirect(302, url);
   }
@@ -34,11 +38,15 @@ export class QuickBooksController {
     const fullUrl = `${protocol}://${host}${req.raw.url}`;
     const { tokenJson } = await this.qb.handleCallback(fullUrl, realmId);
     await this.qb.saveTokens(orgId, realmId, tokenJson);
-    const frontendBase =
-      process.env.NEXT_PUBLIC_SITE_URL ||
+    const dashboardBase =
+      process.env.DASHBOARD_BASE_URL ||
       process.env.FRONTEND_URL ||
-      'http://localhost:5173';
-    const target = `${frontendBase.replace(/\/$/, '')}/broker/financials?quickbooks=connected`;
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      'http://localhost:5173/broker';
+    const normalized = dashboardBase.replace(/\/+$/, '');
+    const target = normalized.endsWith('/broker')
+      ? `${normalized}/financials?quickbooks=connected`
+      : `${normalized}/broker/financials?quickbooks=connected`;
     return res.redirect(302, target);
   }
 }

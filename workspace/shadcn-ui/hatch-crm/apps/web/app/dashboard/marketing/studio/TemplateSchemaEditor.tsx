@@ -9,7 +9,6 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 
 export const BASE_FLYER_SCHEMA = {
   page: { width: 612, height: 792 },
@@ -23,7 +22,7 @@ export const BASE_FLYER_SCHEMA = {
     { id: 'agentEmail', x: 36, y: 164, size: 12, maxWidth: 540 },
     { id: 'brokerageName', x: 36, y: 120, size: 10, maxWidth: 540 }
   ],
-  watermark: { enabled: true, text: 'Hatch', opacity: 0.12, size: 42 }
+  watermark: { enabled: false }
 };
 
 const schemaEditorSchema = z
@@ -64,8 +63,8 @@ const schemaEditorSchema = z
       .default([]),
     watermark: z
       .object({
-        enabled: z.boolean().optional().default(true),
-        text: z.string().optional().default('Hatch'),
+        enabled: z.boolean().optional().default(false),
+        text: z.string().optional().default(''),
         opacity: z.number().min(0).max(1).optional().default(0.12),
         size: z.number().positive().optional().default(42),
         x: z.number().optional(),
@@ -156,10 +155,6 @@ export function TemplateSchemaEditor(props: {
 
   const [selectedSlot, setSelectedSlot] = useState<SlotKey>(null);
 
-  const [schemaJson, setSchemaJson] = useState(() => JSON.stringify(schema, null, 2));
-  const [schemaJsonDirty, setSchemaJsonDirty] = useState(false);
-  const [schemaJsonError, setSchemaJsonError] = useState<string | null>(null);
-
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const canvasHostRef = useRef<HTMLDivElement | null>(null);
@@ -177,19 +172,11 @@ export function TemplateSchemaEditor(props: {
     return () => observer.disconnect();
   }, []);
 
-  useEffect(() => {
-    if (schemaJsonDirty) return;
-    setSchemaJson(JSON.stringify(schema, null, 2));
-    setSchemaJsonError(null);
-  }, [schema, schemaJsonDirty]);
-
   const scale = page.width > 0 ? canvasWidth / page.width : 1;
   const canvasHeight = page.height * scale;
 
   const commitSchema = (nextSchema: EditorSchema) => {
     onChange(nextSchema);
-    setSchemaJsonDirty(false);
-    setSchemaJsonError(null);
   };
 
   const updateSchema = (fn: (current: EditorSchema) => EditorSchema) => {
@@ -227,23 +214,6 @@ export function TemplateSchemaEditor(props: {
 
       return draft;
     });
-  };
-
-  const handleApplyJson = () => {
-    setSchemaJsonError(null);
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(schemaJson);
-    } catch {
-      setSchemaJsonError('Schema JSON must be valid JSON');
-      return;
-    }
-    const validated = schemaEditorSchema.safeParse(parsed);
-    if (!validated.success) {
-      setSchemaJsonError('Schema JSON does not match expected structure');
-      return;
-    }
-    commitSchema(validated.data);
   };
 
   const handleReset = () => {
@@ -659,28 +629,6 @@ export function TemplateSchemaEditor(props: {
           ) : null}
         </div>
 
-        <div className="space-y-2">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">Schema JSON</p>
-            <div className="flex items-center gap-2">
-              {schemaJsonDirty ? <span className="text-xs text-muted-foreground">Unsaved edits</span> : null}
-              <Button type="button" size="sm" variant="outline" onClick={handleApplyJson} disabled={disabled}>
-                Apply JSON
-              </Button>
-            </div>
-          </div>
-          <Textarea
-            value={schemaJson}
-            disabled={disabled}
-            onChange={(event) => {
-              setSchemaJson(event.target.value);
-              setSchemaJsonDirty(true);
-              setSchemaJsonError(null);
-            }}
-            className="min-h-[240px] font-mono text-xs"
-          />
-          {schemaJsonError ? <p className="text-xs text-destructive">{schemaJsonError}</p> : null}
-        </div>
       </div>
     </div>
   );

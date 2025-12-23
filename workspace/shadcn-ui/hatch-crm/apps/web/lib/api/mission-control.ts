@@ -51,6 +51,9 @@ export interface MissionControlOverview {
     highRiskListings: number;
     highRiskTransactions: number;
   };
+  aiApprovals: {
+    pending: number;
+  };
   leadStats: {
     totalLeads: number;
     newLeads: number;
@@ -116,6 +119,19 @@ export interface MissionControlAgentRow {
   riskScore: number;
   isCompliant: boolean;
   requiresAction: boolean;
+  performance?: {
+    modelVersion: string;
+    overallScore: number;
+    confidenceBand: 'HIGH' | 'MEDIUM' | 'DEVELOPING';
+    riskDragPenalty?: number;
+    topDrivers: Array<{
+      label: string;
+      direction: 'positive' | 'negative';
+      metricSummary: string;
+      deepLink?: string;
+    }>;
+    lastUpdated: string;
+  } | null;
   ceHoursRequired?: number | null;
   ceHoursCompleted?: number | null;
   memberships: Array<{ type: string; name: string; status: string }>;

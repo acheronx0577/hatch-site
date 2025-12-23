@@ -17,7 +17,6 @@ import {
   Lock,
   Megaphone,
   NotebookPen,
-  Percent,
   Radar,
   Sparkles,
   Settings,
@@ -114,8 +113,7 @@ const NAV_SECTIONS: NavSection[] = [
         icon: DollarSign,
         roles: ['BROKER', 'AGENT', 'ADMIN'],
         children: [
-          { icon: DollarSign, label: 'Financials', path: '/broker/financials', roles: ['BROKER', 'AGENT', 'ADMIN'] },
-          { icon: Percent, label: 'Commission Plans', path: '/broker/commission-plans', roles: ['BROKER', 'ADMIN'] }
+          { icon: DollarSign, label: 'Financials', path: '/broker/financials', roles: ['BROKER', 'AGENT', 'ADMIN'] }
         ]
       }
     ]

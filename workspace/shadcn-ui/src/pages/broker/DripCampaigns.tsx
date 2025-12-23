@@ -110,12 +110,12 @@ export default function DripCampaignsPage() {
   );
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Marketing</p>
-          <h1 className="text-2xl font-semibold text-slate-900">Drip Campaigns</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Marketing</p>
+          <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Drip Campaigns</h1>
+          <p className="text-sm text-slate-600">
             Build lightweight drips that run through Playbooks—no new AI surfaces required.
           </p>
         </div>
@@ -124,7 +124,7 @@ export default function DripCampaignsPage() {
         </Button>
       </div>
 
-      <Card className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <Card className="space-y-3 p-6 hover:translate-y-0 hover:shadow-brand">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-slate-800">Create drip campaign</p>
@@ -151,7 +151,7 @@ export default function DripCampaignsPage() {
         {error && <p className="text-sm text-destructive">{error}</p>}
       </Card>
 
-      <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <Card className="p-6 hover:translate-y-0 hover:shadow-brand">
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <h2 className="text-lg font-semibold text-slate-900">Campaigns</h2>
           <div className="text-xs text-muted-foreground">
@@ -165,7 +165,7 @@ export default function DripCampaignsPage() {
         ) : (
           <div className="space-y-3 pt-3">
             {campaigns.map((campaign) => (
-              <div key={campaign.id} className="rounded-xl border border-slate-100 bg-slate-50/50 p-3">
+              <div key={campaign.id} className="rounded-xl border border-[var(--glass-border)] bg-white/25 p-4 backdrop-blur">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{campaign.name}</p>
@@ -175,7 +175,7 @@ export default function DripCampaignsPage() {
                   </div>
                   <div className="flex items-center gap-2 text-xs">
                     {campaign.enabled ? (
-                      <Badge className="bg-emerald-100 text-emerald-700">Enabled</Badge>
+                      <Badge variant="success">Enabled</Badge>
                     ) : (
                       <Badge variant="secondary">Disabled</Badge>
                     )}
@@ -193,7 +193,7 @@ export default function DripCampaignsPage() {
                       .map((step) => (
                         <span
                           key={step.id}
-                          className="inline-flex items-center gap-2 rounded-full bg-white px-2 py-1 text-xs shadow-sm"
+                          className="inline-flex items-center gap-2 rounded-full border border-[var(--glass-border)] bg-white/25 px-2 py-1 text-xs backdrop-blur"
                         >
                           <span className="font-semibold">{step.actionType}</span>
                           <span className="text-muted-foreground">@ {step.offsetHours}h</span>
@@ -208,7 +208,7 @@ export default function DripCampaignsPage() {
       </Card>
 
       {stepCampaignId && (
-        <Card className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 shadow-sm">
+        <Card className="p-6 [--hatch-card-alpha:var(--hatch-glass-alpha-elevated)] hover:translate-y-0 hover:shadow-brand">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-indigo-900">Add step</p>

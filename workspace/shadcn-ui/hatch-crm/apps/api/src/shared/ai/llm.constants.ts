@@ -1,4 +1,4 @@
-export const INTERNAL_LLM_PROVIDER_ID = 'internalAI';
+export const INTERNAL_LLM_PROVIDER_ID = 'grok';
 
 export const DEFAULT_LLM_MODEL_ID = 'pipeline-ai-default';
 export const DEFAULT_EMBEDDING_MODEL_ID = 'pipeline-embeddings-default';

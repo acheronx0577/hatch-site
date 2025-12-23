@@ -35,6 +35,6 @@ import { SearchVectorService } from './search-vector.service';
     GlobalSearchService,
     SearchVectorService
   ],
-  exports: [SemanticSearchService, IngestService, IndexerProducer, SearchVectorService, GlobalSearchService]
+  exports: [SemanticSearchService, IngestService, IndexerProducer, SearchVectorService, GlobalSearchService, EmbeddingsService]
 })
 export class SearchModule {}

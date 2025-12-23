@@ -6,10 +6,13 @@ import { OptionalJwtAuthGuard } from '@/auth/optional-jwt-auth.guard';
 import { RolesGuard } from '@/auth/roles.guard';
 import { OrgListingContactType } from '@hatch/db';
 import { OrgListingsService } from './org-listings.service';
+import { OrgListingDetailsService } from './org-listing-details.service';
+import { OrgListingRecommendationsService } from './org-listing-recommendations.service';
 import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { AttachListingDocumentDto } from './dto/attach-listing-document.dto';
 import { AttachListingContactDto } from './dto/attach-listing-contact.dto';
+import { ListingApprovalActionDto } from './dto/listing-approval-action.dto';
 
 interface AuthedRequest {
   user?: { userId?: string };
@@ -20,7 +23,11 @@ interface AuthedRequest {
 @ApiBearerAuth()
 @Controller('organizations/:orgId/listings')
 export class OrgListingsController {
-  constructor(private readonly svc: OrgListingsService) {}
+  constructor(
+    private readonly svc: OrgListingsService,
+    private readonly details: OrgListingDetailsService,
+    private readonly recommendations: OrgListingRecommendationsService
+  ) {}
 
   @Get('public')
   listPublic(@Param('orgId') orgId: string) {
@@ -69,10 +76,43 @@ export class OrgListingsController {
   @Post(':listingId/approve')
   @UseGuards(JwtAuthGuard, RolesGuard('broker'))
   @HttpCode(200)
-  approve(@Param('orgId') orgId: string, @Param('listingId') listingId: string, @Req() req: AuthedRequest) {
+  approve(
+    @Param('orgId') orgId: string,
+    @Param('listingId') listingId: string,
+    @Req() req: AuthedRequest,
+    @Body() dto: ListingApprovalActionDto
+  ) {
     const brokerUserId = req.user?.userId;
     if (!brokerUserId) throw new Error('Missing user context');
-    return this.svc.approveListing(orgId, brokerUserId, listingId);
+    return this.svc.approveListing(orgId, brokerUserId, listingId, dto?.note);
+  }
+
+  @Post(':listingId/request-changes')
+  @UseGuards(JwtAuthGuard, RolesGuard('broker'))
+  @HttpCode(200)
+  requestChanges(
+    @Param('orgId') orgId: string,
+    @Param('listingId') listingId: string,
+    @Req() req: AuthedRequest,
+    @Body() dto: ListingApprovalActionDto
+  ) {
+    const brokerUserId = req.user?.userId;
+    if (!brokerUserId) throw new Error('Missing user context');
+    return this.svc.requestListingChanges(orgId, brokerUserId, listingId, dto?.note);
+  }
+
+  @Post(':listingId/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard('broker'))
+  @HttpCode(200)
+  reject(
+    @Param('orgId') orgId: string,
+    @Param('listingId') listingId: string,
+    @Req() req: AuthedRequest,
+    @Body() dto: ListingApprovalActionDto
+  ) {
+    const brokerUserId = req.user?.userId;
+    if (!brokerUserId) throw new Error('Missing user context');
+    return this.svc.rejectListing(orgId, brokerUserId, listingId, dto?.note);
   }
 
   @Post(':listingId/documents')
@@ -86,6 +126,54 @@ export class OrgListingsController {
     const userId = req.user?.userId;
     if (!userId) throw new Error('Missing user context');
     return this.svc.attachListingDocument(orgId, userId, listingId, dto);
+  }
+
+  @Get(':listingId/details')
+  @UseGuards(OptionalJwtAuthGuard)
+  getDetails(
+    @Param('orgId') orgId: string,
+    @Param('listingId') listingId: string,
+    @Req() req: AuthedRequest,
+    @Query('radiusMiles') radiusMiles?: string,
+    @Query('comparableLimit') comparableLimit?: string
+  ) {
+    const headerUser =
+      (req.headers?.['x-user-id'] as string | undefined) ??
+      (req.headers?.['x-user'] as string | undefined) ??
+      undefined;
+    const userId = req.user?.userId ?? headerUser ?? 'demo-user';
+    const parsedRadius = radiusMiles ? Number(radiusMiles) : undefined;
+    const parsedLimit = comparableLimit ? Number(comparableLimit) : undefined;
+    return this.details.getFullDetails(orgId, userId, listingId, {
+      radiusMiles: Number.isFinite(parsedRadius ?? NaN) ? parsedRadius : undefined,
+      comparableLimit: Number.isFinite(parsedLimit ?? NaN) ? parsedLimit : undefined
+    });
+  }
+
+  @Get(':listingId/recommendations')
+  @UseGuards(OptionalJwtAuthGuard)
+  getRecommendations(
+    @Param('orgId') orgId: string,
+    @Param('listingId') listingId: string,
+    @Req() req: AuthedRequest
+  ) {
+    const headerUser =
+      (req.headers?.['x-user-id'] as string | undefined) ??
+      (req.headers?.['x-user'] as string | undefined) ??
+      undefined;
+    const userId = req.user?.userId ?? headerUser ?? 'demo-user';
+    return this.recommendations.getRecommendations(orgId, userId, listingId);
+  }
+
+  @Get(':listingId/activity')
+  @UseGuards(OptionalJwtAuthGuard)
+  getActivity(@Param('orgId') orgId: string, @Param('listingId') listingId: string, @Req() req: AuthedRequest) {
+    const headerUser =
+      (req.headers?.['x-user-id'] as string | undefined) ??
+      (req.headers?.['x-user'] as string | undefined) ??
+      undefined;
+    const userId = req.user?.userId ?? headerUser ?? 'demo-user';
+    return this.svc.listListingActivity(orgId, userId, listingId);
   }
 
   @Get(':listingId/contacts')

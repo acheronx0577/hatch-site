@@ -5,15 +5,21 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill text-sm font-semibold tracking-tight transition-all duration-200 motion-safe:will-change-transform motion-safe:scale-100 motion-safe:hover:scale-105 motion-safe:active:scale-97 ease-linear ring-offset-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[color:var(--focus-ring)] focus-visible:ring-offset-[var(--focus-ring-offset)] disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 antialiased [text-rendering:geometricPrecision]',  {    variants: {
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-pill text-sm font-semibold tracking-tight antialiased [text-rendering:geometricPrecision] ' +
+    'transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out ' +
+    'motion-safe:hover:-translate-y-px motion-safe:active:translate-y-0 ' +
+    'ring-offset-background focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-[color:var(--focus-ring)] focus-visible:ring-offset-[var(--focus-ring-offset)] ' +
+    'disabled:pointer-events-none disabled:opacity-60 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0',
+  {
+    variants: {
       variant: {
-        default: 'bg-brand-gradient text-ink-50 shadow-brand hover:brightness-[1.05]',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/85 shadow-brand',
+        default: 'bg-brand-gradient text-ink-50 shadow-brand hover:shadow-brand-md hover:brightness-[1.03]',
+        destructive: 'bg-destructive text-destructive-foreground shadow-brand hover:bg-destructive/88 hover:shadow-brand-md',
         outline:
-          'border-[1.5px] border-brand-blue-600 bg-background text-brand-blue-700 hover:bg-brand-blue-600/5 hover:text-brand-blue-700',
+          'border border-[var(--glass-border)] bg-white/25 text-ink-700 shadow-none backdrop-blur-xl hover:bg-white/35 hover:text-ink-900 hover:shadow-brand dark:bg-white/10 dark:text-ink-100 dark:hover:bg-white/15',
         secondary:
-          'bg-ink-75 text-ink-700 shadow-brand hover:bg-ink-100',
-        ghost: 'bg-transparent text-ink-600 hover:bg-ink-75',
+          'border border-[var(--glass-border)] bg-white/35 text-ink-800 shadow-brand hover:bg-white/45 hover:shadow-brand-md dark:bg-white/10 dark:text-ink-100 dark:hover:bg-white/15',
+        ghost: 'bg-transparent text-ink-700 shadow-none hover:bg-white/25 hover:text-ink-900 dark:text-ink-100 dark:hover:bg-white/10',
         link: 'text-brand-blue-600 underline-offset-4 hover:underline',
       },
       size: {

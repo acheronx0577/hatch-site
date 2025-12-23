@@ -17,9 +17,9 @@ const tabs = [
 export default function BrokerRentals() {
   const { activeOrgId } = useAuth();
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
-  if (!orgId) return <div className="p-6 text-sm text-slate-600">Select an organization to view rentals.</div>;
+  if (!orgId) return <div className="text-sm text-slate-600">Select an organization to view rentals.</div>;
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <RentalsView orgId={orgId} />
     </div>
   );
@@ -58,20 +58,20 @@ function RentalsView({ orgId }: { orgId: string }) {
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <p className="text-sm uppercase tracking-wide text-slate-500">Rentals & PM</p>
-          <h1 className="text-2xl font-semibold text-slate-900">Property management backbone</h1>
-          <p className="text-sm text-slate-500">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Rentals & PM</p>
+          <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Property management backbone</h1>
+          <p className="text-sm text-slate-600">
             View properties under management, monitor leases, and keep seasonal tax filings on schedule.
           </p>
         </div>
-        <div className="flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+        <div className="flex rounded-full border border-[var(--glass-border)] bg-white/10 p-1 backdrop-blur-md">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={`rounded-full px-4 py-1 text-sm font-medium ${
-                activeTab === tab.id ? 'bg-slate-900 text-white' : 'text-slate-600'
+                activeTab === tab.id ? 'border border-white/20 bg-white/35 text-slate-900 shadow-brand' : 'text-slate-600 hover:bg-white/20 hover:text-slate-900'
               }`}
             >
               {tab.label}

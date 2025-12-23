@@ -90,14 +90,16 @@ const metricLinkMap: Record<string, string> = {
   'Active agents': '/broker/team?stage=ACTIVE',
   'Non-compliant agents': '/broker/compliance?filter=NONCOMPLIANT',
   'High-risk agents': '/broker/compliance?filter=HIGH_RISK',
-  'Total leads': '/broker/leads',
-  'New leads': '/broker/leads?stage=NEW',
-  'Appointments set': '/broker/leads?stage=ACTIVE',
-  'Total LOIs': '/broker/lead-routing',
-  Submitted: '/broker/lead-routing?status=SUBMITTED',
-  'Under review': '/broker/lead-routing?status=UNDER_REVIEW',
-  Accepted: '/broker/lead-routing?status=ACCEPTED',
-  Declined: '/broker/lead-routing?status=DECLINED',
+  'Total leads': '/broker/crm',
+  'New leads': '/broker/crm',
+  'Appointments set': '/broker/crm',
+  'Total LOIs': '/broker/offer-intents',
+  Draft: '/broker/offer-intents?status=DRAFT',
+  Sent: '/broker/offer-intents?status=SENT',
+  Received: '/broker/offer-intents?status=RECEIVED',
+  Countered: '/broker/offer-intents?status=COUNTERED',
+  Accepted: '/broker/offer-intents?status=ACCEPTED',
+  Rejected: '/broker/offer-intents?status=REJECTED',
   'Transactions synced': '/broker/transactions',
   'Transactions failed': '/broker/transactions',
   'Est. GCI': '/broker/analytics',
@@ -114,7 +116,7 @@ const metricLinkMap: Record<string, string> = {
   'Under contract': '/broker/transactions?filter=UNDER_CONTRACT',
   'Transactions needing TC attention': '/broker/transactions?filter=ATTENTION',
   'Marketing automation': '/broker/marketing/campaigns',
-  'Lead optimization': '/broker/leads',
+  'Lead optimization': '/broker/crm',
   'Evaluations (30d)': '/broker/compliance?view=ai'
 };
 
@@ -218,15 +220,27 @@ function mapOverviewToMetrics(overview?: MissionControlOverviewData): Metric[] {
     },
     {
       category: 'Offer intents',
-      label: 'Submitted',
-      value: numberFormatter.format(overview.loiStats.submittedOfferIntents),
-      href: metricLinkMap.Submitted
+      label: 'Draft',
+      value: numberFormatter.format(overview.loiStats.draftOfferIntents),
+      href: metricLinkMap.Draft
     },
     {
       category: 'Offer intents',
-      label: 'Under review',
-      value: numberFormatter.format(overview.loiStats.underReviewOfferIntents),
-      href: metricLinkMap['Under review']
+      label: 'Sent',
+      value: numberFormatter.format(overview.loiStats.sentOfferIntents),
+      href: metricLinkMap.Sent
+    },
+    {
+      category: 'Offer intents',
+      label: 'Received',
+      value: numberFormatter.format(overview.loiStats.receivedOfferIntents),
+      href: metricLinkMap.Received
+    },
+    {
+      category: 'Offer intents',
+      label: 'Countered',
+      value: numberFormatter.format(overview.loiStats.counteredOfferIntents),
+      href: metricLinkMap.Countered
     },
     {
       category: 'Offer intents',
@@ -236,9 +250,9 @@ function mapOverviewToMetrics(overview?: MissionControlOverviewData): Metric[] {
     },
     {
       category: 'Offer intents',
-      label: 'Declined',
-      value: numberFormatter.format(overview.loiStats.declinedOfferIntents),
-      href: metricLinkMap.Declined
+      label: 'Rejected',
+      value: numberFormatter.format(overview.loiStats.rejectedOfferIntents),
+      href: metricLinkMap.Rejected
     },
     {
       category: 'Financials',

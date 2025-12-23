@@ -2,14 +2,17 @@ import React from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { BrokerProvider } from './contexts/BrokerContext'
+import { LeadMessagingProvider } from './contexts/LeadMessagingContext'
 import { MessengerProvider } from './contexts/MessengerContext'
 import { Toaster } from '@/components/ui/toaster'
+import { CookieConsentBanner } from '@/components/CookieConsentBanner'
 
 // Public Pages
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import DemoLanding from './pages/DemoLanding'
+import DemoBooking from './pages/DemoBooking'
 import PerfBenchPage from './pages/dev/PerfBench'
 import TermsPage from './pages/Terms'
 import Portal from './pages/Portal'
@@ -21,12 +24,10 @@ import BrokerLayout from './components/layout/BrokerLayout'
 // Broker Pages
 import BrokerDashboard from './pages/broker/Dashboard'
 import BrokerProperties from './pages/broker/Properties'
-import BrokerLeads from './pages/broker/Leads'
+import BrokerPropertyDetail from './pages/broker/properties/PropertyDetail'
 import BrokerTeam from './pages/broker/Team'
-import BrokerTeamAdvanced from './pages/broker/TeamAdvanced'
 import BrokerCalendar from './pages/broker/Calendar'
 import BrokerAnalytics from './pages/broker/Analytics'
-import CommissionPlansPage from './pages/broker/CommissionPlans'
 import LeadRoutingDesk from './pages/broker/LeadRoutingDesk'
 import DraftListingsPage from './pages/broker/DraftListings'
 import BrokerMarketingPage from './pages/broker/Marketing'
@@ -59,6 +60,7 @@ import { AgentPerformanceDetail } from './pages/broker/agent-performance/AgentPe
 import ContractsPage from './pages/broker/Contracts'
 import BrokerAccountsPage from './pages/broker/Accounts'
 import BrokerOpportunitiesPage from './pages/broker/Opportunities'
+import LeadsRedirect from './pages/broker/LeadsRedirect'
 
 // CRM
 import CRM from './pages/CRM'
@@ -68,16 +70,18 @@ function App() {
   return (
     <AuthProvider>
       <BrokerProvider>
-        <MessengerProvider>
-          <Router
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true,
-            }}
-          >
-            <div className="App">
-              <Toaster />
-              <Routes>
+        <LeadMessagingProvider>
+          <MessengerProvider>
+            <Router
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true,
+              }}
+            >
+              <div className="App">
+                <Toaster />
+                <CookieConsentBanner />
+                <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Home />} />
               <Route path="/home" element={<Home />} />
@@ -87,7 +91,8 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/portal" element={<Portal />} />
-              <Route path="/demo" element={<DemoLanding />} />
+              <Route path="/demo" element={<DemoBooking />} />
+              <Route path="/demo/session" element={<DemoLanding />} />
               <Route path="/terms" element={<TermsPage />} />
               <Route path="/dev/perf" element={<PerfBenchPage />} />
               <Route path="/lp/:orgId/:slug" element={<LeadGenLandingPage />} />
@@ -99,11 +104,11 @@ function App() {
                 <Route path="crm" element={<CRM />} />
                 <Route path="crm/leads/:id" element={<LeadDetailPage />} />
                 <Route path="properties" element={<BrokerProperties />} />
+                <Route path="properties/:listingId" element={<BrokerPropertyDetail />} />
                 <Route path="transactions" element={<BrokerTransactions />} />
-                <Route path="leads" element={<BrokerLeads />} />
+                <Route path="leads" element={<LeadsRedirect />} />
                 <Route path="team" element={<BrokerTeam />} />
                 <Route path="compliance" element={<RiskCenterPage />} />
-                <Route path="team-advanced" element={<BrokerTeamAdvanced />} />
                 <Route path="calendar" element={<BrokerCalendar />} />
                 <Route path="analytics" element={<BrokerAnalytics />} />
                 <Route path="accounts" element={<BrokerAccountsPage />} />
@@ -119,7 +124,6 @@ function App() {
                 <Route path="notifications" element={<BrokerNotificationsPage />} />
                 <Route path="opportunities" element={<BrokerOpportunitiesPage />} />
                 <Route path="audit-log" element={<BrokerAuditLogPage />} />
-                <Route path="commission-plans" element={<CommissionPlansPage />} />
                 <Route path="lead-routing" element={<LeadRoutingDesk />} />
                 <Route path="draft-listings" element={<DraftListingsPage />} />
                 <Route path="ai-employees" element={<Navigate to="mission-control" replace />} />
@@ -149,10 +153,11 @@ function App() {
 
               {/* Default redirect */}
               <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </div>
-          </Router>
-        </MessengerProvider>
+                </Routes>
+              </div>
+            </Router>
+          </MessengerProvider>
+        </LeadMessagingProvider>
       </BrokerProvider>
     </AuthProvider>
   )

@@ -20,6 +20,11 @@ export class BatchService {
   ) {}
 
   async syncEvents(limit = this.defaultLimit): Promise<BatchSyncResult> {
+    if (!this.batchClient.isEnabled()) {
+      this.logger.debug('Skipping Batch sync; integration is disabled.');
+      return { totalImported: 0, pagesProcessed: 0 };
+    }
+
     let page = 1;
     let totalImported = 0;
     let pagesProcessed = 0;

@@ -16,6 +16,9 @@
     "resolveJsonModule": true,
     "jsx": "preserve",
     "incremental": true,
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
     "baseUrl": ".",
     "paths": {
       "@/app/*": [

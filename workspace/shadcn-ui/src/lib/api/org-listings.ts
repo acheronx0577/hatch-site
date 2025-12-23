@@ -11,6 +11,22 @@ export interface OrgListingAgent {
   } | null;
 }
 
+export interface OrgListingDocumentRecord {
+  id: string;
+  type: string;
+  createdAt?: string;
+  orgFile?: {
+    id: string;
+    name: string;
+    fileId: string;
+    category?: string;
+    documentType?: string;
+    complianceStatus?: string;
+    reviewStatus?: string;
+    createdAt?: string;
+  } | null;
+}
+
 export interface OrgListingRecord {
   id: string;
   status: string;
@@ -50,6 +66,11 @@ export interface OrgListingRecord {
   coverPhotoUrl?: string | null;
   expiresAt?: string | null;
   agentProfile?: OrgListingAgent | null;
+  documents?: OrgListingDocumentRecord[];
+  brokerApproved?: boolean | null;
+  listedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export const fetchOrgListings = async (orgId: string): Promise<OrgListingRecord[]> => {
@@ -100,3 +121,144 @@ const mapPropertyToOrgListing = (prop: BrokerPropertyRow): OrgListingRecord => (
   expiresAt: null,
   agentProfile: null,
 });
+
+export type FullPropertyComparable = {
+  address: string;
+  price: number;
+  sqft: number | null;
+  pricePerSqft: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  soldDate: string;
+  distanceMiles: number | null;
+};
+
+export type FullPropertyMlsDetails = {
+  propertyType: string | null;
+  yearBuilt: number | null;
+  sqft: number | null;
+  lotSize: number | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  stories: number | null;
+  parkingSpaces: number | null;
+  garageType: string | null;
+  pool: boolean | null;
+  waterfront: boolean | null;
+  view: string | null;
+  construction: string | null;
+  roofType: string | null;
+  foundation: string | null;
+  cooling: string | null;
+  heating: string | null;
+  electric: string | null;
+  sewer: string | null;
+  water: string | null;
+  hoa: boolean | null;
+  hoaFee: number | null;
+  hoaFrequency: string | null;
+  taxAmount: number | null;
+  taxYear: number | null;
+  assessedValue: number | null;
+  interiorFeatures: string[] | null;
+  exteriorFeatures: string[] | null;
+  appliances: string[] | null;
+  flooring: string[] | null;
+  publicRemarks: string | null;
+  privateRemarks: string | null;
+  listDate: string | null;
+  daysOnMarket: number | null;
+  lastPriceChange: string | null;
+  photos: string[];
+  virtualTourUrl: string | null;
+};
+
+export type FullPropertyAreaMetrics = {
+  population: number | null;
+  medianAge: number | null;
+  medianIncome: number | null;
+  medianHomeValue: number | null;
+  avgPricePerSqft: number | null;
+  homeownershipRate: number | null;
+  avgDaysOnMarket: number | null;
+  listToSaleRatio: number | null;
+  inventoryMonths: number | null;
+  priceChange1Year: number | null;
+  priceChange5Year: number | null;
+  schoolDistrict: string | null;
+  schoolRatings: Array<{
+    name: string;
+    type: string | null;
+    distance: string | null;
+    rating: number;
+  }>;
+  walkScore: number | null;
+  transitScore: number | null;
+  bikeScore: number | null;
+};
+
+export type FullPropertyDetailsResponse = {
+  listing: OrgListingRecord;
+  mlsDetails: FullPropertyMlsDetails | null;
+  areaMetrics: FullPropertyAreaMetrics | null;
+  comparables: FullPropertyComparable[];
+};
+
+export const fetchOrgListingDetails = async (orgId: string, listingId: string) =>
+  apiFetch<FullPropertyDetailsResponse>(`organizations/${orgId}/listings/${listingId}/details`);
+
+export type ListingRecommendationPriority = 'high' | 'medium' | 'low';
+
+export type ListingRecommendation = {
+  type: string;
+  title: string;
+  description: string;
+  priority: ListingRecommendationPriority;
+  field?: string;
+  documentType?: string;
+};
+
+export type ListingRecommendationsResponse = {
+  stageRecommendations: ListingRecommendation[];
+  missingFields: string[];
+  contractGaps: string[];
+  aiRecommendations: ListingRecommendation[];
+  complianceIssues: ListingComplianceIssue[];
+  nextActions: ListingRecommendation[];
+};
+
+export const fetchOrgListingRecommendations = async (orgId: string, listingId: string) =>
+  apiFetch<ListingRecommendationsResponse>(`organizations/${orgId}/listings/${listingId}/recommendations`);
+
+export type ListingComplianceIssue = {
+  code: string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  title: string;
+  description: string;
+  resolutionSteps: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type ListingActivityEvent = {
+  id: string;
+  type: string;
+  message?: string | null;
+  createdAt: string;
+  actor?: { firstName?: string | null; lastName?: string | null; email?: string | null } | null;
+  payload?: Record<string, unknown> | null;
+};
+
+export const fetchOrgListingActivity = async (orgId: string, listingId: string) =>
+  apiFetch<ListingActivityEvent[]>(`organizations/${orgId}/listings/${listingId}/activity`);
+
+export const requestOrgListingApproval = async (orgId: string, listingId: string) =>
+  apiFetch<OrgListingRecord>(`organizations/${orgId}/listings/${listingId}/request-approval`, { method: 'POST' });
+
+export const approveOrgListing = async (orgId: string, listingId: string, payload?: { note?: string }) =>
+  apiFetch<OrgListingRecord>(`organizations/${orgId}/listings/${listingId}/approve`, { method: 'POST', body: payload ?? {} });
+
+export const requestOrgListingChanges = async (orgId: string, listingId: string, payload?: { note?: string }) =>
+  apiFetch<OrgListingRecord>(`organizations/${orgId}/listings/${listingId}/request-changes`, { method: 'POST', body: payload ?? {} });
+
+export const rejectOrgListing = async (orgId: string, listingId: string, payload?: { note?: string }) =>
+  apiFetch<OrgListingRecord>(`organizations/${orgId}/listings/${listingId}/reject`, { method: 'POST', body: payload ?? {} });

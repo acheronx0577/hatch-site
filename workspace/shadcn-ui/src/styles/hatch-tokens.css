@@ -58,9 +58,9 @@
   --border-strong: rgba(17, 26, 44, 0.14);
 
   /* Shadows */
-  --shadow-sm: 0 6px 18px rgba(11, 18, 32, 0.08);
-  --shadow-md: 0 18px 38px rgba(11, 18, 32, 0.14);
-  --shadow-lg: 0 32px 64px rgba(11, 18, 32, 0.18);
+  --shadow-sm: 0 14px 40px rgba(11, 18, 32, 0.08);
+  --shadow-md: 0 24px 58px rgba(11, 18, 32, 0.12);
+  --shadow-lg: 0 36px 86px rgba(11, 18, 32, 0.16);
 
   /* Radii */
   --radius-sm: 8px;
@@ -107,13 +107,23 @@
   --focus-ring-offset: 2px;
 
   /* Translucent surfaces */
-  --glass-background: rgba(255, 255, 255, 0.85);
-  --glass-border: rgba(157, 171, 197, 0.25);
+  --glass-background: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.2);
 
   /* Component surfaces */
   --hatch-card-alpha: 0.95;
   --hatch-card-blur: 0px;
   --hatch-card-border: var(--border-subtle);
+
+  /* Glass tuning */
+  --hatch-glass-alpha-default: 0.7;
+  --hatch-glass-alpha-elevated: 0.8;
+  --hatch-glass-alpha-recessed: 0.5;
+  --hatch-glass-blur: 14px;
+  --hatch-glass-tint-info: rgba(31, 95, 255, 0.1);
+  --hatch-glass-tint-warning: rgba(245, 158, 11, 0.1);
+  --hatch-glass-tint-success: rgba(16, 185, 129, 0.1);
+  --hatch-glass-tint-danger: rgba(244, 63, 94, 0.1);
 
   /* Body + text */
   --text-primary: #1c1c1e;
@@ -145,7 +155,7 @@
   --text-inverse: var(--ink-900);
 
   --glass-background: rgba(20, 34, 55, 0.8);
-  --glass-border: rgba(84, 110, 152, 0.35);
+  --glass-border: rgba(255, 255, 255, 0.12);
 
   --hatch-card-border: var(--border-subtle);
 

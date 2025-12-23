@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { PlaybookActionType } from '@hatch/db'
+import { ChatContextType, PlaybookActionType } from '@hatch/db'
+import { randomUUID } from 'crypto'
 import { PrismaService } from '@/modules/prisma/prisma.service'
 import { AiEmployeesService } from '@/modules/ai-employees/ai-employees.service'
 import { GlobalSearchService } from '@/modules/search/global-search.service'
@@ -76,6 +77,31 @@ type PlannedAction = {
 
 type ChatActionMetadata = PlaybookActionExecutionResult & { summary?: string }
 
+type EnsureSessionInput = {
+  title?: string
+  contextType?: 'GENERAL' | 'LEAD' | 'LISTING' | 'TRANSACTION'
+  contextId?: string
+  contextSnapshot?: Record<string, unknown>
+}
+
+type ContextField = { label: string; value: string }
+type ContextDocument = {
+  id: string
+  name: string
+  fileId?: string | null
+  documentType?: string | null
+  complianceStatus?: string | null
+  href?: string | null
+}
+
+type ChatContextPanel = {
+  title: string
+  subtitle?: string | null
+  href?: string | null
+  fields: ContextField[]
+  documents?: ContextDocument[]
+}
+
 @Injectable()
 export class ChatService {
   private readonly log = new Logger(ChatService.name)
@@ -96,7 +122,41 @@ export class ChatService {
 
   async createSession(orgId: string, userId: string, title?: string) {
     return (this.prisma as any).chatSession.create({
-      data: { organizationId: orgId, userId, title: title ?? null }
+      data: {
+        organizationId: orgId,
+        userId,
+        title: title ?? null,
+        contextType: ChatContextType.LEGACY,
+        contextKey: `LEGACY:${randomUUID()}`
+      }
+    })
+  }
+
+  async ensureSession(orgId: string, userId: string, input: EnsureSessionInput) {
+    const contextType = this.normalizeContextType(input.contextType)
+    const contextId = input.contextId?.trim() ? input.contextId.trim() : undefined
+    const contextKey = this.buildContextKey(contextType, contextId)
+    const title = input.title?.trim() ? input.title.trim() : this.defaultTitleForContext(contextType)
+
+    const update: Record<string, unknown> = {
+      contextType,
+      contextId: contextId ?? null
+    }
+    if (title !== undefined) update.title = title
+    if (input.contextSnapshot !== undefined) update.contextSnapshot = input.contextSnapshot as any
+
+    return (this.prisma as any).chatSession.upsert({
+      where: { organizationId_userId_contextKey: { organizationId: orgId, userId, contextKey } },
+      update,
+      create: {
+        organizationId: orgId,
+        userId,
+        title: title ?? null,
+        contextType,
+        contextId: contextId ?? null,
+        contextKey,
+        contextSnapshot: (input.contextSnapshot as any) ?? undefined
+      }
     })
   }
 
@@ -108,13 +168,28 @@ export class ChatService {
     })
   }
 
+  async getSessionContext(sessionId: string, orgId: string, userId: string) {
+    const session = await this.assertSession(sessionId, orgId, userId)
+    const panel = await this.buildContextPanel(orgId, session)
+    return {
+      sessionId: session.id,
+      title: session.title ?? null,
+      contextType: session.contextType,
+      contextId: session.contextId ?? null,
+      contextKey: session.contextKey,
+      panel,
+      contextSnapshot: (session.contextSnapshot as any) ?? null
+    }
+  }
+
   async sendMessage(orgId: string, userId: string, sessionId: string, content: string) {
-    await this.assertSession(sessionId, orgId, userId)
+    const session = await this.assertSession(sessionId, orgId, userId)
     await (this.prisma as any).chatMessage.create({
       data: { sessionId, role: 'user', content }
     })
 
-    const context = await this.buildContext(orgId, userId, content)
+    const activeContext = await this.buildContextPanel(orgId, session)
+    const context = await this.buildContext(orgId, userId, content, activeContext)
     const ai = await this.aiEmployees.runPersona('hatchAssistant' as any, {
       organizationId: orgId,
       userId,
@@ -169,9 +244,10 @@ export class ChatService {
     if (!session) {
       throw new Error('Session not found or unauthorized')
     }
+    return session
   }
 
-  private async buildContext(orgId: string, userId: string, content: string) {
+  private async buildContext(orgId: string, userId: string, content: string, activeContext?: ChatContextPanel | null) {
     const availableActions = this.describePlaybookActions()
     let tcInsights: Record<string, unknown> | null = null
     let nurtureDraft: Record<string, unknown> | null = null
@@ -213,10 +289,233 @@ export class ChatService {
             .join(', ')}`
         )
       }
-      return { topResults: top, timelines, availableActions, tcInsights, nurtureDraft, legalFormsContext }
+      return { activeContext: activeContext ?? null, topResults: top, timelines, availableActions, tcInsights, nurtureDraft, legalFormsContext }
     } catch (err) {
-      return { availableActions, tcInsights, nurtureDraft }
+      return { activeContext: activeContext ?? null, availableActions, tcInsights, nurtureDraft }
     }
+  }
+
+  private normalizeContextType(value?: string): ChatContextType {
+    const candidate = value?.trim().toUpperCase()
+    switch (candidate) {
+      case 'LEAD':
+        return ChatContextType.LEAD
+      case 'LISTING':
+        return ChatContextType.LISTING
+      case 'TRANSACTION':
+        return ChatContextType.TRANSACTION
+      case 'GENERAL':
+        return ChatContextType.GENERAL
+      default:
+        return ChatContextType.GENERAL
+    }
+  }
+
+  private buildContextKey(contextType: ChatContextType, contextId?: string) {
+    switch (contextType) {
+      case ChatContextType.GENERAL:
+        return 'GENERAL'
+      case ChatContextType.LEAD: {
+        if (!contextId) throw new Error('contextId is required for lead chat sessions')
+        return `LEAD:${contextId}`
+      }
+      case ChatContextType.LISTING: {
+        if (!contextId) throw new Error('contextId is required for listing chat sessions')
+        return `LISTING:${contextId}`
+      }
+      case ChatContextType.TRANSACTION: {
+        if (!contextId) throw new Error('contextId is required for transaction chat sessions')
+        return `TRANSACTION:${contextId}`
+      }
+      default:
+        return `LEGACY:${randomUUID()}`
+    }
+  }
+
+  private defaultTitleForContext(contextType: ChatContextType) {
+    switch (contextType) {
+      case ChatContextType.TRANSACTION:
+        return 'Transaction'
+      case ChatContextType.LISTING:
+        return 'Listing'
+      case ChatContextType.LEAD:
+        return 'Lead'
+      case ChatContextType.GENERAL:
+        return 'General'
+      default:
+        return 'Chat'
+    }
+  }
+
+  private async buildContextPanel(orgId: string, session: any): Promise<ChatContextPanel | null> {
+    const contextType: ChatContextType = session.contextType ?? ChatContextType.GENERAL
+    const contextId: string | null = session.contextId ?? null
+    const snapshot = (session.contextSnapshot as any) as ChatContextPanel | null | undefined
+
+    if (contextType === ChatContextType.GENERAL) {
+      return {
+        title: 'General context',
+        subtitle: 'Ask anything about your brokerage. Open Ask Hatch from a listing/transaction/lead to anchor the context.',
+        href: null,
+        fields: []
+      }
+    }
+
+    if (contextType === ChatContextType.TRANSACTION && contextId) {
+      const txn = await this.prisma.orgTransaction.findFirst({
+        where: { id: contextId, organizationId: orgId },
+        include: {
+          listing: { select: { id: true, addressLine1: true, city: true, state: true, postalCode: true, listPrice: true } },
+          agentProfile: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
+          documents: {
+            include: {
+              orgFile: { select: { id: true, name: true, fileId: true, documentType: true, complianceStatus: true } }
+            }
+          }
+        }
+      })
+
+      if (!txn) {
+        return snapshot ?? {
+          title: 'Transaction',
+          subtitle: `Transaction ${contextId}`,
+          href: `/broker/transactions?focus=${contextId}`,
+          fields: []
+        }
+      }
+
+      const address = txn.listing?.addressLine1
+        ? `${txn.listing.addressLine1}${txn.listing.city ? `, ${txn.listing.city}` : ''}`
+        : `Transaction ${txn.id}`
+
+      const docs = (txn.documents ?? [])
+        .map((doc) => doc.orgFile)
+        .filter(Boolean)
+        .slice(0, 8)
+        .map<ContextDocument>((file) => ({
+          id: file.id,
+          name: file.name,
+          fileId: file.fileId,
+          documentType: file.documentType ?? null,
+          complianceStatus: file.complianceStatus ?? null,
+          href: `/broker/documents/${file.id}`
+        }))
+
+      const agent = txn.agentProfile?.user
+        ? `${txn.agentProfile.user.firstName ?? ''} ${txn.agentProfile.user.lastName ?? ''}`.trim() || txn.agentProfile.user.email
+        : null
+
+      const fields: ContextField[] = [
+        { label: 'Status', value: String(txn.status) },
+        { label: 'Closing date', value: txn.closingDate ? new Date(txn.closingDate).toLocaleDateString() : '—' },
+        { label: 'Buyer', value: txn.buyerName ?? '—' },
+        { label: 'Seller', value: txn.sellerName ?? '—' }
+      ]
+      if (agent) fields.push({ label: 'Agent', value: agent })
+
+      const compliance = txn.requiresAction || txn.isCompliant === false ? 'Needs attention' : 'OK'
+      fields.push({ label: 'Compliance', value: compliance })
+
+      return {
+        title: address,
+        subtitle: txn.listing?.listPrice ? `$${Number(txn.listing.listPrice).toLocaleString()} list` : null,
+        href: `/broker/transactions?focus=${txn.id}`,
+        fields,
+        documents: docs
+      }
+    }
+
+    if (contextType === ChatContextType.LISTING && contextId) {
+      const listing = await this.prisma.orgListing.findFirst({
+        where: { id: contextId, organizationId: orgId },
+        include: {
+          agentProfile: { include: { user: { select: { firstName: true, lastName: true, email: true } } } },
+          documents: {
+            include: {
+              orgFile: { select: { id: true, name: true, fileId: true, documentType: true, complianceStatus: true } }
+            }
+          }
+        }
+      })
+
+      if (!listing) {
+        return snapshot ?? {
+          title: 'Listing',
+          subtitle: `Listing ${contextId}`,
+          href: `/broker/properties/${contextId}`,
+          fields: []
+        }
+      }
+
+      const agent = listing.agentProfile?.user
+        ? `${listing.agentProfile.user.firstName ?? ''} ${listing.agentProfile.user.lastName ?? ''}`.trim() ||
+          listing.agentProfile.user.email
+        : null
+
+      const docs = (listing.documents ?? [])
+        .map((doc) => doc.orgFile)
+        .filter(Boolean)
+        .slice(0, 8)
+        .map<ContextDocument>((file) => ({
+          id: file.id,
+          name: file.name,
+          fileId: file.fileId,
+          documentType: file.documentType ?? null,
+          complianceStatus: file.complianceStatus ?? null,
+          href: `/broker/documents/${file.id}`
+        }))
+
+      const fields: ContextField[] = [
+        { label: 'Status', value: String(listing.status) },
+        { label: 'Price', value: listing.listPrice ? `$${Number(listing.listPrice).toLocaleString()}` : '—' }
+      ]
+      if (agent) fields.push({ label: 'Agent', value: agent })
+
+      return {
+        title: listing.addressLine1,
+        subtitle: `${listing.city}, ${listing.state} ${listing.postalCode}`.trim(),
+        href: `/broker/properties/${listing.id}`,
+        fields,
+        documents: docs
+      }
+    }
+
+    if (contextType === ChatContextType.LEAD && contextId) {
+      const person = await this.prisma.person.findFirst({
+        where: { id: contextId, organizationId: orgId, deletedAt: null },
+        include: { owner: { select: { firstName: true, lastName: true, email: true } } }
+      })
+
+      if (!person) {
+        return snapshot ?? {
+          title: 'Lead',
+          subtitle: `Lead ${contextId}`,
+          href: `/broker/crm/leads/${contextId}`,
+          fields: []
+        }
+      }
+
+      const owner = person.owner
+        ? `${person.owner.firstName ?? ''} ${person.owner.lastName ?? ''}`.trim() || person.owner.email
+        : null
+
+      const fields: ContextField[] = [
+        { label: 'Stage', value: String(person.stage) },
+        { label: 'Lead type', value: String(person.leadType) },
+        { label: 'Email', value: person.primaryEmail ?? '—' },
+        { label: 'Phone', value: person.primaryPhone ?? '—' }
+      ]
+      if (owner) fields.push({ label: 'Owner', value: owner })
+
+      return {
+        title: `${person.firstName} ${person.lastName}`.trim() || 'Lead',
+        subtitle: person.primaryEmail ?? null,
+        href: `/broker/crm/leads/${person.id}`,
+        fields
+      }
+    }
+
+    return snapshot ?? null
   }
 
   private async runTransactionCoordinator(orgId: string, userId: string, transactionId: string) {

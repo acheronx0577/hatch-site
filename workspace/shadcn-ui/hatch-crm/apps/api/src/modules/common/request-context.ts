@@ -33,12 +33,24 @@ const toTeamIds = (value?: string | string[]): string[] => {
 
 export function resolveRequestContext(req: FastifyRequest): RequestContext {
   const headers = req.headers;
-  const userId = (headers['x-user-id'] as string | undefined)?.trim() || '';
+  const authUser = (req as FastifyRequest & { user?: Record<string, unknown> }).user;
+  const authUserId =
+    (authUser?.userId as string | undefined) ?? (authUser?.sub as string | undefined) ?? undefined;
+
+  const userId = authUserId ?? (headers['x-user-id'] as string | undefined)?.trim() ?? '';
+
   const tenantHeader = (headers['x-tenant-id'] as string | undefined)?.trim();
-  const tenantId = tenantHeader && tenantHeader.length > 0 ? tenantHeader : DEFAULT_TENANT_ID;
+  const authTenant = (authUser?.tenantId as string | undefined)?.trim();
+  const tenantId = tenantHeader && tenantHeader.length > 0 ? tenantHeader : authTenant && authTenant.length > 0 ? authTenant : DEFAULT_TENANT_ID;
+
   const orgHeader = (headers['x-org-id'] as string | undefined)?.trim();
-  const orgId = orgHeader && orgHeader.length > 0 ? orgHeader : DEFAULT_ORG_ID;
-  const roleHeader = (headers['x-user-role'] as string | undefined)?.trim().toUpperCase();
+  const authOrg =
+    (authUser?.orgId as string | undefined)?.trim() ??
+    (authUser?.organizationId as string | undefined)?.trim();
+  const orgId = orgHeader && orgHeader.length > 0 ? orgHeader : authOrg && authOrg.length > 0 ? authOrg : DEFAULT_ORG_ID;
+
+  const authRole = (authUser?.role as string | undefined)?.trim().toUpperCase();
+  const roleHeader = ((headers['x-user-role'] as string | undefined)?.trim() ?? authRole ?? '').toUpperCase();
   const role = ((roleHeader && (UserRole as Record<string, UserRole>)[roleHeader]) ?? DEFAULT_ROLE) as UserRole;
   const teamIds = toTeamIds(headers['x-user-team-ids'] as string | string[] | undefined);
   const allowTeamHeader = (headers['x-allow-team-contact-actions'] as string | undefined)?.trim().toLowerCase();

@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { fetchAgentProfile, fetchAgentTrainingProgress } from '@/lib/api/agents';
+import { AgentPerformancePanel } from './components/agent-performance-panel';
 
 const DEFAULT_ORG_ID = process.env.NEXT_PUBLIC_ORG_ID ?? 'org-hatch';
 
@@ -85,6 +86,13 @@ export default async function AgentDetailPage({ params }: AgentDetailPageProps) 
           </div>
         </Card>
       </div>
+
+      <AgentPerformancePanel
+        orgId={DEFAULT_ORG_ID}
+        agentProfileId={agentProfileId}
+        riskLevel={profile.riskLevel}
+        requiresAction={profile.requiresAction}
+      />
     </div>
   );
 }

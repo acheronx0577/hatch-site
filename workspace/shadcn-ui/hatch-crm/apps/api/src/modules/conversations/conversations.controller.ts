@@ -7,10 +7,12 @@ import {
   Param,
   Post,
   Query,
-  Req
+  Req,
+  UseGuards
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { resolveRequestContext } from '../common/request-context';
 import { ConversationsService } from './conversations.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
@@ -21,6 +23,7 @@ import { AddParticipantsDto } from './dto/update-participants.dto';
 import { UploadAttachmentDto } from './dto/upload-attachment.dto';
 
 @Controller('conversations')
+@UseGuards(JwtAuthGuard)
 export class ConversationsController {
   constructor(private readonly conversations: ConversationsService) {}
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -7,6 +7,7 @@ import {
 } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { resolveRequestContext } from '../common/request-context';
 import { ListingsService } from './listings.service';
 import type { BrokerPropertyRow, PromoteDraftPayload } from './types';
@@ -14,6 +15,7 @@ import type { BrokerPropertyRow, PromoteDraftPayload } from './types';
 @ApiTags('Listings')
 @ApiBearerAuth()
 @Controller(['listings', 'properties'])
+@UseGuards(JwtAuthGuard)
 export class ListingsController {
   constructor(private readonly listings: ListingsService) {}
 

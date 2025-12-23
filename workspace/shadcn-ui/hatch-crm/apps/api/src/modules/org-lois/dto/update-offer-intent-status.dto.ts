@@ -1,6 +1,6 @@
 import { IsIn, IsOptional, IsString } from 'class-validator';
 
-const OFFER_STATUS_VALUES = ['DRAFT', 'SUBMITTED', 'UNDER_REVIEW', 'ACCEPTED', 'DECLINED', 'WITHDRAWN'] as const;
+const OFFER_STATUS_VALUES = ['DRAFT', 'SENT', 'RECEIVED', 'COUNTERED', 'ACCEPTED', 'REJECTED'] as const;
 
 export class UpdateOfferIntentStatusDto {
   @IsIn(OFFER_STATUS_VALUES)

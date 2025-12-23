@@ -5,6 +5,8 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getApiBaseUrl } from '@/lib/api';
+import { getAttribution } from '@/lib/telemetry/attribution';
+import { getAnonymousId } from '@/lib/telemetry/identity';
 
 type FieldType = 'text' | 'email' | 'tel' | 'textarea';
 
@@ -25,41 +27,20 @@ type FormSchema = {
   };
 };
 
-function parseParams() {
-  const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
-  return {
-    utmSource: params.get('utm_source') ?? params.get('utmSource'),
-    utmMedium: params.get('utm_medium') ?? params.get('utmMedium'),
-    utmCampaign: params.get('utm_campaign') ?? params.get('utmCampaign'),
-    gclid: params.get('gclid'),
-    fbclid: params.get('fbclid')
-  };
-}
-
-function getAnonymousId() {
-  const key = 'hatch_anonymous_id';
-  try {
-    const existing = localStorage.getItem(key);
-    if (existing && existing.length > 10) return existing;
-    const next = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? (crypto as any).randomUUID() : `${Date.now()}_${Math.random()}`;
-    localStorage.setItem(key, next);
-    return next;
-  } catch {
-    return `${Date.now()}_${Math.random()}`;
-  }
-}
-
 export function LeadGenLandingForm(props: { orgId: string; slug: string; formSchema?: FormSchema | null }) {
   const schema = props.formSchema ?? {};
-  const fields: FormField[] =
-    schema.fields && Array.isArray(schema.fields) && schema.fields.length > 0
-      ? schema.fields
-      : [
-          { name: 'name', label: 'Full name', type: 'text' },
-          { name: 'email', label: 'Email', type: 'email', required: true },
-          { name: 'phone', label: 'Phone', type: 'tel' },
-          { name: 'message', label: 'Message', type: 'textarea' }
-        ];
+  const fields = useMemo<FormField[]>(() => {
+    if (schema.fields && Array.isArray(schema.fields) && schema.fields.length > 0) {
+      return schema.fields;
+    }
+
+    return [
+      { name: 'name', label: 'Full name', type: 'text' },
+      { name: 'email', label: 'Email', type: 'email', required: true },
+      { name: 'phone', label: 'Phone', type: 'tel' },
+      { name: 'message', label: 'Message', type: 'textarea' }
+    ];
+  }, [schema.fields]);
 
   const [values, setValues] = useState<Record<string, string>>({});
   const [consentEmail, setConsentEmail] = useState<boolean>(Boolean(schema.consent?.email));
@@ -80,7 +61,7 @@ export function LeadGenLandingForm(props: { orgId: string; slug: string; formSch
     setStatus('submitting');
     setError(null);
 
-    const { utmSource, utmMedium, utmCampaign, gclid, fbclid } = parseParams();
+    const { utmSource, utmMedium, utmCampaign, gclid, fbclid } = getAttribution();
 
     const payload: any = {
       name: values.name?.trim() || undefined,
@@ -182,4 +163,3 @@ export function LeadGenLandingForm(props: { orgId: string; slug: string; formSch
     </div>
   );
 }
-

@@ -31,9 +31,9 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
-import { ChatWindow } from '@/components/chat/ChatWindow'
 import { getLatestDripStepForLead } from '@/lib/api/drip-campaigns'
 import { emitCopilotContext } from '@/lib/copilot/events'
+import { emitAskHatchOpen } from '@/lib/ask-hatch/events'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ApiError } from '@/lib/api/errors'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -122,8 +122,6 @@ export default function LeadDetailPage() {
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(
     fallbackLeadDetail ? 'Showing cached lead snapshot while we sync with the CRM…' : null
   )
-  const [chatOpen, setChatOpen] = useState(false)
-  const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined)
   const [nextDrip, setNextDrip] = useState<{
     actionType?: string
     offsetHours?: number
@@ -139,6 +137,7 @@ export default function LeadDetailPage() {
     lastName: '',
     email: '',
     phone: '',
+    leadType: 'UNKNOWN',
     consentEmail: false,
     consentSMS: false,
     doNotContact: false
@@ -392,8 +391,22 @@ export default function LeadDetailPage() {
   const openFollowUpChat = () => {
     if (!lead) return
     const label = `${lead.firstName ?? ''} ${lead.lastName ?? ''}`.trim() || lead.email || lead.id
-    setInitialPrompt(`Draft a follow-up email for lead ${label}. Keep it concise and propose the next best action.`)
-    setChatOpen(true)
+    emitAskHatchOpen({
+      title: `Lead · ${label}`,
+      contextType: 'LEAD',
+      contextId: lead.id,
+      contextSnapshot: {
+        title: label,
+        subtitle: lead.email ?? null,
+        href: `/broker/crm/leads/${lead.id}`,
+        fields: [
+          { label: 'Pipeline', value: pipelineName },
+          { label: 'Stage', value: stageName },
+          { label: 'Lead type', value: lead.leadType ?? 'UNKNOWN' },
+          { label: 'Representing Licensee', value: lead.owner?.name ?? 'Unassigned' }
+        ]
+      }
+    })
   }
 
   const openEdit = () => {
@@ -403,6 +416,7 @@ export default function LeadDetailPage() {
       lastName: lead.lastName ?? '',
       email: lead.email ?? '',
       phone: lead.phone ?? '',
+      leadType: lead.leadType ?? 'UNKNOWN',
       consentEmail: Boolean(lead.consents.find((c) => c.channel === 'EMAIL' && c.status === 'GRANTED')),
       consentSMS: Boolean(lead.consents.find((c) => c.channel === 'SMS' && c.status === 'GRANTED')),
       doNotContact: false
@@ -421,6 +435,7 @@ export default function LeadDetailPage() {
         lastName: form.lastName || undefined,
         email: form.email || undefined,
         phone: form.phone || undefined,
+        leadType: form.leadType,
         consentEmail: form.consentEmail,
         consentSMS: form.consentSMS,
         doNotContact: form.doNotContact
@@ -524,7 +539,7 @@ export default function LeadDetailPage() {
                 </CardTitle>
                 <CardDescription>
                   {pipelineName} · {stageDisplay.short}
-                  {stageDisplay.long ? ` · ${stageDisplay.long}` : ''} · Owner {lead.owner?.name ?? 'Unassigned'}
+                  {stageDisplay.long ? ` · ${stageDisplay.long}` : ''}{lead.leadType && lead.leadType !== 'UNKNOWN' ? ` · ${lead.leadType === 'BUYER' ? 'Buyer lead' : 'Seller lead'}` : ''} · Representing Licensee {lead.owner?.name ?? 'Unassigned'}
                 </CardDescription>
               </div>
               <div className="flex flex-col items-end gap-2 text-right text-xs">
@@ -778,7 +793,6 @@ export default function LeadDetailPage() {
       <Button asChild variant="secondary">
         <Link to="/broker/crm">Return to pipeline</Link>
       </Button>
-      <ChatWindow open={chatOpen} onClose={() => setChatOpen(false)} initialPrompt={initialPrompt} />
 
       {/* Edit Lead Dialog */}
       <EditLeadDialog
@@ -803,8 +817,8 @@ function EditLeadDialog({
 }: {
   open: boolean
   busy: boolean
-  form: { firstName: string; lastName: string; email: string; phone: string; consentEmail: boolean; consentSMS: boolean; doNotContact: boolean }
-  setForm: React.Dispatch<React.SetStateAction<{ firstName: string; lastName: string; email: string; phone: string; consentEmail: boolean; consentSMS: boolean; doNotContact: boolean }>>
+  form: { firstName: string; lastName: string; email: string; phone: string; leadType: string; consentEmail: boolean; consentSMS: boolean; doNotContact: boolean }
+  setForm: React.Dispatch<React.SetStateAction<{ firstName: string; lastName: string; email: string; phone: string; leadType: string; consentEmail: boolean; consentSMS: boolean; doNotContact: boolean }>>
   onClose: () => void
   onSave: () => void
 }) {
@@ -836,6 +850,19 @@ function EditLeadDialog({
               <Label htmlFor="phone">Phone</Label>
               <Input id="phone" placeholder={e164Hint} value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
             </div>
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="leadType">Lead type</Label>
+            <select
+              id="leadType"
+              className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-sm"
+              value={form.leadType}
+              onChange={(e) => setForm((f) => ({ ...f, leadType: e.target.value }))}
+            >
+              <option value="UNKNOWN">Unknown</option>
+              <option value="BUYER">Buyer</option>
+              <option value="SELLER">Seller</option>
+            </select>
           </div>
           <div className="grid grid-cols-3 gap-3 pt-2">
             <label className="flex items-center gap-2 text-sm">

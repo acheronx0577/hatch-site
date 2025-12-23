@@ -38,7 +38,7 @@ class MockEmbeddings implements EmbeddingsProvider {
   }
 
   private vec(text: string) {
-    const dim = 1536;
+    const dim = 768;
     const out = new Array(dim).fill(0);
     let hash = 2166136261 >>> 0;
     for (let i = 0; i < text.length; i += 1) {
@@ -71,5 +71,5 @@ class LlmEmbeddingsAdapter implements EmbeddingsProvider {
 }
 
 function usesVendorProvider(name: string) {
-  return ['llm', 'internal', 'vendor', 'openai'].includes(name);
+  return ['llm', 'internal', 'vendor', 'grok', 'xai'].includes(name);
 }

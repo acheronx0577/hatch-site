@@ -533,7 +533,7 @@ function ListingGroup({
 
 const getContractStatusBadge = (status: string) => {
   if (status === 'SIGNED') return 'border border-emerald-100 bg-emerald-50 text-emerald-700';
-  if (status === 'SENT') return 'border border-amber-100 bg-amber-50 text-amber-700';
+  if (status === 'OUT_FOR_SIGNATURE') return 'border border-amber-100 bg-amber-50 text-amber-700';
   if (status === 'VOIDED') return 'border border-rose-100 bg-rose-50 text-rose-700';
   return 'border bg-slate-100 text-slate-700';
 };

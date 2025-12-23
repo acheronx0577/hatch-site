@@ -21,7 +21,7 @@ export const MissionControlLayout: React.FC<MissionControlLayoutProps> = ({
           {kpis}
           {modules}
         </div>
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
+        <aside className="flex flex-col gap-6 lg:sticky lg:top-24">
           {sidebar}
         </aside>
       </div>

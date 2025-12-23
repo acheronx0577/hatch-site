@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import { CalendarClock, NotebookPen, ShieldCheck, Target } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { ErrorBanner } from '@/components/error-banner';
 import { useApiError } from '@/hooks/use-api-error';
@@ -24,6 +25,7 @@ interface LeadActionsProps {
 
 export default function ContactActions({ lead, pipelines }: LeadActionsProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [note, setNote] = useState('');
   const [taskTitle, setTaskTitle] = useState('');
   const [taskDueAt, setTaskDueAt] = useState('');
@@ -62,6 +64,8 @@ export default function ContactActions({ lead, pipelines }: LeadActionsProps) {
     return stageOptions.find((option) => option.value === stageValue)?.label ?? 'Select a stage';
   }, [stageOptions, stageValue]);
 
+  const leadType = lead.leadType ?? 'UNKNOWN';
+
   const handleStageChange = (value: string) => {
     if (value === stageValue) return;
     const [pipelineId, stageId] = value.split(':');
@@ -74,6 +78,25 @@ export default function ContactActions({ lead, pipelines }: LeadActionsProps) {
         });
         setMessage('Stage updated');
         clearError();
+        void queryClient.invalidateQueries({ queryKey: ['insights'] });
+        router.refresh();
+      } catch (error) {
+        showError(error);
+        setMessage(null);
+      }
+    });
+  };
+
+  const handleLeadTypeChange = (value: string) => {
+    const nextType = value === 'BUYER' || value === 'SELLER' || value === 'UNKNOWN' ? value : null;
+    if (!nextType || nextType === leadType) return;
+
+    startTransition(async () => {
+      try {
+        await updateLead(lead.id, { leadType: nextType });
+        setMessage('Lead type updated');
+        clearError();
+        void queryClient.invalidateQueries({ queryKey: ['insights'] });
         router.refresh();
       } catch (error) {
         showError(error);
@@ -88,6 +111,7 @@ export default function ContactActions({ lead, pipelines }: LeadActionsProps) {
         await updateLead(lead.id, type === 'EMAIL' ? { consentEmail: checked } : { consentSMS: checked });
         setMessage(`${type} consent ${checked ? 'granted' : 'revoked'}`);
         clearError();
+        void queryClient.invalidateQueries({ queryKey: ['insights'] });
         router.refresh();
       } catch (error) {
         showError(error);
@@ -104,6 +128,7 @@ export default function ContactActions({ lead, pipelines }: LeadActionsProps) {
         setNote('');
         setMessage('Note added');
         clearError();
+        void queryClient.invalidateQueries({ queryKey: ['insights'] });
         router.refresh();
       } catch (error) {
         showError(error);
@@ -127,6 +152,7 @@ export default function ContactActions({ lead, pipelines }: LeadActionsProps) {
         setTaskDueAt('');
         setMessage('Task created');
         clearError();
+        void queryClient.invalidateQueries({ queryKey: ['insights'] });
         router.refresh();
       } catch (error) {
         showError(error);
@@ -166,6 +192,31 @@ export default function ContactActions({ lead, pipelines }: LeadActionsProps) {
               {option.label}
             </option>
           ))}
+        </select>
+      </div>
+
+      <div className="rounded-xl border border-slate-200/60 bg-white px-4 py-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Target className="h-4 w-4 text-brand-500" />
+              Lead type
+            </p>
+            <p className="text-xs text-slate-500">Buyer/seller orientation used for routing and reporting.</p>
+          </div>
+          <span className="inline-flex items-center rounded-full border border-slate-200/60 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+            {leadType === 'UNKNOWN' ? 'Unknown' : leadType === 'BUYER' ? 'Buyer' : 'Seller'}
+          </span>
+        </div>
+        <select
+          value={leadType}
+          onChange={(event) => handleLeadTypeChange(event.target.value)}
+          disabled={isPending}
+          className="mt-3 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <option value="UNKNOWN">Unknown</option>
+          <option value="BUYER">Buyer</option>
+          <option value="SELLER">Seller</option>
         </select>
       </div>
 

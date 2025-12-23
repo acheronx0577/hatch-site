@@ -1,18 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import {
+  approveRoutingApprovalQueueItem,
   fetchRoutingCapacity,
+  fetchRoutingApprovalQueue,
   fetchRoutingEvents,
   fetchRoutingMetrics,
   fetchRoutingRules,
+  fetchRoutingSettings,
   fetchRoutingSla,
   createRoutingRule,
   updateRoutingRule,
   deleteRoutingRule,
   processRoutingSla,
+  rejectRoutingApprovalQueueItem,
+  updateRoutingSettings,
+  type LeadRoutingOrgMode,
   type LeadRoutingRule,
   type LeadRouteEventRecord,
   type LeadRoutingRulePayload,
+  type LeadRoutingSettings,
+  type RoutingApprovalQueueItem,
   type RoutingCapacityAgent,
   type RoutingMetricsSummary,
   type RoutingSlaDashboard,
@@ -55,7 +63,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/components/ui/use-toast'
-import { AlertTriangle, Edit3, Loader2, PlusCircle, RefreshCcw, Trash2 } from 'lucide-react'
+import { AlertTriangle, Edit3, Loader2, PlusCircle, Trash2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const TENANT_ID = import.meta.env.VITE_TENANT_ID || 'tenant-hatch'
 
@@ -78,6 +87,7 @@ type RuleFormState = {
   priceMax: string
   agentTargets: string
   teamTarget: string
+  teamLeadersOnly: boolean
   pondTeam: string
   slaFirstTouch: string
   slaKeptAppointment: string
@@ -95,6 +105,7 @@ const emptyForm: RuleFormState = {
   priceMax: '',
   agentTargets: '',
   teamTarget: '',
+  teamLeadersOnly: false,
   pondTeam: '',
   slaFirstTouch: '30',
   slaKeptAppointment: '1440'
@@ -202,7 +213,11 @@ function RuleDialog({ open, onOpenChange, initialRule, onSubmit }: RuleDialogPro
             ?.filter((target) => target.type === 'AGENT')
             .map((target) => target.id)
             .join(', ') ?? ''
-        const teamTarget = initialRule.targets?.find((target) => target.type === 'TEAM')?.id ?? ''
+        const teamTargetConfig = initialRule.targets?.find((target) => target.type === 'TEAM') ?? null
+        const teamTarget = teamTargetConfig?.id ?? ''
+        const teamLeadersOnly =
+          Array.isArray((teamTargetConfig as any)?.includeRoles) &&
+          (teamTargetConfig as any).includeRoles.some((role: unknown) => String(role).toLowerCase() === 'leader')
         const pondTarget =
           initialRule.fallback?.teamId ??
           initialRule.targets?.find((target) => target.type === 'POND')?.id ??
@@ -220,6 +235,7 @@ function RuleDialog({ open, onOpenChange, initialRule, onSubmit }: RuleDialogPro
           priceMax: priceBand.max !== undefined ? String(priceBand.max) : '',
           agentTargets,
           teamTarget,
+          teamLeadersOnly,
           pondTeam: pondTarget,
           slaFirstTouch:
             initialRule.slaFirstTouchMinutes !== undefined && initialRule.slaFirstTouchMinutes !== null
@@ -259,7 +275,12 @@ function RuleDialog({ open, onOpenChange, initialRule, onSubmit }: RuleDialogPro
       }
     }
     if (form.teamTarget) {
-      targets.push({ type: 'TEAM', id: form.teamTarget, strategy: 'BEST_FIT' })
+      targets.push({
+        type: 'TEAM',
+        id: form.teamTarget,
+        strategy: 'BEST_FIT',
+        ...(form.teamLeadersOnly ? { includeRoles: ['leader'] } : {})
+      })
     }
     if (form.pondTeam) {
       targets.push({ type: 'POND', id: form.pondTeam })
@@ -449,6 +470,17 @@ function RuleDialog({ open, onOpenChange, initialRule, onSubmit }: RuleDialogPro
                   placeholder="team-id"
                 />
               </div>
+              <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                <div>
+                  <Label className="text-sm font-medium">Team leaders only</Label>
+                  <p className="text-xs text-muted-foreground">Route TEAM targets to members with role “leader”.</p>
+                </div>
+                <Switch
+                  checked={form.teamLeadersOnly}
+                  onCheckedChange={(value) => handleChange('teamLeadersOnly', value)}
+                  disabled={!form.teamTarget}
+                />
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="rule-pond">Pond / fallback team</Label>
                 <Input
@@ -532,15 +564,24 @@ function LeadRoutingDesk() {
   const [refreshing, setRefreshing] = useState(false)
   const [processingSla, setProcessingSla] = useState(false)
 
-  const [rules, setRules] = useState<LeadRoutingRule[]>([])
-  const [capacity, setCapacity] = useState<RoutingCapacityAgent[]>([])
-  const [events, setEvents] = useState<LeadRouteEventRecord[]>([])
-  const [sla, setSla] = useState<RoutingSlaDashboard | null>(null)
-  const [metrics, setMetrics] = useState<RoutingMetricsSummary | null>(null)
+	const [rules, setRules] = useState<LeadRoutingRule[]>([])
+	const [capacity, setCapacity] = useState<RoutingCapacityAgent[]>([])
+	const [events, setEvents] = useState<LeadRouteEventRecord[]>([])
+	const [sla, setSla] = useState<RoutingSlaDashboard | null>(null)
+	const [metrics, setMetrics] = useState<RoutingMetricsSummary | null>(null)
+	const [routingSettings, setRoutingSettings] = useState<LeadRoutingSettings | null>(null)
+	const [approvalQueue, setApprovalQueue] = useState<RoutingApprovalQueueItem[]>([])
+	const [updatingMode, setUpdatingMode] = useState(false)
+	const [queueActionId, setQueueActionId] = useState<string | null>(null)
+	const [advancedOpen, setAdvancedOpen] = useState(false)
 
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingRule, setEditingRule] = useState<LeadRoutingRule | null>(null)
-  const [searchParams, setSearchParams] = useSearchParams()
+	const [reassignDialogOpen, setReassignDialogOpen] = useState(false)
+	const [reassignTarget, setReassignTarget] = useState<RoutingApprovalQueueItem | null>(null)
+	const [reassignAgentId, setReassignAgentId] = useState<string>('')
+
+	const [dialogOpen, setDialogOpen] = useState(false)
+	const [editingRule, setEditingRule] = useState<LeadRoutingRule | null>(null)
+	const [searchParams, setSearchParams] = useSearchParams()
 
   const parseStatus = (value: string | null): OfferStatusFilter => {
     if (!value) return 'ALL'
@@ -573,21 +614,25 @@ function LeadRoutingDesk() {
     return events.filter((event) => getEventOfferStatus(event) === statusFilter)
   }, [events, statusFilter])
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [rulesData, capacityData, slaData, metricsData, eventsData] = await Promise.all([
-        fetchRoutingRules(TENANT_ID),
-        fetchRoutingCapacity(TENANT_ID),
-        fetchRoutingSla(TENANT_ID),
-        fetchRoutingMetrics(TENANT_ID),
-        fetchRoutingEvents({ tenantId: TENANT_ID, limit: 15 })
-      ])
-      setRules(normalizeArray<LeadRoutingRule>(rulesData))
-      setCapacity(normalizeArray<RoutingCapacityAgent>(capacityData))
-      setSla(slaData)
-      setMetrics(metricsData)
-      setEvents(normalizeArray<LeadRouteEventRecord>(eventsData))
+	const loadData = useCallback(async () => {
+		setLoading(true)
+		try {
+			const [settingsData, queueData, rulesData, capacityData, slaData, metricsData, eventsData] = await Promise.all([
+				fetchRoutingSettings(TENANT_ID),
+				fetchRoutingApprovalQueue(TENANT_ID),
+				fetchRoutingRules(TENANT_ID),
+				fetchRoutingCapacity(TENANT_ID),
+				fetchRoutingSla(TENANT_ID),
+				fetchRoutingMetrics(TENANT_ID),
+				fetchRoutingEvents({ tenantId: TENANT_ID, limit: 15 })
+			])
+			setRoutingSettings(settingsData)
+			setApprovalQueue(queueData.items ?? [])
+			setRules(normalizeArray<LeadRoutingRule>(rulesData))
+			setCapacity(normalizeArray<RoutingCapacityAgent>(capacityData))
+			setSla(slaData)
+			setMetrics(metricsData)
+			setEvents(normalizeArray<LeadRouteEventRecord>(eventsData))
     } catch (error) {
       toast({
         title: 'Unable to load routing data',
@@ -603,30 +648,135 @@ function LeadRoutingDesk() {
     loadData()
   }, [loadData])
 
-  const refreshSection = async () => {
-    setRefreshing(true)
-    try {
-      const [rulesData, eventsData] = await Promise.all([
-        fetchRoutingRules(TENANT_ID),
-        fetchRoutingEvents({ tenantId: TENANT_ID, limit: 15 })
-      ])
-      setRules(normalizeArray<LeadRoutingRule>(rulesData))
-      setEvents(normalizeArray<LeadRouteEventRecord>(eventsData))
-    } catch (error) {
-      toast({
-        title: 'Refresh failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive'
-      })
-    } finally {
-      setRefreshing(false)
-    }
-  }
+	const refreshSection = async () => {
+		setRefreshing(true)
+		try {
+			const [settingsData, queueData, rulesData, eventsData] = await Promise.all([
+				fetchRoutingSettings(TENANT_ID),
+				fetchRoutingApprovalQueue(TENANT_ID),
+				fetchRoutingRules(TENANT_ID),
+				fetchRoutingEvents({ tenantId: TENANT_ID, limit: 15 })
+			])
+			setRoutingSettings(settingsData)
+			setApprovalQueue(queueData.items ?? [])
+			setRules(normalizeArray<LeadRoutingRule>(rulesData))
+			setEvents(normalizeArray<LeadRouteEventRecord>(eventsData))
+		} catch (error) {
+			toast({
+				title: 'Refresh failed',
+				description: error instanceof Error ? error.message : 'Unknown error',
+				variant: 'destructive'
+			})
+		} finally {
+			setRefreshing(false)
+		}
+	}
 
-  const ruleNameById = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const rule of normalizeArray<LeadRoutingRule>(rules)) {
-      map.set(rule.id, rule.name)
+	const refreshApprovalQueue = useCallback(async () => {
+		const queue = await fetchRoutingApprovalQueue(TENANT_ID)
+		setApprovalQueue(queue.items ?? [])
+	}, [])
+
+	const handleToggleApprovalPool = async (enabled: boolean) => {
+		const currentMode = routingSettings?.mode ?? 'AUTOMATIC'
+		const nextMode: LeadRoutingOrgMode = enabled ? 'APPROVAL_POOL' : 'AUTOMATIC'
+		if (currentMode === nextMode) return
+
+		const ok = window.confirm(
+			enabled
+				? 'Enable Broker Approval Pool? New inbound leads will be queued until a broker approves an assignee.'
+				: 'Disable Broker Approval Pool? New inbound leads will assign automatically; any currently queued leads remain pending until you approve/reject them.'
+		)
+		if (!ok) return
+
+		setUpdatingMode(true)
+		try {
+			const updated = await updateRoutingSettings(TENANT_ID, { mode: nextMode })
+			setRoutingSettings(updated)
+			await refreshApprovalQueue()
+			toast({
+				title: 'Routing mode updated',
+				description: updated.mode === 'APPROVAL_POOL' ? 'New leads will require broker approval.' : 'New leads will assign automatically.'
+			})
+		} catch (error) {
+			toast({
+				title: 'Unable to update routing mode',
+				description: error instanceof Error ? error.message : 'Unknown error',
+				variant: 'destructive'
+			})
+		} finally {
+			setUpdatingMode(false)
+		}
+	}
+
+	const approveQueueItem = async (item: RoutingApprovalQueueItem, agentId?: string | null) => {
+		setQueueActionId(item.assignmentId)
+		try {
+			await approveRoutingApprovalQueueItem({
+				tenantId: TENANT_ID,
+				assignmentId: item.assignmentId,
+				agentId: agentId ?? null
+			})
+			toast({
+				title: 'Lead assigned',
+				description: agentId ? 'Lead assigned to selected agent.' : 'Lead assigned to the system recommendation.'
+			})
+			await refreshApprovalQueue()
+		} catch (error) {
+			toast({
+				title: 'Unable to approve lead',
+				description: error instanceof Error ? error.message : 'Unknown error',
+				variant: 'destructive'
+			})
+		} finally {
+			setQueueActionId(null)
+		}
+	}
+
+	const rejectQueueItem = async (item: RoutingApprovalQueueItem) => {
+		const ok = window.confirm('Reject this lead assignment request? The lead will remain unassigned.')
+		if (!ok) return
+		setQueueActionId(item.assignmentId)
+		try {
+			await rejectRoutingApprovalQueueItem({ tenantId: TENANT_ID, assignmentId: item.assignmentId })
+			toast({ title: 'Removed from approval pool' })
+			await refreshApprovalQueue()
+		} catch (error) {
+			toast({
+				title: 'Unable to reject lead',
+				description: error instanceof Error ? error.message : 'Unknown error',
+				variant: 'destructive'
+			})
+		} finally {
+			setQueueActionId(null)
+		}
+	}
+
+	const openReassign = (item: RoutingApprovalQueueItem) => {
+		setReassignTarget(item)
+		setReassignAgentId(item.recommended?.agentId ?? item.candidates[0]?.agentId ?? '')
+		setReassignDialogOpen(true)
+	}
+
+	const submitReassign = async () => {
+		if (!reassignTarget) return
+		if (!reassignAgentId) {
+			toast({
+				title: 'Select an agent',
+				description: 'Choose an agent to assign this lead.',
+				variant: 'destructive'
+			})
+			return
+		}
+		await approveQueueItem(reassignTarget, reassignAgentId)
+		setReassignDialogOpen(false)
+		setReassignTarget(null)
+	}
+
+	const ruleNameById = useMemo(() => {
+		const map = new Map<string, string>()
+		for (const rule of normalizeArray<LeadRoutingRule>(rules)) {
+			map.set(rule.id, rule.name)
     }
     return map
   }, [rules])
@@ -702,38 +852,199 @@ function LeadRoutingDesk() {
     )
   }
 
-  return (
-    <div className="space-y-8 px-6 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Lead Routing & SLA Desk</h1>
-          <p className="text-sm text-muted-foreground">
-            Tune assignment rules, monitor SLA health, and audit decision transparency.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={refreshSection} disabled={refreshing}>
-            {refreshing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Refresh
-          </Button>
-          <Button onClick={() => { setEditingRule(null); setDialogOpen(true) }}>
-            <PlusCircle className="mr-2 h-4 w-4" />
-            New rule
-          </Button>
-        </div>
-      </div>
+	  return (
+	    <div className="space-y-8">
+	      <div className="flex flex-wrap items-center justify-between gap-4">
+	        <div>
+	          <h1 className="text-[30px] font-semibold tracking-tight">Lead Routing & SLA Desk</h1>
+	          <p className="text-sm text-muted-foreground">
+	            Choose how new leads get assigned. Advanced rules and SLA analytics live under “Advanced”.
+	          </p>
+	        </div>
+	        <div className="flex items-center gap-2">
+	          <Button variant="outline" onClick={refreshSection} disabled={refreshing}>
+	            {refreshing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+	            Refresh
+	          </Button>
+	        </div>
+		      </div>
 
+		      <div className="grid gap-4 md:grid-cols-2">
+		        <Card>
+		          <CardHeader>
+		            <CardTitle>Routing mode</CardTitle>
+		            <CardDescription>Automatic assignment or broker approval pool.</CardDescription>
+		          </CardHeader>
+		          <CardContent className="space-y-3">
+		            <div className="flex items-start justify-between gap-4">
+		              <div className="space-y-1">
+		                <p className="text-sm font-semibold">Broker approval pool</p>
+		                <p className="text-xs text-muted-foreground">
+		                  When enabled, new inbound leads stay unassigned until a broker approves an assignee.
+		                </p>
+		              </div>
+		              <div className="flex items-center gap-2">
+		                <Switch
+		                  checked={(routingSettings?.mode ?? 'AUTOMATIC') === 'APPROVAL_POOL'}
+		                  onCheckedChange={handleToggleApprovalPool}
+		                  disabled={!routingSettings || updatingMode}
+		                />
+		                {updatingMode ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+		              </div>
+		            </div>
+		            <div className="text-xs text-muted-foreground">
+		              Current:{' '}
+		              <span className="font-semibold text-slate-900">
+		                {(routingSettings?.mode ?? 'AUTOMATIC') === 'APPROVAL_POOL' ? 'Broker approval pool' : 'Automatic'}
+		              </span>
+		            </div>
+		            {routingSettings?.approvalTeamName ? (
+		              <div className="text-xs text-muted-foreground">
+		                Queue: <span className="font-semibold text-slate-900">{routingSettings.approvalTeamName}</span>
+		              </div>
+		            ) : null}
+		          </CardContent>
+		        </Card>
+
+		        <Card className="md:col-span-2">
+		          <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+		            <div>
+		              <CardTitle>Broker approval pool</CardTitle>
+		              <CardDescription>Pending leads waiting for broker assignment.</CardDescription>
+		            </div>
+		            <Badge variant="secondary">{approvalQueue.length} pending</Badge>
+		          </CardHeader>
+		          <CardContent>
+		            {approvalQueue.length === 0 ? (
+		              <div className="text-sm text-muted-foreground">
+		                {routingSettings?.mode === 'APPROVAL_POOL'
+		                  ? 'No leads waiting for approval.'
+		                  : 'Enable Broker approval pool to queue new inbound leads for review.'}
+		              </div>
+		            ) : (
+		              <ScrollArea className="max-h-[320px] pr-2">
+		                <Table>
+		                  <TableHeader>
+		                    <TableRow>
+		                      <TableHead>Lead</TableHead>
+		                      <TableHead>Recommended</TableHead>
+		                      <TableHead>Why</TableHead>
+		                      <TableHead className="text-right">Actions</TableHead>
+		                    </TableRow>
+		                  </TableHeader>
+		                  <TableBody>
+		                    {approvalQueue.map((item) => (
+		                      <TableRow key={item.assignmentId}>
+		                        <TableCell className="min-w-[260px]">
+		                          <div className="space-y-1">
+		                            <div className="flex flex-wrap items-center gap-2">
+		                              <Link
+		                                to={`/broker/crm/leads/${encodeURIComponent(item.personId)}`}
+		                                className="font-semibold hover:underline"
+		                              >
+		                                {item.lead.name}
+		                              </Link>
+		                              <Badge variant="outline" className="text-[10px]">
+		                                {item.lead.leadType}
+		                              </Badge>
+		                              <Badge variant="secondary" className="text-[10px]">
+		                                {item.lead.stage}
+		                              </Badge>
+		                            </div>
+		                            <div className="text-xs text-muted-foreground">
+		                              {[item.lead.email, item.lead.phone].filter(Boolean).join(' • ') || '—'}
+		                            </div>
+		                          </div>
+		                        </TableCell>
+		                        <TableCell className="min-w-[220px]">
+		                          {item.recommended ? (
+		                            <div className="space-y-1">
+		                              <div className="font-medium">{item.recommended.fullName || item.recommended.agentId}</div>
+		                              {item.recommended.score !== null ? (
+		                                <div className="text-xs text-muted-foreground">
+		                                  Score {item.recommended.score.toFixed(2)}
+		                                </div>
+		                              ) : null}
+		                            </div>
+		                          ) : (
+		                            <span className="text-sm text-muted-foreground">—</span>
+		                          )}
+		                        </TableCell>
+		                        <TableCell className="min-w-[260px] text-xs text-muted-foreground">
+		                          {item.recommended?.reasons?.length ? item.recommended.reasons.join(' • ') : '—'}
+		                        </TableCell>
+		                        <TableCell className="text-right">
+		                          <div className="flex flex-wrap justify-end gap-2">
+		                            <Button
+		                              size="sm"
+		                              onClick={() => approveQueueItem(item)}
+		                              disabled={queueActionId === item.assignmentId}
+		                            >
+		                              {queueActionId === item.assignmentId && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+		                              Approve
+		                            </Button>
+		                            <Button
+		                              size="sm"
+		                              variant="outline"
+		                              onClick={() => openReassign(item)}
+		                              disabled={queueActionId === item.assignmentId}
+		                            >
+		                              Reassign
+		                            </Button>
+		                            <Button
+		                              size="sm"
+		                              variant="destructive"
+		                              onClick={() => rejectQueueItem(item)}
+		                              disabled={queueActionId === item.assignmentId}
+		                            >
+		                              Reject
+		                            </Button>
+		                          </div>
+		                        </TableCell>
+		                      </TableRow>
+		                    ))}
+		                  </TableBody>
+		                </Table>
+		              </ScrollArea>
+		            )}
+		          </CardContent>
+		        </Card>
+		      </div>
+
+		      <details
+		        open={advancedOpen}
+		        onToggle={(event) => setAdvancedOpen((event.currentTarget as HTMLDetailsElement).open)}
+		        className="rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-white/5 p-4 backdrop-blur-md dark:bg-white/5"
+		      >
+		        <summary className="cursor-pointer select-none text-sm font-semibold text-slate-900 dark:text-ink-100">
+		          Advanced (rules, capacity, SLA, metrics, events)
+		        </summary>
+		        <div className="mt-6 space-y-8">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Routing rules</CardTitle>
             <CardDescription>Ordered by priority; lower numbers evaluate first.</CardDescription>
           </div>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingRule(null)
+              setDialogOpen(true)
+            }}
+          >
+            <PlusCircle className="mr-2 h-4 w-4" />
+            New rule
+          </Button>
         </CardHeader>
         <CardContent>
           {rules.length === 0 ? (
-            <div className="flex items-center justify-center rounded-md border border-dashed py-10 text-sm text-muted-foreground">
-              No routing rules configured yet.
+            <div className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-dashed border-[var(--glass-border)] bg-white/10 py-10 text-sm text-muted-foreground backdrop-blur-md dark:bg-white/5">
+              <PlusCircle className="h-6 w-6 text-brand-blue-600" />
+              <p className="font-medium text-slate-700 dark:text-ink-100">No routing rules yet.</p>
+              <p className="text-xs text-slate-500 dark:text-ink-100/70">
+                Create a rule to start assigning new leads automatically.
+              </p>
             </div>
           ) : (
             <ScrollArea className="max-h-[340px] pr-2">
@@ -845,28 +1156,28 @@ function LeadRoutingDesk() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-gradient-to-r before:from-brand-blue-600 before:to-brand-green-500 before:content-['']">
           <CardHeader>
             <CardTitle>SLA health</CardTitle>
             <CardDescription>Monitor timer load and process breaches.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Total timers</p>
-                <p className="text-lg font-semibold">{sla?.summary.total ?? 0}</p>
+              <div className="rounded-[var(--radius-md)] border border-white/20 bg-card/[var(--hatch-glass-alpha-recessed)] p-4 backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Total timers</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">{sla?.summary.total ?? 0}</p>
               </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Pending</p>
-                <p className="text-lg font-semibold">{sla?.summary.pending ?? 0}</p>
+              <div className="rounded-[var(--radius-md)] border border-white/20 bg-card/[var(--hatch-glass-alpha-recessed)] p-4 backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Pending</p>
+                <p className="mt-1 text-2xl font-semibold text-slate-900">{sla?.summary.pending ?? 0}</p>
               </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Breached</p>
-                <p className="text-lg font-semibold text-destructive">{sla?.summary.breached ?? 0}</p>
+              <div className="rounded-[var(--radius-md)] border border-rose-200/60 bg-rose-500/10 p-4 backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">Breached</p>
+                <p className="mt-1 text-2xl font-semibold text-rose-700">{sla?.summary.breached ?? 0}</p>
               </div>
-              <div className="rounded-lg border p-3">
-                <p className="text-xs text-muted-foreground">Satisfied</p>
-                <p className="text-lg font-semibold text-emerald-600">{sla?.summary.satisfied ?? 0}</p>
+              <div className="rounded-[var(--radius-md)] border border-emerald-200/60 bg-emerald-500/10 p-4 backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">Satisfied</p>
+                <p className="mt-1 text-2xl font-semibold text-emerald-700">{sla?.summary.satisfied ?? 0}</p>
               </div>
             </div>
             <Button onClick={handleProcessSla} disabled={processingSla} variant="outline">
@@ -915,26 +1226,26 @@ function LeadRoutingDesk() {
         <CardContent className="space-y-4">
           {metrics ? (
             <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-lg border p-4">
-                <p className="text-xs text-muted-foreground">Average time to first touch</p>
-                <p className="text-lg font-semibold">{formatMinutes(metrics.firstTouch.averageMinutes)}</p>
-                <p className="text-xs text-muted-foreground mt-1">{metrics.firstTouch.count} satisfied timers</p>
+              <div className="rounded-[var(--radius-md)] border border-white/20 bg-card/[var(--hatch-glass-alpha-recessed)] p-4 backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">Avg first touch</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-900">{formatMinutes(metrics.firstTouch.averageMinutes)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{metrics.firstTouch.count} satisfied timers</p>
               </div>
-              <div className="rounded-lg border p-4">
-                <p className="text-xs text-muted-foreground">First-touch breach rate</p>
-                <p className="text-lg font-semibold text-destructive">
+              <div className="rounded-[var(--radius-md)] border border-rose-200/60 bg-rose-500/10 p-4 backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">First-touch breach</p>
+                <p className="mt-2 text-2xl font-semibold text-rose-700">
                   {percent(metrics.breach.firstTouch.percentage)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {metrics.breach.firstTouch.breached} of {metrics.breach.firstTouch.total} timers
                 </p>
               </div>
-              <div className="rounded-lg border p-4">
-                <p className="text-xs text-muted-foreground">Kept appointment breach rate</p>
-                <p className="text-lg font-semibold text-destructive">
+              <div className="rounded-[var(--radius-md)] border border-rose-200/60 bg-rose-500/10 p-4 backdrop-blur-md">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">Kept appt breach</p>
+                <p className="mt-2 text-2xl font-semibold text-rose-700">
                   {percent(metrics.breach.keptAppointment.percentage)}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {metrics.breach.keptAppointment.breached} of {metrics.breach.keptAppointment.total} timers
                 </p>
               </div>
@@ -997,17 +1308,18 @@ function LeadRoutingDesk() {
             <CardTitle>Decision viewer</CardTitle>
             <CardDescription>Recent routing events with candidate transparency.</CardDescription>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-1 rounded-full border border-[var(--glass-border)] bg-white/10 p-1 backdrop-blur-md dark:bg-white/5">
             {offerStatusFilters.map((option) => (
               <button
                 key={option.id}
                 type="button"
                 onClick={() => handleStatusFilterChange(option.id)}
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                className={cn(
+                  'rounded-full px-3 py-1 text-[11px] font-semibold transition-colors duration-200',
                   statusFilter === option.id
-                    ? 'bg-slate-900 text-white'
-                    : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+                    ? 'border border-white/20 bg-white/35 text-slate-900 shadow-brand'
+                    : 'text-slate-600 hover:bg-white/20 hover:text-slate-900 dark:text-ink-100/70 dark:hover:bg-white/10 dark:hover:text-ink-100'
+                )}
               >
                 {option.label}
               </button>
@@ -1027,7 +1339,7 @@ function LeadRoutingDesk() {
               const ruleName = event.matchedRuleId ? ruleNameById.get(event.matchedRuleId) ?? event.matchedRuleId : 'No rule matched'
               const offerStatus = getEventOfferStatus(event)
               return (
-                <div key={event.id} className="rounded-lg border p-4">
+                <div key={event.id} className="rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-white/10 p-4 backdrop-blur-md dark:bg-white/5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h4 className="font-semibold">{ruleName}</h4>
@@ -1061,11 +1373,65 @@ function LeadRoutingDesk() {
             })
           )}
         </CardContent>
-      </Card>
+	      </Card>
 
-      <RuleDialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
+		      </div>
+		    </details>
+
+		    <Dialog
+		      open={reassignDialogOpen}
+		      onOpenChange={(open) => {
+		        setReassignDialogOpen(open)
+		        if (!open) {
+		          setReassignTarget(null)
+		        }
+		      }}
+		    >
+		      <DialogContent>
+		        <DialogHeader>
+		          <DialogTitle>Reassign lead</DialogTitle>
+		          <DialogDescription>Select an agent to take this lead.</DialogDescription>
+		        </DialogHeader>
+
+		        <div className="space-y-2">
+		          <Label>Agent</Label>
+		          <Select value={reassignAgentId} onValueChange={setReassignAgentId}>
+		            <SelectTrigger>
+		              <SelectValue placeholder="Select an agent" />
+		            </SelectTrigger>
+		            <SelectContent>
+		              {(reassignTarget?.candidates ?? []).map((candidate) => (
+		                <SelectItem key={candidate.agentId} value={candidate.agentId}>
+		                  {candidate.fullName || candidate.agentId}
+		                </SelectItem>
+		              ))}
+		            </SelectContent>
+		          </Select>
+		          <p className="text-xs text-muted-foreground">
+		            Options come from the last routing run (top candidates).
+		          </p>
+		        </div>
+
+		        <DialogFooter>
+		          <Button variant="outline" onClick={() => setReassignDialogOpen(false)}>
+		            Cancel
+		          </Button>
+		          <Button
+		            onClick={submitReassign}
+		            disabled={!reassignTarget || !reassignAgentId || queueActionId === reassignTarget.assignmentId}
+		          >
+		            {reassignTarget && queueActionId === reassignTarget.assignmentId && (
+		              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+		            )}
+		            Assign
+		          </Button>
+		        </DialogFooter>
+		      </DialogContent>
+		    </Dialog>
+	
+	      <RuleDialog
+	        open={dialogOpen}
+	        onOpenChange={(open) => {
           setDialogOpen(open)
           if (!open) setEditingRule(null)
         }}

@@ -43,6 +43,7 @@ const DEFAULT_FORM = {
   phone: '',
   source: '',
   ownerId: '',
+  leadType: 'UNKNOWN',
   pipelineId: '',
   stageId: '',
   notes: '',
@@ -176,7 +177,7 @@ export function AddLeadModal({
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Owner</Label>
+              <Label>Representing Licensee</Label>
               <Select value={form.ownerId || 'unassigned'} onValueChange={(value) => handleChange('ownerId', value === 'unassigned' ? '' : value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Unassigned" />
@@ -192,9 +193,22 @@ export function AddLeadModal({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Source</Label>
-              <Input value={form.source} onChange={(event) => handleChange('source', event.target.value)} placeholder="Zillow, Open house, Referral…" />
+              <Label>Lead type</Label>
+              <Select value={form.leadType} onValueChange={(value) => handleChange('leadType', value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Unknown" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UNKNOWN">Unknown</SelectItem>
+                  <SelectItem value="BUYER">Buyer</SelectItem>
+                  <SelectItem value="SELLER">Seller</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Source</Label>
+            <Input value={form.source} onChange={(event) => handleChange('source', event.target.value)} placeholder="Zillow, Open house, Referral…" />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">

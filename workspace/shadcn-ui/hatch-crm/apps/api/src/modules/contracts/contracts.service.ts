@@ -1,8 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ContractInstanceStatus, OrgListingContactType, Prisma, SignatureEnvelopeStatus } from '@hatch/db';
 import { PDFCheckBox, PDFDocument, PDFDropdown, PDFOptionList, PDFRadioGroup, PDFTextField, StandardFonts, rgb } from 'pdf-lib';
 import pdfParseModule from 'pdf-parse';
+import { Readable } from 'stream';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
@@ -101,9 +102,12 @@ const DEFAULT_EDITABLE_KEYS = new Set<string>([
   'BROKER_EMAIL'
 ]);
 
+const MAX_OVERLAY_BOXES = 2000;
+
 @Injectable()
 export class ContractsService {
   private readonly logger = new Logger(ContractsService.name);
+  private s3NotConfiguredPdf: Buffer | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -113,6 +117,36 @@ export class ContractsService {
     private readonly docusign: ContractsDocuSignService,
     private readonly config: ConfigService
   ) {}
+
+  private async getS3NotConfiguredPdf(): Promise<Buffer> {
+    if (this.s3NotConfiguredPdf) return this.s3NotConfiguredPdf;
+
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([612, 792]);
+    const titleFont = await doc.embedFont(StandardFonts.HelveticaBold);
+    const bodyFont = await doc.embedFont(StandardFonts.Helvetica);
+
+    const title = 'PDF unavailable in local dev';
+    const lines = [
+      'This contract PDF is stored in S3, but the API is not configured with a bucket.',
+      '',
+      'Set `AWS_S3_BUCKET_DOCS` (or `AWS_S3_BUCKET`) and AWS credentials, then restart the API.',
+      '',
+      'Once configured, reload this page.'
+    ];
+
+    let y = 740;
+    page.drawText(title, { x: 54, y, size: 18, font: titleFont, color: rgb(0.12, 0.12, 0.12) });
+    y -= 32;
+
+    for (const line of lines) {
+      page.drawText(line, { x: 54, y, size: 12, font: bodyFont, color: rgb(0.2, 0.2, 0.2) });
+      y -= 18;
+    }
+
+    this.s3NotConfiguredPdf = Buffer.from(await doc.save());
+    return this.s3NotConfiguredPdf;
+  }
 
   async listTemplates(orgId: string, query: ListTemplatesQueryDto) {
     const activeOnly = (query.active ?? 'true').toLowerCase() !== 'false';
@@ -349,7 +383,7 @@ export class ContractsService {
       erase?: boolean;
     }> = [];
 
-    for (const entry of boxesRaw.slice(0, 250)) {
+    for (const entry of boxesRaw.slice(0, MAX_OVERLAY_BOXES)) {
       if (!entry || typeof entry !== 'object') continue;
       const id = typeof (entry as any).id === 'string' ? (entry as any).id : '';
       const page = (entry as any).page;
@@ -454,6 +488,53 @@ export class ContractsService {
 
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       form.updateFieldAppearances(font);
+
+      const overlayBoxes = this.readOverlayBoxes(values) ?? [];
+      if (overlayBoxes.length > 0) {
+        const pages = pdfDoc.getPages();
+        const padding = 6;
+        const defaultFontSize = 10;
+
+        for (const box of overlayBoxes) {
+          const resolvedKey = box.key?.trim() ?? '';
+          const hasKey = resolvedKey.length > 0;
+          const isManualOverride = hasKey && box.value !== undefined;
+          const isFreeText = !hasKey;
+          if (!isManualOverride && !isFreeText) continue;
+
+          const page = pages[box.page - 1];
+          if (!page) continue;
+
+          if (box.value === undefined) continue;
+          const rawValue = this.coercePdfValue(box.value);
+          const value = rawValue.replace(/\s+/g, ' ').trim();
+          if (!value) continue;
+
+          const fontSize = box.fontSize ?? defaultFontSize;
+          const erase = Boolean(box.erase);
+          const boxPadding = erase ? 0 : padding;
+          const maxWidth = Math.max(0, box.w - boxPadding * 2);
+          const drawnValue = maxWidth > 0 ? this.truncateTextToWidth(value, maxWidth, font, fontSize) : value;
+          if (!drawnValue) continue;
+
+          const pageHeight = page.getHeight();
+          const pageWidth = page.getWidth();
+          const x = box.x + boxPadding;
+          const y = pageHeight - box.y - boxPadding - fontSize;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          if (x < 0 || y < 0 || x > pageWidth || y > pageHeight) continue;
+
+          if (erase) {
+            const rectX = box.x;
+            const rectY = pageHeight - box.y - box.h;
+            if (Number.isFinite(rectX) && Number.isFinite(rectY)) {
+              page.drawRectangle({ x: rectX, y: rectY, width: box.w, height: box.h, color: rgb(1, 1, 1) });
+            }
+          }
+
+          page.drawText(drawnValue, { x, y, size: fontSize, font });
+        }
+      }
 
       const outputKey = this.draftS3KeyForInstance(params.orgId, params.instanceId);
       const filledBytes = await pdfDoc.save();
@@ -696,7 +777,6 @@ export class ContractsService {
       throw new NotFoundException('Contract PDF not found');
     }
 
-    const stream = await this.s3.getObjectStream(key);
     const baseName = String(instance.title ?? 'contract')
       .replace(/[\\/:*?"<>|]+/g, '')
       .trim();
@@ -704,6 +784,24 @@ export class ContractsService {
       ? baseName
       : `${baseName || 'contract'}.pdf`;
 
+    if (!this.s3.isConfigured()) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new ServiceUnavailableException(
+          'Contract PDFs are unavailable because AWS_S3_BUCKET is not configured.'
+        );
+      }
+
+      this.logger.warn('AWS_S3_BUCKET is not configured; serving placeholder PDF.');
+      const placeholder = await this.getS3NotConfiguredPdf();
+      return {
+        stream: Readable.from(placeholder),
+        mimeType: 'application/pdf',
+        fileName,
+        s3Key: key
+      };
+    }
+
+    const stream = await this.s3.getObjectStream(key);
     return {
       stream,
       mimeType: 'application/pdf',

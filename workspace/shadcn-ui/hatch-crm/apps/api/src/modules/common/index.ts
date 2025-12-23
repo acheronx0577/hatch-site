@@ -7,3 +7,4 @@ export * from './openapi/decorators';
 export * from './request-context';
 export * from './org-admin.guard';
 export * from './prisma-json.util';
+export * from './twilio-webhook.guard';

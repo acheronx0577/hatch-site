@@ -25,7 +25,7 @@ export class SemanticSearchService {
     const limit = Math.max(1, Math.min(params.limit ?? maxTopK, 20));
 
     const [queryVector] = await this.embeddings.embed([query], { tenantId });
-    const dim = queryVector.length || 1536;
+    const dim = queryVector.length || 768;
     const vectorValues = Prisma.join(queryVector.map((value) => Prisma.sql`${value}`));
     const vectorExpr = Prisma.sql`(${vectorValues})::vector(${dim})`;
 

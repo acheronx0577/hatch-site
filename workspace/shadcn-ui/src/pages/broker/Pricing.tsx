@@ -144,17 +144,17 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="p-6 space-y-10">
+    <div className="space-y-10">
       <div className="text-center space-y-4">
         <Badge variant="outline" className="gap-2 text-sm">
           <ShieldCheck className="h-4 w-4" /> Seat-based subscriptions with Stripe checkout
         </Badge>
-        <h1 className="text-4xl font-bold text-gray-900">Choose a plan that fits your brokerage</h1>
-        <p className="text-lg text-gray-600 max-w-2xl mx-auto">
+        <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Choose a plan that fits your brokerage</h1>
+        <p className="text-lg text-slate-600 max-w-2xl mx-auto">
           Each bundle includes the full Hatch marketing + listings suite. Pick the seat count that matches your team,
           or talk with sales for a tailored rollout.
         </p>
-        <div className="inline-flex items-center gap-2 bg-slate-100 rounded-full p-1">
+        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--glass-border)] bg-white/10 p-1 backdrop-blur-md">
           <Button
             size="sm"
             variant={interval === 'monthly' ? 'default' : 'ghost'}
@@ -172,7 +172,7 @@ export default function PricingPage() {
             Yearly
           </Button>
         </div>
-        <p className="text-sm text-gray-500">{intervalCopy[interval].helper}</p>
+        <p className="text-sm text-slate-500">{intervalCopy[interval].helper}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">

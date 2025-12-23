@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { Loader2, Mail, MessageSquare, Phone } from 'lucide-react'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -16,6 +17,7 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 
 import { useLeadActions } from '@/hooks/useLeadActions'
@@ -53,15 +55,47 @@ export function LeadDrawer({
   const [detail, setDetail] = useState<LeadDetail>(() => createFallbackDetail(lead))
   const [loading, setLoading] = useState(false)
   const [noteDraft, setNoteDraft] = useState('')
-  const { pending, error, clearError, changeStage, assignOwner, addNote } = useLeadActions(leadId)
+  const [fitForm, setFitForm] = useState(() => ({
+    preapproved: Boolean(lead?.preapproved ?? false),
+    budgetMin: lead?.budgetMin != null ? String(lead.budgetMin) : '',
+    budgetMax: lead?.budgetMax != null ? String(lead.budgetMax) : '',
+    timeframeDays: lead?.timeframeDays != null ? String(lead.timeframeDays) : '',
+    geo: ''
+  }))
+  const [fitInventoryMatch, setFitInventoryMatch] = useState<number | null>(null)
+  const [hasRemoteDetail, setHasRemoteDetail] = useState(false)
+  const { pending, error, clearError, changeStage, assignOwner, updateLeadType, addNote, updateFit } = useLeadActions(leadId)
+  const seededLeadIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!open) {
+    if (open) return
+    seededLeadIdRef.current = null
+    setHasRemoteDetail(false)
+  }, [open])
+
+  useEffect(() => {
+    if (!open || !leadId) return
+    if (seededLeadIdRef.current === leadId) return
+
+    seededLeadIdRef.current = leadId
+    setHasRemoteDetail(false)
+    if (lead) {
       setDetail(createFallbackDetail(lead))
-      setNoteDraft('')
-      clearError()
-      return
+      setFitForm({
+        preapproved: Boolean(lead.preapproved ?? false),
+        budgetMin: lead.budgetMin != null ? String(lead.budgetMin) : '',
+        budgetMax: lead.budgetMax != null ? String(lead.budgetMax) : '',
+        timeframeDays: lead.timeframeDays != null ? String(lead.timeframeDays) : '',
+        geo: ''
+      })
+      setFitInventoryMatch(null)
     }
+    setNoteDraft('')
+    clearError()
+  }, [open, lead, leadId, clearError])
+
+  useEffect(() => {
+    if (!open) return
     if (!leadId) return
 
     let cancelled = false
@@ -71,13 +105,39 @@ export function LeadDrawer({
         const result = await getLead(leadId)
         if (!cancelled) {
           setDetail(result)
+          const fit = result.fit ?? null
+          const budgetMin = fit?.budgetMin ?? result.budgetMin ?? null
+          const budgetMax = fit?.budgetMax ?? result.budgetMax ?? null
+          const timeframeDays = fit?.timeframeDays ?? result.timeframeDays ?? null
+          const geo = fit?.geo ?? ''
+
+          setFitForm({
+            preapproved: Boolean(fit?.preapproved ?? result.preapproved ?? false),
+            budgetMin: typeof budgetMin === 'number' ? String(budgetMin) : '',
+            budgetMax: typeof budgetMax === 'number' ? String(budgetMax) : '',
+            timeframeDays: typeof timeframeDays === 'number' ? String(timeframeDays) : '',
+            geo: geo ?? ''
+          })
+          setFitInventoryMatch(typeof fit?.inventoryMatch === 'number' ? fit.inventoryMatch : null)
           setNoteDraft('')
+          setHasRemoteDetail(true)
         }
       } catch (err) {
         console.error('Failed to load lead details', err)
         if (!cancelled && lead) {
           setDetail(createFallbackDetail(lead))
+          setFitForm({
+            preapproved: Boolean(lead.preapproved ?? false),
+            budgetMin: lead.budgetMin != null ? String(lead.budgetMin) : '',
+            budgetMax: lead.budgetMax != null ? String(lead.budgetMax) : '',
+            timeframeDays: lead.timeframeDays != null ? String(lead.timeframeDays) : '',
+            geo: ''
+          })
+          setFitInventoryMatch(null)
           setNoteDraft('')
+        }
+        if (!cancelled) {
+          setHasRemoteDetail(false)
         }
       } finally {
         if (!cancelled) {
@@ -169,6 +229,16 @@ export function LeadDrawer({
     }
   }
 
+  const handleLeadTypeChange = async (nextLeadType: string) => {
+    try {
+      const updated = await updateLeadType(nextLeadType as any)
+      setDetail(updated)
+      onLeadUpdated(extractSummary(updated))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const handleAddNote = async () => {
     const text = noteDraft.trim()
     if (!text) return
@@ -185,6 +255,31 @@ export function LeadDrawer({
     }
   }
 
+  const parseOptionalInt = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    const parsed = Number(trimmed)
+    if (!Number.isFinite(parsed)) return null
+    return Math.max(0, Math.round(parsed))
+  }
+
+  const handleSaveQualification = async () => {
+    try {
+      const updated = await updateFit({
+        preapproved: fitForm.preapproved,
+        budgetMin: parseOptionalInt(fitForm.budgetMin),
+        budgetMax: parseOptionalInt(fitForm.budgetMax),
+        timeframeDays: parseOptionalInt(fitForm.timeframeDays),
+        geo: fitForm.geo.trim() || null,
+        inventoryMatch: fitInventoryMatch
+      })
+      setDetail(updated)
+      onLeadUpdated(extractSummary(updated))
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   const displayName = detail
     ? `${detail.firstName ?? ''} ${detail.lastName ?? ''}`.trim() || 'Lead'
     : lead
@@ -194,27 +289,25 @@ export function LeadDrawer({
   const lastActivity = detail?.lastActivityAt ?? lead?.lastActivityAt
   const stageEnteredAt = detail?.stageEnteredAt ?? lead?.stageEnteredAt
   const ownerName = detail?.owner?.name ?? lead?.owner?.name ?? 'Unassigned'
+  const leadType = detail?.leadType ?? lead?.leadType ?? 'UNKNOWN'
+  const leadTypeLabel = leadType === 'BUYER' ? 'Buyer' : leadType === 'SELLER' ? 'Seller' : null
   const stageName = detail?.stage?.name ?? lead?.stage?.name ?? 'Unassigned'
   const stageDisplay = getStageDisplay(stageName)
   const pipelineName =
     detail?.pipelineName ?? detail?.stage?.pipelineName ?? lead?.pipelineName ?? lead?.stage?.pipelineName ?? 'Pipeline'
+  const qualificationDisabled = pending === 'fit' || !hasRemoteDetail || loading
 
   return (
     <Sheet
       open={open}
-      onOpenChange={(next) => {
-        if (!next) {
-          setDetail(null)
-        }
-        onOpenChange(next)
-      }}
+      onOpenChange={onOpenChange}
     >
       <SheetContent side="right" className="flex w-full flex-col gap-4 bg-background p-0 sm:max-w-md">
         <SheetHeader className="border-b border-slate-200 px-6 py-5 text-left">
           <SheetTitle className="text-xl">{displayName}</SheetTitle>
           <SheetDescription>
             {pipelineName} · {stageDisplay.short}
-            {stageDisplay.long ? ` · ${stageDisplay.long}` : ''} · Owner {ownerName}
+            {stageDisplay.long ? ` · ${stageDisplay.long}` : ''}{leadTypeLabel ? ` · ${leadTypeLabel} lead` : ''} · Representing Licensee {ownerName}
           </SheetDescription>
         </SheetHeader>
 
@@ -267,6 +360,96 @@ export function LeadDrawer({
                   </dl>
                 </section>
 
+                <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Qualification</p>
+                      <p className="text-sm text-slate-700">
+                        Mortgage and buying criteria{!hasRemoteDetail ? ' (syncing…)': ''}
+                      </p>
+                    </div>
+                    <Badge variant={fitForm.preapproved ? 'default' : 'secondary'}>
+                      {fitForm.preapproved ? 'Pre-approved' : 'Not pre-approved'}
+                    </Badge>
+                  </div>
+                  <Separator className="my-3" />
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="lead-preapproved" className="text-sm text-slate-700">
+                        Pre-approved
+                      </Label>
+                      <Switch
+                        id="lead-preapproved"
+                        checked={fitForm.preapproved}
+                        onCheckedChange={(checked) => setFitForm((prev) => ({ ...prev, preapproved: checked }))}
+                        disabled={qualificationDisabled}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-budget-min" className="text-xs text-slate-600">
+                          Budget min
+                        </Label>
+                        <Input
+                          id="lead-budget-min"
+                          type="number"
+                          value={fitForm.budgetMin}
+                          onChange={(event) => setFitForm((prev) => ({ ...prev, budgetMin: event.target.value }))}
+                          placeholder="e.g. 350000"
+                          disabled={qualificationDisabled}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-budget-max" className="text-xs text-slate-600">
+                          Budget max
+                        </Label>
+                        <Input
+                          id="lead-budget-max"
+                          type="number"
+                          value={fitForm.budgetMax}
+                          onChange={(event) => setFitForm((prev) => ({ ...prev, budgetMax: event.target.value }))}
+                          placeholder="e.g. 550000"
+                          disabled={qualificationDisabled}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-timeframe" className="text-xs text-slate-600">
+                          Timeframe (days)
+                        </Label>
+                        <Input
+                          id="lead-timeframe"
+                          type="number"
+                          value={fitForm.timeframeDays}
+                          onChange={(event) => setFitForm((prev) => ({ ...prev, timeframeDays: event.target.value }))}
+                          placeholder="e.g. 30"
+                          disabled={qualificationDisabled}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="lead-geo" className="text-xs text-slate-600">
+                          Target area
+                        </Label>
+                        <Input
+                          id="lead-geo"
+                          value={fitForm.geo}
+                          onChange={(event) => setFitForm((prev) => ({ ...prev, geo: event.target.value }))}
+                          placeholder="e.g. Miami Beach"
+                          disabled={qualificationDisabled}
+                        />
+                      </div>
+                    </div>
+
+                    <Button type="button" size="sm" onClick={handleSaveQualification} disabled={qualificationDisabled}>
+                      {pending === 'fit' && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                      Save qualification
+                    </Button>
+                  </div>
+                </section>
+
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-700">Stage</h3>
@@ -300,7 +483,7 @@ export function LeadDrawer({
                 </section>
 
                 <section className="space-y-2">
-                  <Label htmlFor="lead-owner">Owner</Label>
+                  <Label htmlFor="lead-owner">Representing Licensee</Label>
                   <Select
                     value={detail.owner?.id ?? 'unassigned'}
                     onValueChange={handleOwnerChange}
@@ -316,6 +499,24 @@ export function LeadDrawer({
                           {owner.name}
                         </SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </section>
+
+                <section className="space-y-2">
+                  <Label htmlFor="lead-type">Lead type</Label>
+                  <Select
+                    value={detail.leadType ?? 'UNKNOWN'}
+                    onValueChange={handleLeadTypeChange}
+                    disabled={pending === 'leadType'}
+                  >
+                    <SelectTrigger id="lead-type">
+                      <SelectValue placeholder="Unknown" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="UNKNOWN">Unknown</SelectItem>
+                      <SelectItem value="BUYER">Buyer</SelectItem>
+                      <SelectItem value="SELLER">Seller</SelectItem>
                     </SelectContent>
                   </Select>
                 </section>

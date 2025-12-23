@@ -8,17 +8,24 @@ import {
   Patch,
   Post,
   Query,
-  Req
+  Req,
+  UseGuards
 } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { RolesGuard } from '@/auth/roles.guard';
 import { ApiModule, ApiStandardErrors, resolveRequestContext } from '../common';
+import { PermissionsService } from '@/modules/permissions/permissions.service';
 import { CreateRoutingRuleDto } from './dto/create-routing-rule.dto';
+import { RoutingApprovalDecisionDto, RoutingApprovalQueueResponseDto } from './dto/routing-approval-queue.dto';
 import { RoutingRuleDraftDto, RoutingRuleDraftRequestDto } from './dto/routing-ai.dto';
+import { RoutingSettingsDto, UpdateRoutingSettingsDto } from './dto/routing-settings.dto';
 import { UpdateRoutingRuleDto } from './dto/update-routing-rule.dto';
 import { RoutingAiService } from './routing-ai.service';
 import { RoutingService } from './routing.service';
+import { RoutingSettingsService } from './routing-settings.service';
 import {
   RoutingCapacityEntryDto,
   RoutingCapacityResponseDto,
@@ -46,11 +53,117 @@ const parseMaybeJson = (value: unknown) => {
 @ApiModule('Routing')
 @ApiStandardErrors()
 @Controller('routing')
+@UseGuards(JwtAuthGuard)
 export class RoutingController {
   constructor(
     private readonly routing: RoutingService,
-    private readonly routingAi: RoutingAiService
+    private readonly routingAi: RoutingAiService,
+    private readonly routingSettings: RoutingSettingsService,
+    private readonly permissions: PermissionsService
   ) {}
+
+  @Get('settings')
+  @ApiQuery({ name: 'tenantId', required: false })
+  @ApiOkResponse({ type: RoutingSettingsDto })
+  async settings(
+    @Query('tenantId') tenantId: string | undefined,
+    @Req() req: FastifyRequest
+  ): Promise<RoutingSettingsDto> {
+    const ctx = resolveRequestContext(req);
+    const scopedTenantId = this.resolveTenantId(ctx, tenantId);
+    await this.permissions.assertBrokerOrTeamLead(ctx.orgId, ctx.userId);
+    const result = await this.routingSettings.getSettings({ orgId: ctx.orgId, tenantId: scopedTenantId });
+    return {
+      mode: result.mode,
+      approvalTeamId: result.approvalTeamId,
+      approvalTeamName: result.approvalTeamName,
+      updatedAt: result.updatedAt ? result.updatedAt.toISOString() : null
+    };
+  }
+
+  @Patch('settings')
+  @UseGuards(RolesGuard('broker'))
+  @ApiQuery({ name: 'tenantId', required: false })
+  @ApiBody({ type: UpdateRoutingSettingsDto })
+  @ApiOkResponse({ type: RoutingSettingsDto })
+  async updateSettings(
+    @Body() dto: UpdateRoutingSettingsDto,
+    @Query('tenantId') tenantId: string | undefined,
+    @Req() req: FastifyRequest
+  ): Promise<RoutingSettingsDto> {
+    const ctx = resolveRequestContext(req);
+    const scopedTenantId = this.resolveTenantId(ctx, tenantId);
+    await this.permissions.assertBroker(ctx.orgId, ctx.userId);
+    const result = await this.routingSettings.updateSettings({
+      orgId: ctx.orgId,
+      tenantId: scopedTenantId,
+      mode: dto.mode,
+      approvalTeamId: dto.approvalTeamId ?? undefined
+    });
+    return {
+      mode: result.mode,
+      approvalTeamId: result.approvalTeamId,
+      approvalTeamName: result.approvalTeamName,
+      updatedAt: result.updatedAt ? result.updatedAt.toISOString() : null
+    };
+  }
+
+  @Get('approval-queue')
+  @UseGuards(RolesGuard('broker'))
+  @ApiQuery({ name: 'tenantId', required: false })
+  @ApiOkResponse({ type: RoutingApprovalQueueResponseDto })
+  async approvalQueue(
+    @Query('tenantId') tenantId: string | undefined,
+    @Req() req: FastifyRequest
+  ): Promise<RoutingApprovalQueueResponseDto> {
+    const ctx = resolveRequestContext(req);
+    const scopedTenantId = this.resolveTenantId(ctx, tenantId);
+    await this.permissions.assertBroker(ctx.orgId, ctx.userId);
+    return this.routingSettings.listApprovalQueue({ tenantId: scopedTenantId, orgId: ctx.orgId });
+  }
+
+  @Post('approval-queue/:assignmentId/approve')
+  @UseGuards(RolesGuard('broker'))
+  @ApiParam({ name: 'assignmentId', description: 'Approval queue assignment id' })
+  @ApiQuery({ name: 'tenantId', required: false })
+  @ApiBody({ type: RoutingApprovalDecisionDto })
+  @ApiOkResponse({ schema: { type: 'object' } })
+  async approveFromQueue(
+    @Param('assignmentId') assignmentId: string,
+    @Body() dto: RoutingApprovalDecisionDto,
+    @Query('tenantId') tenantId: string | undefined,
+    @Req() req: FastifyRequest
+  ) {
+    const ctx = resolveRequestContext(req);
+    const scopedTenantId = this.resolveTenantId(ctx, tenantId);
+    await this.permissions.assertBroker(ctx.orgId, ctx.userId);
+    return this.routingSettings.approveFromQueue({
+      tenantId: scopedTenantId,
+      orgId: ctx.orgId,
+      assignmentId,
+      agentId: dto.agentId ?? undefined
+    });
+  }
+
+  @Post('approval-queue/:assignmentId/reject')
+  @UseGuards(RolesGuard('broker'))
+  @ApiParam({ name: 'assignmentId', description: 'Approval queue assignment id' })
+  @ApiQuery({ name: 'tenantId', required: false })
+  @ApiOkResponse({ schema: { type: 'object' } })
+  async rejectFromQueue(
+    @Param('assignmentId') assignmentId: string,
+    @Query('tenantId') tenantId: string | undefined,
+    @Req() req: FastifyRequest
+  ) {
+    const ctx = resolveRequestContext(req);
+    const scopedTenantId = this.resolveTenantId(ctx, tenantId);
+    await this.permissions.assertBroker(ctx.orgId, ctx.userId);
+    return this.routingSettings.rejectFromQueue({
+      tenantId: scopedTenantId,
+      orgId: ctx.orgId,
+      assignmentId
+    });
+  }
 
   @Get('rules')
   @ApiQuery({ name: 'tenantId', required: false })

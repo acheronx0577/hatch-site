@@ -2,7 +2,7 @@ import './globals.css';
 
 import type { Metadata } from 'next';
 import { Inter, Plus_Jakarta_Sans } from 'next/font/google';
-import type { ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 import { Analytics } from '@vercel/analytics/next';
 
 import { AppShell } from '@/components/layout/AppShell';
@@ -34,7 +34,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${plusJakarta.variable}`}>
       <body className="min-h-screen bg-gray-50 text-[var(--hatch-text)] antialiased">
-        <AppShell>{children}</AppShell>
+        <Suspense fallback={<div className="min-h-screen bg-gray-50" />}>
+          <AppShell>{children}</AppShell>
+        </Suspense>
         <Toaster />
         <Analytics />
       </body>

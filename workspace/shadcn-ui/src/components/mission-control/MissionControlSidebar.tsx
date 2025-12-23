@@ -1,8 +1,8 @@
 import React from 'react';
 
 interface MissionControlSidebarProps {
-  securityAudit: React.ReactNode;
   activityFeed: React.ReactNode;
+  securityAudit?: React.ReactNode;
 }
 
 export const MissionControlSidebar: React.FC<MissionControlSidebarProps> = ({
@@ -10,8 +10,8 @@ export const MissionControlSidebar: React.FC<MissionControlSidebarProps> = ({
   activityFeed
 }) => {
   return (
-    <div className="flex flex-col gap-4">
-      {securityAudit}
+    <div className="flex flex-col gap-6">
+      {securityAudit ? <>{securityAudit}</> : null}
       {activityFeed}
     </div>
   );

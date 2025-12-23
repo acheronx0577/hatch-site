@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react'
+import React, { useMemo } from 'react'
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import BrokerSidebar from './BrokerSidebar'
@@ -7,12 +7,8 @@ import { ExternalLink } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { resolveUserIdentity } from '@/lib/utils'
 import { useUserRole } from '@/lib/auth/roles'
+import { ChatWindow } from '@/components/chat/ChatWindow'
 import { CopilotDock } from '@/components/copilot/CopilotDock'
-import { HatchAIWidget, type HatchAIMessage } from '@/components/copilot/HatchAIWidget'
-import { chatAiPersona, type PersonaChatMessage } from '@/lib/api/hatch'
-import type { PersonaId } from '@/lib/ai/aiPersonas'
-import { useToast } from '@/components/ui/use-toast'
-import { buildMemoryToastPayload } from '@/lib/ai/memoryToast'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
 import { usePresence } from '@/lib/realtime/presenceSocket'
 import { GlobalSearch } from '@/components/global-search/GlobalSearch'
@@ -39,7 +35,6 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
   const { session, user, isDemoSession, activeOrgId, signOut, status } = useAuth()
   const role = useUserRole()
   const { sendLocation } = usePresence(activeOrgId, user?.id ?? null, location.pathname + location.search)
-  const { toast } = useToast()
 
   const { displayName, initials } = useMemo(
     () => resolveUserIdentity(session?.profile, user?.email ?? null, 'Broker'),
@@ -86,62 +81,11 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
     return allowList.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
   }, [agentAllowedPaths, location.pathname, role])
 
-  const debug = useMemo(() => {
-    const params = new URLSearchParams(location.search)
-    const flag = params.get('copilotDebug')
-    return flag === '1' || flag === 'true'
-  }, [location.search])
-
-  const handleWidgetSend = useCallback(
-    async ({
-      text,
-      personaId,
-      history,
-      forceCurrentPersona
-    }: {
-      text: string
-      personaId: PersonaId
-      history: HatchAIMessage[]
-      forceCurrentPersona?: boolean
-    }) => {
-      const response = await chatAiPersona({
-        text,
-        currentPersonaId: personaId,
-        forceCurrentPersona,
-        history: history.map<PersonaChatMessage>(({ role, content, personaId: msgPersonaId }) => ({
-          role,
-          content,
-          personaId: msgPersonaId
-        }))
-      })
-
-      const memoryToast = buildMemoryToastPayload(response.memoryLog)
-      if (memoryToast) {
-        toast(memoryToast)
-      }
-
-      // Prefer API-provided authorship; otherwise attribute handoff then reply.
-      let firstAssistantSeen = false
-      const replies =
-        response.messages?.map<HatchAIMessage>((message) => {
-          if (message.role !== 'assistant') {
-            return { id: crypto.randomUUID(), role: message.role, content: message.content, personaId: message.personaId }
-          }
-          const msgPersonaId = message.personaId ?? (firstAssistantSeen ? response.activePersonaId : personaId)
-          firstAssistantSeen = true
-          return { id: crypto.randomUUID(), role: 'assistant', content: message.content, personaId: msgPersonaId }
-        }) ?? []
-
-      return {
-        activePersonaId: response.activePersonaId,
-        replies
-      }
-    },
-    [toast]
-  )
-
   const [searchOpen, setSearchOpen] = React.useState(false)
   const [chatOpen, setChatOpen] = React.useState(false)
+  const [chatLaunchContext, setChatLaunchContext] = React.useState<
+    React.ComponentProps<typeof ChatWindow>['launchContext']
+  >(null)
 
   React.useEffect(() => {
     const handler = (event: KeyboardEvent) => {
@@ -152,11 +96,30 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
       }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'h') {
         event.preventDefault()
+        setChatLaunchContext(null)
         setChatOpen((prev) => !prev)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  React.useEffect(() => {
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<React.ComponentProps<typeof ChatWindow>['launchContext']>).detail
+      setChatLaunchContext(detail ?? null)
+      setChatOpen(true)
+    }
+    const onClose = () => {
+      setChatOpen(false)
+      setChatLaunchContext(null)
+    }
+    window.addEventListener('ask-hatch:open', onOpen)
+    window.addEventListener('ask-hatch:close', onClose)
+    return () => {
+      window.removeEventListener('ask-hatch:open', onOpen)
+      window.removeEventListener('ask-hatch:close', onClose)
+    }
   }, [])
 
   React.useEffect(() => {
@@ -194,78 +157,87 @@ export default function BrokerLayout({ showBackButton = false }: BrokerLayoutPro
   }
 
   return (
-    <div className="hatch-broker-shell relative flex h-screen overflow-hidden">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-[#f8faff] via-[#f1f4ff] to-[#eff6ff]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_0%,rgba(31,95,255,0.18),transparent_55%)]"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_95%_15%,rgba(0,198,162,0.16),transparent_50%)]"
-      />
-      <BrokerSidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {isDemoSession && (
-          <div className="bg-amber-100 border-b border-amber-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-amber-900">
-            Demo Mode — data is read-only and actions are not persisted.
-          </div>
-        )}
-        {/* Header */}
-        <header className="relative border-b border-[var(--glass-border)] bg-[var(--glass-background)] px-6 py-4 backdrop-blur-xl">
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/45 via-white/12 to-white/0 dark:from-white/10 dark:via-white/5" />
-          <div className="relative flex justify-between items-center">
-            <div className="flex items-center" aria-hidden="true" />
-            
-            {/* Public Site Navigation. */}
-            <div className="flex items-center space-x-4">
-              <Button
-                variant="outline"
-                className="border-[var(--glass-border)] bg-white/35 text-ink-800 hover:bg-white/50 dark:bg-white/10 dark:text-ink-100 dark:hover:bg-white/15"
-                onClick={() => setSearchOpen(true)}
-              >
-                Search ⌘K
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => navigate('/')}
-                className="flex items-center space-x-2 border-[var(--glass-border)] bg-white/25 text-ink-700 hover:bg-white/40 hover:text-ink-900 dark:bg-white/10 dark:text-ink-100 dark:hover:bg-white/15"
-              >
-                <ExternalLink className="h-4 w-4" />
-                <span>View Public Site</span>
-              </Button>
-              <NotificationBell />
-              <div className="flex items-center space-x-2 text-sm text-ink-600">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-white/25 text-brand-blue-700 shadow-brand backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-brand-blue-300">
-                  <span className="font-semibold">{initials}</span>
-                </div>
-                <span className="font-semibold text-ink-800 dark:text-ink-100">{displayName}</span>
-              </div>
-              <Button
-                variant="outline"
-                className="border-[var(--glass-border)] bg-white/25 text-ink-700 hover:bg-white/40 hover:text-ink-900 dark:bg-white/10 dark:text-ink-100 dark:hover:bg-white/15"
-                onClick={async () => {
-                  await signOut()
-                  navigate('/login', { replace: true })
-                }}
-              >
-                Sign out
-              </Button>
+    <>
+      <div className="hatch-broker-shell relative flex h-screen overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-b from-[#f8faff] via-[#f1f4ff] to-[#eff6ff]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_0%,rgba(31,95,255,0.18),transparent_55%)]"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_95%_15%,rgba(0,198,162,0.16),transparent_50%)]"
+        />
+        <BrokerSidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {isDemoSession && (
+            <div className="bg-amber-100 border-b border-amber-200 px-6 py-2 text-xs font-semibold uppercase tracking-wide text-amber-900">
+              Demo Mode — data is read-only and actions are not persisted.
             </div>
-          </div>
-        </header>
+          )}
+          {/* Header */}
+          <header className="relative border-b border-[var(--glass-border)] bg-[var(--glass-background)] px-6 py-4 backdrop-blur-xl">
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/45 via-white/12 to-white/0 dark:from-white/10 dark:via-white/5" />
+            <div className="relative flex justify-between items-center">
+              <div className="flex items-center" aria-hidden="true" />
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-6">
-          <Outlet />
-        </main>
-        <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
-        <CopilotDock debug={debug} />
-        <HatchAIWidget isOpen={chatOpen} onClose={() => setChatOpen(false)} onSend={handleWidgetSend} />
+              {/* Public Site Navigation. */}
+              <div className="flex items-center space-x-4">
+                <Button
+                  variant="outline"
+                  className="border-[var(--glass-border)] bg-white/35 text-ink-800 hover:bg-white/50 dark:bg-white/10 dark:text-ink-100 dark:hover:bg-white/15"
+                  onClick={() => setSearchOpen(true)}
+                >
+                  Search ⌘K
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/')}
+                  className="flex items-center space-x-2 border-[var(--glass-border)] bg-white/25 text-ink-700 hover:bg-white/40 hover:text-ink-900 dark:bg-white/10 dark:text-ink-100 dark:hover:bg-white/15"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span>View Public Site</span>
+                </Button>
+                <NotificationBell />
+                <div className="flex items-center space-x-2 text-sm text-ink-600">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/35 bg-white/25 text-brand-blue-700 shadow-brand backdrop-blur-xl dark:border-white/15 dark:bg-white/10 dark:text-brand-blue-300">
+                    <span className="font-semibold">{initials}</span>
+                  </div>
+                  <span className="font-semibold text-ink-800 dark:text-ink-100">{displayName}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-[var(--glass-border)] bg-white/25 text-ink-700 hover:bg-white/40 hover:text-ink-900 dark:bg-white/10 dark:text-ink-100 dark:hover:bg-white/15"
+                  onClick={async () => {
+                    await signOut()
+                    navigate('/login', { replace: true })
+                  }}
+                >
+                  Sign out
+                </Button>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-transparent p-8">
+            <Outlet />
+          </main>
+          <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+          <ChatWindow
+            open={chatOpen}
+            onClose={() => {
+              setChatOpen(false)
+              setChatLaunchContext(null)
+            }}
+            launchContext={chatLaunchContext}
+          />
+        </div>
       </div>
-    </div>
+      <CopilotDock />
+    </>
   )
 }

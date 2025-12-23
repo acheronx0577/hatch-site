@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 
 const DEFAULT_AGENT_ALLOWED_PATHS = ['/broker/crm', '/broker/contracts', '/broker/transactions'] as const;
+const DEFAULT_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class OrganizationsService {
@@ -88,6 +89,13 @@ export class OrganizationsService {
     return { user, org, membership };
   }
 
+  private normalizeInviteExpiry(expiresAt?: string) {
+    const fallback = new Date(Date.now() + DEFAULT_INVITE_TTL_MS);
+    if (!expiresAt) return fallback;
+    const parsed = new Date(expiresAt);
+    return Number.isNaN(parsed.getTime()) ? fallback : parsed;
+  }
+
   async createAgentInvite(orgId: string, brokerUserId: string, dto: { email: string; expiresAt?: string }) {
     const { org, user: broker } = await this.ensureBrokerInOrg(orgId, brokerUserId);
 
@@ -95,22 +103,51 @@ export class OrganizationsService {
       throw new BadRequestException('A valid email is required');
     }
 
-    const token = randomUUID();
-    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const email = dto.email.toLowerCase().trim();
+    const expiresAt = this.normalizeInviteExpiry(dto.expiresAt);
+    const now = new Date();
 
-    const invite = await this.prisma.agentInvite.create({
-      data: {
+    const existingPending = await this.prisma.agentInvite.findFirst({
+      where: {
         organizationId: orgId,
-        email: dto.email.toLowerCase(),
-        token,
-        status: AgentInviteStatus.PENDING,
-        invitedByUserId: brokerUserId,
-        expiresAt
-      }
+        email,
+        status: AgentInviteStatus.PENDING
+      },
+      orderBy: { createdAt: 'desc' }
     });
 
+    if (existingPending && existingPending.expiresAt.getTime() < now.getTime()) {
+      await this.prisma.agentInvite.update({
+        where: { id: existingPending.id },
+        data: { status: AgentInviteStatus.EXPIRED }
+      });
+    }
+
+    const token = randomUUID();
+
+    const invite = existingPending && existingPending.expiresAt.getTime() >= now.getTime()
+      ? await this.prisma.agentInvite.update({
+          where: { id: existingPending.id },
+          data: {
+            token,
+            invitedByUserId: brokerUserId,
+            expiresAt,
+            status: AgentInviteStatus.PENDING
+          }
+        })
+      : await this.prisma.agentInvite.create({
+          data: {
+            organizationId: orgId,
+            email,
+            token,
+            status: AgentInviteStatus.PENDING,
+            invitedByUserId: brokerUserId,
+            expiresAt
+          }
+        });
+
     // Generate Cognito signup URL with invite token embedded in state
-    const signupUrl = this.cognito.generateSignupUrl(token, dto.email, '/portal');
+    const signupUrl = this.cognito.generateSignupUrl(invite.token, invite.email, '/portal');
 
     // Send invite email
     const brokerName = broker.firstName && broker.lastName ? `${broker.firstName} ${broker.lastName}` : broker.email;
@@ -156,13 +193,13 @@ export class OrganizationsService {
 
     try {
       await this.mail.sendMail({
-        to: dto.email,
+        to: invite.email,
         subject: `${broker.firstName || 'Someone'} invited you to join ${org.name} on Hatch CRM`,
         html: emailHtml
       });
-      this.logger.log(`Invite email sent to ${dto.email} for org ${org.name}`);
+      this.logger.log(`Invite email sent to ${invite.email} for org ${org.name}`);
     } catch (error) {
-      this.logger.error(`Failed to send invite email to ${dto.email}`, error);
+      this.logger.error(`Failed to send invite email to ${invite.email}`, error);
       // Don't fail the invite creation if email fails
     }
 
@@ -182,10 +219,137 @@ export class OrganizationsService {
 
   async getOrgInvites(orgId: string, brokerUserId: string) {
     await this.ensureBrokerInOrg(orgId, brokerUserId);
+    const now = new Date();
+    await this.prisma.agentInvite.updateMany({
+      where: {
+        organizationId: orgId,
+        status: AgentInviteStatus.PENDING,
+        expiresAt: { lt: now }
+      },
+      data: { status: AgentInviteStatus.EXPIRED }
+    });
     return this.prisma.agentInvite.findMany({
       where: { organizationId: orgId },
       orderBy: { createdAt: 'desc' }
     });
+  }
+
+  async resendAgentInvite(orgId: string, brokerUserId: string, inviteId: string) {
+    const { org, user: broker } = await this.ensureBrokerInOrg(orgId, brokerUserId);
+
+    const invite = await this.prisma.agentInvite.findUnique({
+      where: { id: inviteId }
+    });
+    if (!invite || invite.organizationId !== orgId) {
+      throw new NotFoundException('Invite not found');
+    }
+    if (invite.status !== AgentInviteStatus.PENDING) {
+      throw new BadRequestException('Only pending invites can be resent');
+    }
+
+    const next = await this.prisma.agentInvite.update({
+      where: { id: invite.id },
+      data: {
+        token: randomUUID(),
+        invitedByUserId: brokerUserId,
+        expiresAt: new Date(Date.now() + DEFAULT_INVITE_TTL_MS)
+      }
+    });
+
+    const signupUrl = this.cognito.generateSignupUrl(next.token, next.email, '/portal');
+
+    const brokerName = broker.firstName && broker.lastName ? `${broker.firstName} ${broker.lastName}` : broker.email;
+    const emailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: system-ui, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0; text-align: center; }
+          .content { background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; }
+          .button { display: inline-block; background: #667eea; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; }
+          .footer { text-align: center; padding: 20px; font-size: 12px; color: #666; }
+          .org-name { color: #667eea; font-weight: 600; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>You're Invited!</h1>
+          </div>
+          <div class="content">
+            <p>Hello,</p>
+            <p><strong>${brokerName}</strong> from <span class="org-name">${org.name}</span> is resending your invitation to join Hatch CRM.</p>
+            <p>Click the button below to create your account and get started:</p>
+            <div style="text-align: center;">
+              <a href="${signupUrl}" class="button">Accept Invitation &amp; Sign Up</a>
+            </div>
+            <p style="font-size: 14px; color: #666;">This invitation will expire on ${next.expiresAt.toLocaleDateString()}.</p>
+            <p style="font-size: 12px; color: #999; margin-top: 30px; border-top: 1px solid #e0e0e0; padding-top: 20px;">
+              If you didn't expect this invitation, you can safely ignore this email.
+            </p>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} Hatch CRM. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    try {
+      await this.mail.sendMail({
+        to: next.email,
+        subject: `${broker.firstName || 'Someone'} resent your invitation to join ${org.name} on Hatch CRM`,
+        html: emailHtml
+      });
+      this.logger.log(`Invite email resent to ${next.email} for org ${org.name}`);
+    } catch (error) {
+      this.logger.error(`Failed to resend invite email to ${next.email}`, error);
+    }
+
+    try {
+      await this.events.logOrgEvent({
+        organizationId: orgId,
+        actorId: brokerUserId,
+        type: OrgEventType.AGENT_INVITE_CREATED,
+        message: `Agent invite resent for ${next.email}`,
+        payload: { inviteId: next.id, email: next.email, invitedByUserId: brokerUserId, expiresAt: next.expiresAt }
+      });
+    } catch {}
+
+    return { invite: next, signupUrl };
+  }
+
+  async revokeAgentInvite(orgId: string, brokerUserId: string, inviteId: string) {
+    await this.ensureBrokerInOrg(orgId, brokerUserId);
+
+    const invite = await this.prisma.agentInvite.findUnique({ where: { id: inviteId } });
+    if (!invite || invite.organizationId !== orgId) {
+      throw new NotFoundException('Invite not found');
+    }
+
+    if (invite.status !== AgentInviteStatus.PENDING) {
+      throw new BadRequestException('Only pending invites can be revoked');
+    }
+
+    const updated = await this.prisma.agentInvite.update({
+      where: { id: invite.id },
+      data: { status: AgentInviteStatus.REVOKED }
+    });
+
+    try {
+      await this.events.logOrgEvent({
+        organizationId: orgId,
+        actorId: brokerUserId,
+        type: OrgEventType.AGENT_INVITE_CREATED,
+        message: `Agent invite revoked for ${updated.email}`,
+        payload: { inviteId: updated.id, email: updated.email, invitedByUserId: brokerUserId }
+      });
+    } catch {}
+
+    return updated;
   }
 
   private normalizeAllowedPaths(paths: unknown): string[] {

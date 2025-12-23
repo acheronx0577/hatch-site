@@ -20,6 +20,7 @@ vi.mock('@/lib/api/mission-control', () => ({
     onboarding: { agentsInOnboarding: 1, totalOnboardingTasksOpen: 2, totalOnboardingTasksCompleted: 1 },
     offboarding: { agentsInOffboarding: 1, totalOffboardingTasksOpen: 1 },
     aiCompliance: { evaluationsLast30Days: 4, highRiskListings: 1, highRiskTransactions: 0 },
+    aiApprovals: { pending: 2 },
     leadStats: {
       totalLeads: 4,
       newLeads: 2,

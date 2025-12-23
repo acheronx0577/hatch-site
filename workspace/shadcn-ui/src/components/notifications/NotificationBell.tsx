@@ -55,11 +55,11 @@ export function NotificationBell() {
   };
 
   const linkForNotification = (notification: NotificationItem) => {
-    if (notification.leadId) return `/broker/leads?focus=${notification.leadId}`;
-    if (notification.offerIntentId) return `/broker/lead-routing?focus=${notification.offerIntentId}`;
-    if (notification.listingId) return `/broker/properties?focus=${notification.listingId}`;
+    if (notification.leadId) return `/broker/crm/leads/${notification.leadId}`;
+    if (notification.offerIntentId) return `/broker/offer-intents?focus=${notification.offerIntentId}`;
+    if (notification.listingId) return `/broker/properties/${notification.listingId}`;
     if (notification.transactionId) return `/broker/transactions?focus=${notification.transactionId}`;
-    if (notification.leaseId) return `/broker/properties?focus=${notification.leaseId}`;
+    if (notification.leaseId) return `/broker/financials`;
     return '/broker/mission-control';
   };
 

@@ -1,5 +1,7 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEmail, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsInt, IsObject, IsOptional, IsString, Min } from 'class-validator';
+
+const LEAD_TYPE_VALUES = ['BUYER', 'SELLER', 'UNKNOWN'] as const;
 
 export function toBoolean(value: unknown): boolean | undefined {
   if (value === undefined || value === null || value === '') return undefined;
@@ -94,6 +96,10 @@ export class CreateLeadDto {
   @IsOptional()
   @IsString()
   stageId?: string;
+
+  @IsOptional()
+  @IsIn(LEAD_TYPE_VALUES)
+  leadType?: (typeof LEAD_TYPE_VALUES)[number];
 
   @IsOptional()
   @Transform(({ value }) => toBoolean(value))

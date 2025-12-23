@@ -8,6 +8,7 @@ describe('BatchService', () => {
   let service: BatchService;
 
   const mockBatchClient = {
+    isEnabled: jest.fn().mockReturnValue(true),
     fetchEvents: jest.fn()
   };
 

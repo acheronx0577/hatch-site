@@ -11,12 +11,12 @@ interface MissionControlMetricTileProps {
   className?: string;
 }
 
-const toneBg: Record<MetricTone, string> = {
-  neutral: 'bg-slate-50',
-  muted: 'bg-slate-100',
-  success: 'bg-emerald-50',
-  warning: 'bg-amber-50',
-  danger: 'bg-rose-50'
+const toneTint: Record<MetricTone, string> = {
+  neutral: 'from-white/0',
+  muted: 'from-slate-500/5',
+  success: 'from-emerald-500/10',
+  warning: 'from-amber-500/10',
+  danger: 'from-rose-500/10'
 };
 
 const toneLabel: Record<MetricTone, string> = {
@@ -42,9 +42,28 @@ export const MissionControlMetricTile: React.FC<MissionControlMetricTileProps> =
   className
 }) => {
   return (
-    <div className={cn('rounded-2xl px-3 py-2.5 flex flex-col gap-1', toneBg[tone], className)}>
-      <span className={cn('text-[11px] font-medium uppercase tracking-wide', toneLabel[tone])}>{label}</span>
-      <span className={cn('text-lg font-semibold leading-tight', toneValue[tone])}>{value}</span>
+    <div
+      className={cn(
+        'rounded-[var(--radius-md)] border border-white/20 bg-card/[var(--hatch-glass-alpha-recessed)] px-4 py-3 backdrop-blur-md',
+        'bg-gradient-to-br to-white/0',
+        toneTint[tone],
+        className
+      )}
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1">
+        <span
+          className={cn(
+            'min-w-0 text-[11px] font-semibold uppercase tracking-[0.12em] leading-snug',
+            'whitespace-normal break-words',
+            toneLabel[tone]
+          )}
+        >
+          {label}
+        </span>
+        <span className={cn('text-right text-xl font-semibold leading-none tabular-nums', toneValue[tone])}>
+          {value}
+        </span>
+      </div>
     </div>
   );
 };

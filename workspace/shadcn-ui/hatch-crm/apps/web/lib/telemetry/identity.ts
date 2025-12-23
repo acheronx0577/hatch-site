@@ -1,4 +1,5 @@
 const ANONYMOUS_ID_KEY = 'hatch_anonymous_id_v1';
+const LEGACY_ANONYMOUS_ID_KEY = 'hatch_anonymous_id';
 
 function fallbackUuid(): string {
   const bytes = new Uint8Array(16);
@@ -20,6 +21,13 @@ export function getAnonymousId(): string {
     if (existing && existing.trim().length > 0) {
       return existing.trim();
     }
+
+    const legacy = window.localStorage.getItem(LEGACY_ANONYMOUS_ID_KEY);
+    if (legacy && legacy.trim().length > 0) {
+      const normalized = legacy.trim();
+      window.localStorage.setItem(ANONYMOUS_ID_KEY, normalized);
+      return normalized;
+    }
   } catch {
     // ignore storage errors
   }
@@ -28,10 +36,10 @@ export function getAnonymousId(): string {
 
   try {
     window.localStorage.setItem(ANONYMOUS_ID_KEY, next);
+    window.localStorage.setItem(LEGACY_ANONYMOUS_ID_KEY, next);
   } catch {
     // ignore storage errors
   }
 
   return next;
 }
-

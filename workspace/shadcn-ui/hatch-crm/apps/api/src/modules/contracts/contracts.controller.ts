@@ -1,7 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { OrgMembershipGuard } from '@/platform/security/org-membership.guard';
 import { resolveRequestContext } from '../common';
 import { ContractsService } from './contracts.service';
 import {
@@ -17,6 +19,7 @@ import {
 @ApiTags('contracts')
 @ApiBearerAuth()
 @Controller('organizations/:orgId/contracts')
+@UseGuards(JwtAuthGuard, OrgMembershipGuard)
 export class ContractsController {
   constructor(private readonly contracts: ContractsService) {}
 

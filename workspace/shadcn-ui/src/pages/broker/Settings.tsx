@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { HatchLogo } from '@/components/HatchLogo'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -127,7 +128,7 @@ export default function BrokerSettingsPage() {
 
   const headerGradient = useMemo(
     () =>
-      'bg-gradient-to-r from-sky-500/90 via-cyan-400/80 to-emerald-400/80 backdrop-blur-lg border border-white/20 shadow-lg',
+      'hatch-hero relative overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-[#1F5FFF] via-[#3D86FF] to-[#00C6A2] text-white shadow-[0_30px_80px_rgba(31,95,255,0.35)]',
     []
   )
 
@@ -161,26 +162,26 @@ export default function BrokerSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-900">
-      <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
-        <div className={`${headerGradient} rounded-3xl px-6 py-5 flex items-center justify-between`}>
+    <div className="space-y-8">
+      <div className="mx-auto max-w-6xl space-y-8">
+        <section className={`${headerGradient} px-6 py-6 md:px-8 md:py-7 flex items-center justify-between`}>
           <div className="space-y-1 text-white drop-shadow-sm">
-            <p className="text-sm uppercase tracking-[0.15em] text-white">Admin · Settings</p>
-            <h1 className="text-2xl font-semibold text-white">Brokerage Profile</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/80">Admin · Settings</p>
+            <h1 className="text-2xl md:text-3xl font-semibold tracking-tight text-white">Brokerage Profile</h1>
             <p className="text-sm text-white/90">
               Keep your brokerage identity polished across reports, client portals, and automations.
             </p>
           </div>
-          <div className="hidden sm:flex items-center gap-3 bg-white rounded-2xl px-4 py-3 border border-white/60 shadow-lg">
+          <div className="hidden sm:flex items-center gap-3 rounded-2xl border border-white/20 bg-white/15 px-4 py-3 backdrop-blur">
             <HatchLogo className="h-12" />
           </div>
-        </div>
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <section className="lg:col-span-2 rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200 shadow-sm p-6 space-y-5">
+          <Card className="lg:col-span-2 p-6 space-y-5 hover:translate-y-0 hover:shadow-brand">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Identity</h2>
-              <p className="text-sm text-slate-500">Who you are and how clients see you.</p>
+              <p className="text-sm text-slate-600">Who you are and how clients see you.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -214,6 +215,7 @@ export default function BrokerSettingsPage() {
             </div>
             <div>
               <Label htmlFor="notes">Internal notes</Label>
+              <p className="mt-1 text-xs text-slate-500">Internal-only. Not visible to agents.</p>
               <Textarea
                 id="notes"
                 value={settings.notes}
@@ -226,15 +228,15 @@ export default function BrokerSettingsPage() {
               <Button variant="outline" onClick={() => setSettings(DEFAULT_SETTINGS)} disabled={saving}>
                 Reset
               </Button>
-              <Button onClick={handleSave} disabled={saving} className="bg-sky-600 hover:bg-sky-700 text-white">
+              <Button onClick={handleSave} disabled={saving}>
                 {saving ? 'Saving…' : 'Save changes'}
               </Button>
             </div>
-          </section>
+          </Card>
 
           <section className="space-y-4">
             {canManageAgentPortal && (
-              <div className="rounded-2xl bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm p-5 space-y-4">
+              <Card className="p-5 space-y-4 hover:translate-y-0 hover:shadow-brand">
                 <div>
                   <h3 className="font-semibold text-slate-900">Agent Portal</h3>
                   <p className="text-sm text-slate-500">
@@ -244,8 +246,10 @@ export default function BrokerSettingsPage() {
 
                 <div className="space-y-3">
                   {agentPortalQuery.isLoading ? (
-                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4 text-sm text-slate-600">
-                      Loading agent portal settings…
+                    <div className="space-y-3 rounded-xl border border-[var(--glass-border)] bg-white/20 p-4 backdrop-blur">
+                      <div className="hatch-shimmer h-3 w-40 rounded" />
+                      <div className="hatch-shimmer h-3 w-56 rounded" />
+                      <div className="hatch-shimmer h-3 w-48 rounded" />
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -255,7 +259,7 @@ export default function BrokerSettingsPage() {
                         return (
                           <div
                             key={module.path}
-                            className="flex items-start justify-between gap-4 rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3"
+                            className="flex items-start justify-between gap-4 rounded-xl border border-[var(--glass-border)] bg-white/25 px-4 py-3 backdrop-blur"
                           >
                             <div>
                               <p className="text-sm font-medium text-slate-900">{module.label}</p>
@@ -324,26 +328,25 @@ export default function BrokerSettingsPage() {
                   <Button
                     disabled={!agentPortalDirty || agentPortalSaveMutation.isPending}
                     onClick={() => agentPortalSaveMutation.mutate()}
-                    className="bg-sky-600 hover:bg-sky-700 text-white"
                   >
                     {agentPortalSaveMutation.isPending ? 'Saving…' : 'Save agent portal'}
                   </Button>
                 </div>
-              </div>
+              </Card>
             )}
 
-            <div className="rounded-2xl bg-white/80 backdrop-blur-md border border-slate-200 shadow-sm p-5 space-y-4">
+            <Card className="p-5 space-y-4 hover:translate-y-0 hover:shadow-brand">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-slate-900">Branding</h3>
                   <p className="text-sm text-slate-500">Logo appears on client-facing reports and emails.</p>
                 </div>
-                <span className="text-xs px-2 py-1 rounded-full bg-sky-50 text-sky-700 border border-sky-100">
+                <span className="text-xs font-semibold text-brand-blue-600 hover:underline cursor-pointer">
                   Hatch palette
                 </span>
               </div>
-              <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-4 flex flex-col items-center gap-3">
-                <div className="w-full h-32 rounded-lg bg-gradient-to-r from-sky-100 via-slate-50 to-emerald-50 border border-slate-100 flex items-center justify-center">
+              <div className="rounded-xl border border-[var(--glass-border)] bg-white/20 p-4 flex flex-col items-center gap-3 backdrop-blur">
+                <div className="w-full h-32 rounded-lg bg-gradient-to-r from-sky-100/70 via-white/50 to-emerald-50/70 border border-[var(--glass-border)] flex items-center justify-center">
                   <img
                     src={settings.logoUrl || '/hatch-logo.png'}
                     alt="Brokerage logo"
@@ -356,23 +359,22 @@ export default function BrokerSettingsPage() {
                     }}
                   />
                 </div>
-                <Label
-                  htmlFor="logoUpload"
-                  className="w-full inline-flex justify-center rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 cursor-pointer"
-                >
-                  Upload new logo
-                  <input
-                    id="logoUpload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleLogoSelect}
-                  />
-                </Label>
+                <Button asChild variant="outline" className="w-full">
+                  <Label htmlFor="logoUpload" className="cursor-pointer justify-center">
+                    Upload new logo
+                    <input
+                      id="logoUpload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLogoSelect}
+                    />
+                  </Label>
+                </Button>
               </div>
-            </div>
+            </Card>
 
-            <div className="rounded-2xl bg-white/70 backdrop-blur-md border border-slate-200 shadow-sm p-5 space-y-3">
+            <Card className="p-5 space-y-3 hover:translate-y-0 hover:shadow-brand">
               <h3 className="font-semibold text-slate-900">Compliance IDs</h3>
               <p className="text-sm text-slate-500">
                 Keep license and association IDs current for disclosure on documents.
@@ -399,7 +401,7 @@ export default function BrokerSettingsPage() {
                   </div>
                 </div>
               </div>
-            </div>
+            </Card>
           </section>
         </div>
       </div>

@@ -35,12 +35,12 @@ export const PlaybookEditor: React.FC = () => {
     setPlaybook(updated)
   }
 
-  if (!playbook) return <p className="p-6 text-sm text-muted-foreground">Loading playbook…</p>
+  if (!playbook) return <p className="text-sm text-muted-foreground">Loading playbook…</p>
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Edit Playbook</h1>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Edit Playbook</h1>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>Enabled</span>
           <Switch

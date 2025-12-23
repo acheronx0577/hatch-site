@@ -123,7 +123,8 @@ const metricLinkMap: Record<string, string> = {
   'Evaluations (30d)': '/dashboard/compliance',
   'Transactions w/ required docs': '/dashboard/transactions',
   'Transactions missing docs': '/dashboard/transactions?filter=missing-docs',
-  'Upcoming closings missing docs': '/dashboard/transactions?filter=missing-docs&withinDays=30'
+  'Upcoming closings missing docs': '/dashboard/transactions?filter=missing-docs&withinDays=30',
+  'AI actions pending approval': '/dashboard/mission-control/ai-approvals'
 };
 
 function mapOverviewToMetrics(overview?: MissionControlOverviewData): Metric[] {
@@ -374,6 +375,12 @@ function mapOverviewToMetrics(overview?: MissionControlOverviewData): Metric[] {
       label: 'Evaluations (30d)',
       value: numberFormatter.format(overview.aiCompliance.evaluationsLast30Days),
       href: metricLinkMap['Evaluations (30d)']
+    },
+    {
+      category: 'AI & Compliance',
+      label: 'AI actions pending approval',
+      value: numberFormatter.format(overview.aiApprovals.pending),
+      href: metricLinkMap['AI actions pending approval']
     }
   ];
 }

@@ -358,11 +358,11 @@ const CalendarPage = () => {
   }, [events])
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Calendar</h1>
-          <p className="text-gray-600">Schedule management powered by live CRM events</p>
+          <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Calendar</h1>
+          <p className="text-sm text-slate-600">Schedule management powered by live CRM events</p>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" disabled>

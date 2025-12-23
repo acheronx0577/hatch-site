@@ -5,8 +5,11 @@ import React from 'react';
 import App from './App.tsx';
 import './index.css';
 import ErrorBoundary from './components/ErrorBoundary.tsx';
+import { getCookieConsent, isTrackingAllowed } from '@/lib/cookieConsent';
 
-inject();
+if (isTrackingAllowed(getCookieConsent())) {
+  inject();
+}
 
 const queryClient = new QueryClient();
 

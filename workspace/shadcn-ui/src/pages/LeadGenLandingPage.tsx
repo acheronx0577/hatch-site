@@ -7,6 +7,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { API_BASE_URL } from '@/lib/api/hatch'
+import { isTrackingAllowed } from '@/lib/cookieConsent'
+import { useCookieConsent } from '@/lib/hooks/useCookieConsent'
 
 type PublicLandingPage = {
   id: string
@@ -146,6 +148,8 @@ function resolveLayoutBlocks(layout: Record<string, unknown> | null) {
 export default function LeadGenLandingPage() {
   const { orgId, slug } = useParams()
   const [searchParams] = useSearchParams()
+  const consent = useCookieConsent()
+  const trackingAllowed = isTrackingAllowed(consent)
 
   const [page, setPage] = useState<PublicLandingPage | null>(null)
   const [loading, setLoading] = useState(true)
@@ -229,6 +233,8 @@ export default function LeadGenLandingPage() {
     const existing = document.querySelector(selector)
     if (existing) existing.remove()
 
+    if (!trackingAllowed) return
+
     const script = document.createElement('script')
     script.src = buildPixelSrc({ orgId, campaignId: page.campaignId, landingPageId: page.id })
     script.async = true
@@ -239,7 +245,7 @@ export default function LeadGenLandingPage() {
     return () => {
       script.remove()
     }
-  }, [orgId, page])
+  }, [orgId, page, trackingAllowed])
 
   const heroBlock = useMemo(() => {
     const hero = layoutBlocks.find((b: any) => b && typeof b === 'object' && (b as any).type === 'hero') as any
@@ -343,7 +349,7 @@ export default function LeadGenLandingPage() {
         ...(utmCampaign ? { utmCampaign } : {}),
         ...(gclid ? { gclid } : {}),
         ...(fbclid ? { fbclid } : {}),
-        anonymousId: getAnonymousId(),
+        ...(trackingAllowed ? { anonymousId: getAnonymousId() } : {}),
         pageUrl: typeof window !== 'undefined' ? window.location.href : undefined,
         referrer: typeof document !== 'undefined' ? document.referrer || undefined : undefined,
         website: honeypot,
@@ -372,14 +378,16 @@ export default function LeadGenLandingPage() {
 
       setSubmittedLeadId(result.leadId ?? 'created')
 
-      try {
-        ;(window as any).HatchPixel?.track?.('leadgen.form_submitted', {
-          orgId,
-          landingPageId: page?.id ?? null,
-          campaignId: page?.campaignId ?? null
-        })
-      } catch {
-        // ignore
+      if (trackingAllowed) {
+        try {
+          ;(window as any).HatchPixel?.track?.('leadgen.form_submitted', {
+            orgId,
+            landingPageId: page?.id ?? null,
+            campaignId: page?.campaignId ?? null
+          })
+        } catch {
+          // ignore
+        }
       }
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Submission failed')

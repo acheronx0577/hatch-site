@@ -22,6 +22,8 @@ export type PdfOverlay = {
   boxes: PdfOverlayBox[];
 };
 
+const MAX_OVERLAY_BOXES = 2000;
+
 export function normalizePdfOverlay(raw: unknown): PdfOverlay {
   if (!raw || typeof raw !== 'object') {
     return { version: 1, boxes: [] };
@@ -33,7 +35,7 @@ export function normalizePdfOverlay(raw: unknown): PdfOverlay {
   }
 
   const boxes: PdfOverlayBox[] = [];
-  for (const entry of boxesRaw.slice(0, 250)) {
+  for (const entry of boxesRaw.slice(0, MAX_OVERLAY_BOXES)) {
     if (!entry || typeof entry !== 'object') continue;
     const id = typeof (entry as any).id === 'string' ? (entry as any).id : '';
     const page = (entry as any).page;
@@ -95,6 +97,8 @@ const generateId = () => {
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
 };
 
+const normalizeFieldKey = (value: string) => value.replace(/[^a-z0-9]+/gi, '').toUpperCase();
+
 type DetectedTextRegion = {
   id: string;
   page: number;
@@ -128,6 +132,7 @@ export function PdfDraftEditor({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [autoFocusId, setAutoFocusId] = useState<string | null>(null);
   const [mode, setMode] = useState<'select' | 'add' | 'text'>('select');
+  const [draftMode, setDraftMode] = useState<'write' | 'edit'>('write');
   const [zoom, setZoom] = useState(1);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
@@ -231,13 +236,43 @@ export function PdfDraftEditor({
       if (typeof key === 'string' && key.trim()) keys.add(key.trim());
     }
     for (const key of Object.keys(fieldValues ?? {})) {
-      if (typeof key === 'string' && key.trim() && key !== '__overlay') keys.add(key.trim());
+      if (typeof key !== 'string') continue;
+      const trimmed = key.trim();
+      if (!trimmed || trimmed.startsWith('__')) continue;
+      keys.add(trimmed);
     }
     return Array.from(keys).sort((a, b) => a.localeCompare(b));
   }, [availableKeys, fieldValues]);
 
+  const fieldMeta = useMemo(() => {
+    const raw = (fieldValues as any)?.__fieldMeta;
+    if (!raw || typeof raw !== 'object') return null;
+    return raw as Record<string, { source?: string; confidence?: number; sourcePath?: string | null }>;
+  }, [fieldValues]);
+
+  const fieldMetaByNormalized = useMemo(() => {
+    if (!fieldMeta) return null;
+    const map = new Map<string, { source?: string; confidence?: number; sourcePath?: string | null }>();
+    for (const [key, meta] of Object.entries(fieldMeta)) {
+      map.set(normalizeFieldKey(key), meta);
+    }
+    return map;
+  }, [fieldMeta]);
+
+  const resolveFieldMeta = (key: string) => {
+    const trimmed = key.trim();
+    if (!trimmed) return null;
+    return fieldMeta?.[trimmed] ?? fieldMetaByNormalized?.get(normalizeFieldKey(trimmed)) ?? null;
+  };
+
   const updateBoxes = (nextBoxes: PdfOverlayBox[]) => {
-    onChange({ version: 1, boxes: nextBoxes });
+    const limited = nextBoxes.slice(0, MAX_OVERLAY_BOXES);
+    onChange({ version: 1, boxes: limited });
+    if (limited.length !== nextBoxes.length) {
+      setDetectInfo(
+        `Reached the max of ${MAX_OVERLAY_BOXES} editable blocks. Remove boxes or capture fewer pages to keep edits stable.`
+      );
+    }
   };
 
   const selectBox = (id: string | null) => {
@@ -265,6 +300,172 @@ export function PdfDraftEditor({
     updateBoxes([]);
     setSelectedId(null);
     setAutoFocusId(null);
+  };
+
+  const captureAllText = async () => {
+    if (!pdfDoc || pageSizes.length === 0 || detecting) return;
+    setDetecting(true);
+    setDetectInfo(null);
+
+    try {
+      const nextBoxes: PdfOverlayBox[] = [];
+      const occupiedByPage = new Map<number, Array<{ x: number; y: number; w: number; h: number }>>();
+
+      const addOccupied = (page: number, rect: { x: number; y: number; w: number; h: number }) => {
+        const list = occupiedByPage.get(page) ?? [];
+        list.push(rect);
+        occupiedByPage.set(page, list);
+      };
+
+      const overlapsExisting = (page: number, rect: { x: number; y: number; w: number; h: number }) => {
+        const list = occupiedByPage.get(page) ?? [];
+        const areaA = rect.w * rect.h;
+        if (!Number.isFinite(areaA) || areaA <= 0) return true;
+        for (const other of list) {
+          const xOverlap = Math.max(0, Math.min(rect.x + rect.w, other.x + other.w) - Math.max(rect.x, other.x));
+          const yOverlap = Math.max(0, Math.min(rect.y + rect.h, other.y + other.h) - Math.max(rect.y, other.y));
+          const intersection = xOverlap * yOverlap;
+          if (intersection <= 0) continue;
+          const areaB = other.w * other.h;
+          const minArea = Math.min(areaA, areaB);
+          if (minArea > 0 && intersection / minArea > 0.35) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      for (const existing of boxes) {
+        addOccupied(existing.page, { x: existing.x, y: existing.y, w: existing.w, h: existing.h });
+      }
+
+      for (let pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber += 1) {
+        if (boxes.length + nextBoxes.length >= MAX_OVERLAY_BOXES) break;
+        const pdfPage = await pdfDoc.getPage(pageNumber);
+        const viewport = pdfPage.getViewport({ scale: 1 });
+        const content = await pdfPage.getTextContent?.();
+        const items = (content as any)?.items ?? [];
+
+        type TextRun = { x: number; y: number; w: number; h: number; text: string; fontSize: number };
+        const runs: TextRun[] = [];
+
+        for (const item of (items as any[]).slice(0, 8000)) {
+          const raw = typeof item?.str === 'string' ? item.str : '';
+          const text = raw.replace(/\s+/g, ' ').trim();
+          if (!text) continue;
+          if (!Array.isArray(item?.transform)) continue;
+
+          const combined = multiplyTransforms(viewport.transform, item.transform);
+          const x0 = combined[4];
+          const y0 = combined[5];
+          if (!Number.isFinite(x0) || !Number.isFinite(y0)) continue;
+
+          const rawWidth =
+            typeof item.width === 'number' && Number.isFinite(item.width) ? item.width : Math.max(8, text.length * 6);
+          const rawHeight =
+            typeof item.height === 'number' && Number.isFinite(item.height)
+              ? item.height
+              : typeof item.transform?.[3] === 'number' && Number.isFinite(item.transform[3])
+                ? Math.abs(item.transform[3])
+                : 12;
+
+          const h = clamp(Math.abs(rawHeight), 6, 160);
+          const w = clamp(Math.abs(rawWidth), 4, viewport.width);
+          const x = clamp(x0, 0, Math.max(0, viewport.width - w));
+          const y = clamp(y0 - h, 0, Math.max(0, viewport.height - h));
+          const fontSize = clamp(h, 6, 28);
+
+          runs.push({ x, y, w, h, text, fontSize });
+        }
+
+        runs.sort((a, b) => (Math.abs(a.y - b.y) < 4 ? a.x - b.x : a.y - b.y));
+
+        const merged: Array<TextRun> = [];
+        for (const run of runs) {
+          const last = merged[merged.length - 1];
+          if (last) {
+            const yMidA = run.y + run.h / 2;
+            const yMidB = last.y + last.h / 2;
+            const yThresh = Math.max(4, Math.min(run.h, last.h) * 0.35);
+            const gap = run.x - (last.x + last.w);
+            const gapThresh = Math.max(12, Math.min(run.h, last.h) * 1.2);
+            const sameLine = Math.abs(yMidA - yMidB) < yThresh;
+
+            if (sameLine) {
+              const xOverlap = Math.max(0, Math.min(last.x + last.w, run.x + run.w) - Math.max(last.x, run.x));
+              const yOverlap = Math.max(0, Math.min(last.y + last.h, run.y + run.h) - Math.max(last.y, run.y));
+              const intersection = xOverlap * yOverlap;
+              const areaA = Math.max(1, run.w * run.h);
+              const areaB = Math.max(1, last.w * last.h);
+              const overlap = intersection / Math.min(areaA, areaB);
+
+              if (overlap > 0.65) {
+                const x0 = Math.min(last.x, run.x);
+                const y0 = Math.min(last.y, run.y);
+                const x1 = Math.max(last.x + last.w, run.x + run.w);
+                const y1 = Math.max(last.y + last.h, run.y + run.h);
+                last.x = x0;
+                last.y = y0;
+                last.w = x1 - x0;
+                last.h = y1 - y0;
+                last.text = run.text.length > last.text.length ? run.text : last.text;
+                last.fontSize = Math.max(last.fontSize, run.fontSize);
+                continue;
+              }
+
+              if (gap >= -2 && gap < gapThresh) {
+                const nextText = gap > 2 ? `${last.text} ${run.text}` : `${last.text}${run.text}`;
+                const x0 = Math.min(last.x, run.x);
+                const y0 = Math.min(last.y, run.y);
+                const x1 = Math.max(last.x + last.w, run.x + run.w);
+                const y1 = Math.max(last.y + last.h, run.y + run.h);
+                last.x = x0;
+                last.y = y0;
+                last.w = x1 - x0;
+                last.h = y1 - y0;
+                last.text = nextText;
+                last.fontSize = Math.max(last.fontSize, run.fontSize);
+                continue;
+              }
+            }
+          }
+          merged.push({ ...run });
+        }
+
+        for (const region of merged.filter((r) => r.w > 6 && r.h > 6)) {
+          if (boxes.length + nextBoxes.length >= MAX_OVERLAY_BOXES) break;
+          if (overlapsExisting(pageNumber, region)) continue;
+
+          const id = `auto:edit:${pageNumber}:${Math.round(region.x)}:${Math.round(region.y)}:${Math.round(region.w)}:${Math.round(region.h)}`;
+          nextBoxes.push({
+            id,
+            page: pageNumber,
+            x: region.x,
+            y: region.y,
+            w: region.w,
+            h: region.h,
+            value: region.text,
+            key: null,
+            fontSize: clamp(region.fontSize, 6, 28),
+            erase: true
+          });
+          addOccupied(pageNumber, region);
+        }
+        pdfPage.cleanup?.();
+      }
+
+      if (nextBoxes.length === 0) {
+        setDetectInfo('No text blocks detected. Try zooming in or use “Edit text” to pick specific regions.');
+        return;
+      }
+
+      updateBoxes([...boxes, ...nextBoxes]);
+      setDetectInfo(`Captured ${nextBoxes.length} editable text blocks. Review and delete any you don’t need before saving.`);
+    } catch (error) {
+      setDetectInfo(`Text capture failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const upsertBox = (id: string, patch: Partial<PdfOverlayBox>) => {
@@ -995,10 +1196,11 @@ export function PdfDraftEditor({
     if (!pdfDoc || pageSizes.length === 0) return;
     if (detectAttemptedRef.current) return;
     if (boxes.length > 0) return;
+    if (draftMode !== 'write') return;
     detectAttemptedRef.current = true;
     void detectBoxes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdfDoc, pageSizes.length]);
+  }, [draftMode, pdfDoc, pageSizes.length]);
 
   useEffect(() => {
     if (!autoFocusId) return;
@@ -1010,6 +1212,33 @@ export function PdfDraftEditor({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-white px-1 py-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={draftMode === 'write' ? 'default' : 'ghost'}
+              onClick={() => {
+                setDraftMode('write');
+                setMode('select');
+              }}
+              disabled={Boolean(disabled)}
+            >
+              Write mode
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={draftMode === 'edit' ? 'default' : 'ghost'}
+              onClick={() => {
+                setDraftMode('edit');
+                setMode('text');
+              }}
+              disabled={Boolean(disabled) || pageSizes.length === 0}
+            >
+              Edit mode
+            </Button>
+          </div>
+
           <Button
             type="button"
             size="sm"
@@ -1060,10 +1289,10 @@ export function PdfDraftEditor({
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => void detectBoxes()}
+            onClick={() => void (draftMode === 'edit' ? captureAllText() : detectBoxes())}
             disabled={Boolean(disabled) || detecting || !pdfDoc}
           >
-            {detecting ? 'Detecting…' : 'Detect fields'}
+            {detecting ? 'Detecting…' : draftMode === 'edit' ? 'Capture text' : 'Detect fields'}
           </Button>
           <Button
             type="button"
@@ -1138,7 +1367,7 @@ export function PdfDraftEditor({
             type="button"
             size="sm"
             variant="outline"
-            onClick={() => upsertBox(selectedBox.id, { value: resolveBoxText(selectedBox) })}
+            onClick={() => upsertBox(selectedBox.id, { value: resolveBoxText(selectedBox), erase: true })}
             disabled={Boolean(disabled)}
           >
             Make manual
@@ -1151,6 +1380,21 @@ export function PdfDraftEditor({
             />
             <span className="text-xs text-slate-600">Erase behind text</span>
           </div>
+          {selectedBox.key?.trim() && resolveFieldMeta(selectedBox.key) ? (
+            <div className="w-full text-xs text-slate-500">
+              {(() => {
+                const meta = resolveFieldMeta(selectedBox.key ?? '');
+                if (!meta) return null;
+                return (
+                  <>
+                    Autofill: {meta.source ?? 'Unknown'}
+                    {typeof meta.confidence === 'number' ? ` · ${Math.round((meta.confidence ?? 0) * 100)}% confidence` : ''}
+                    {meta.sourcePath ? ` · ${String(meta.sourcePath)}` : ''}
+                  </>
+                );
+              })()}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

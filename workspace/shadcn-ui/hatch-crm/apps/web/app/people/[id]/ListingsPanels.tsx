@@ -145,7 +145,7 @@ function PropertyRail({
               />
             ) : (
               <div className="flex h-28 w-full items-center justify-center rounded-t-xl bg-slate-100 text-xs font-medium text-slate-500">
-                Image coming soon
+                No image available
               </div>
             )}
             <div className="space-y-1.5 p-3">

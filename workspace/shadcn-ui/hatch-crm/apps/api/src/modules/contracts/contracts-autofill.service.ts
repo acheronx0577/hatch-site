@@ -4,6 +4,15 @@ import { ContractFieldSourceType, UserRole, type ContractFieldMapping } from '@h
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
 
+type ContractFieldAutofillSource = 'MLS' | 'USER' | 'ORG' | 'SYSTEM' | 'UNKNOWN';
+
+type ContractFieldAutofillMeta = {
+  source: ContractFieldAutofillSource;
+  confidence: number;
+  sourceType?: ContractFieldSourceType;
+  sourcePath?: string | null;
+};
+
 export interface ContractContextParties {
   buyer?: any;
   seller?: any;
@@ -158,6 +167,45 @@ export class ContractsAutofillService {
     const fieldValues: Record<string, unknown> = {};
     const missingRequired: string[] = [];
     const overrideValues = overrides ?? {};
+    const fieldMeta: Record<string, ContractFieldAutofillMeta> = {};
+
+    const listingHasMls = Boolean((context.property as any)?.mlsNumber);
+    const defaultConfidence = (source: ContractFieldAutofillSource) => {
+      switch (source) {
+        case 'MLS':
+          return 0.92;
+        case 'USER':
+          return 0.8;
+        case 'ORG':
+          return 0.75;
+        case 'SYSTEM':
+          return 0.9;
+        default:
+          return 0.5;
+      }
+    };
+
+    const sourceForMapping = (mapping: ContractFieldMapping): ContractFieldAutofillSource => {
+      switch (mapping.sourceType) {
+        case ContractFieldSourceType.PROPERTY:
+          return listingHasMls ? 'MLS' : 'USER';
+        case ContractFieldSourceType.PARTY:
+          return 'USER';
+        case ContractFieldSourceType.BROKERAGE:
+        case ContractFieldSourceType.ORG:
+          return 'ORG';
+        case ContractFieldSourceType.STATIC:
+          return 'SYSTEM';
+        default:
+          return 'UNKNOWN';
+      }
+    };
+
+    const setMeta = (key: string, meta: ContractFieldAutofillMeta) => {
+      if (!key || key.startsWith('__')) return;
+      if (fieldMeta[key]) return;
+      fieldMeta[key] = meta;
+    };
 
     for (const mapping of mappings) {
       const hasOverride = Object.prototype.hasOwnProperty.call(overrideValues, mapping.templateFieldKey);
@@ -165,6 +213,12 @@ export class ContractsAutofillService {
         const override = overrideValues[mapping.templateFieldKey];
         if (override !== undefined) {
           fieldValues[mapping.templateFieldKey] = override;
+          setMeta(mapping.templateFieldKey, {
+            source: 'USER',
+            confidence: 1,
+            sourceType: mapping.sourceType,
+            sourcePath: mapping.sourcePath
+          });
         }
         continue;
       }
@@ -172,11 +226,25 @@ export class ContractsAutofillService {
       const resolved = this.resolveValueFromContext(mapping, context);
       if (resolved !== undefined && resolved !== null) {
         fieldValues[mapping.templateFieldKey] = resolved;
+        const source = sourceForMapping(mapping);
+        setMeta(mapping.templateFieldKey, {
+          source,
+          confidence: defaultConfidence(source),
+          sourceType: mapping.sourceType,
+          sourcePath: mapping.sourcePath
+        });
         continue;
       }
 
       if (mapping.defaultValue !== null && mapping.defaultValue !== undefined) {
         fieldValues[mapping.templateFieldKey] = mapping.defaultValue;
+        const source = mapping.sourceType === ContractFieldSourceType.STATIC ? 'SYSTEM' : 'UNKNOWN';
+        setMeta(mapping.templateFieldKey, {
+          source,
+          confidence: defaultConfidence(source),
+          sourceType: mapping.sourceType,
+          sourcePath: mapping.sourcePath
+        });
         continue;
       }
 
@@ -187,49 +255,106 @@ export class ContractsAutofillService {
 
     // Apply system defaults for dates to keep drafts usable even when data is sparse.
     const today = context.system.generatedDate ?? new Date().toISOString().slice(0, 10);
-    fieldValues['EFFECTIVE_DATE'] ??= context.system.effectiveDate ?? today;
-    fieldValues['OFFER_DATE'] ??= today;
-    fieldValues['GENERATED_DATE'] ??= today;
+    if (fieldValues['EFFECTIVE_DATE'] === undefined) {
+      fieldValues['EFFECTIVE_DATE'] = context.system.effectiveDate ?? today;
+      setMeta('EFFECTIVE_DATE', { source: 'SYSTEM', confidence: 0.95 });
+    }
+    if (fieldValues['OFFER_DATE'] === undefined) {
+      fieldValues['OFFER_DATE'] = today;
+      setMeta('OFFER_DATE', { source: 'SYSTEM', confidence: 0.95 });
+    }
+    if (fieldValues['GENERATED_DATE'] === undefined) {
+      fieldValues['GENERATED_DATE'] = today;
+      setMeta('GENERATED_DATE', { source: 'SYSTEM', confidence: 0.95 });
+    }
 
     const property = context.property as any;
     if (property) {
-      fieldValues['PROPERTY_ADDRESS'] ??= property.fullAddress ?? null;
-      fieldValues['PROPERTY_CITY'] ??= property.city ?? null;
-      fieldValues['PROPERTY_STATE'] ??= property.state ?? null;
-      fieldValues['PROPERTY_POSTAL_CODE'] ??= property.postalCode ?? null;
+      const propertySource: ContractFieldAutofillSource = listingHasMls ? 'MLS' : 'USER';
+      if (fieldValues['PROPERTY_ADDRESS'] === undefined) {
+        fieldValues['PROPERTY_ADDRESS'] = property.fullAddress ?? null;
+        setMeta('PROPERTY_ADDRESS', { source: propertySource, confidence: defaultConfidence(propertySource), sourcePath: 'property.fullAddress' });
+      }
+      if (fieldValues['PROPERTY_CITY'] === undefined) {
+        fieldValues['PROPERTY_CITY'] = property.city ?? null;
+        setMeta('PROPERTY_CITY', { source: propertySource, confidence: defaultConfidence(propertySource), sourcePath: 'property.city' });
+      }
+      if (fieldValues['PROPERTY_STATE'] === undefined) {
+        fieldValues['PROPERTY_STATE'] = property.state ?? null;
+        setMeta('PROPERTY_STATE', { source: propertySource, confidence: defaultConfidence(propertySource), sourcePath: 'property.state' });
+      }
+      if (fieldValues['PROPERTY_POSTAL_CODE'] === undefined) {
+        fieldValues['PROPERTY_POSTAL_CODE'] = property.postalCode ?? null;
+        setMeta('PROPERTY_POSTAL_CODE', { source: propertySource, confidence: defaultConfidence(propertySource), sourcePath: 'property.postalCode' });
+      }
     }
 
     const listingAgent = (context.parties as any)?.listingAgent;
     if (listingAgent) {
-      fieldValues['LISTING_AGENT_NAME'] ??= listingAgent.fullName ?? null;
-      fieldValues['LISTING_AGENT_EMAIL'] ??= listingAgent.email ?? null;
+      if (fieldValues['LISTING_AGENT_NAME'] === undefined) {
+        fieldValues['LISTING_AGENT_NAME'] = listingAgent.fullName ?? null;
+        setMeta('LISTING_AGENT_NAME', { source: 'ORG', confidence: 0.8, sourcePath: 'parties.listingAgent.fullName' });
+      }
+      if (fieldValues['LISTING_AGENT_EMAIL'] === undefined) {
+        fieldValues['LISTING_AGENT_EMAIL'] = listingAgent.email ?? null;
+        setMeta('LISTING_AGENT_EMAIL', { source: 'ORG', confidence: 0.8, sourcePath: 'parties.listingAgent.email' });
+      }
     }
 
     const broker = (context.parties as any)?.broker;
     if (broker) {
-      fieldValues['BROKER_NAME'] ??= broker.fullName ?? null;
-      fieldValues['BROKER_EMAIL'] ??= broker.email ?? null;
+      if (fieldValues['BROKER_NAME'] === undefined) {
+        fieldValues['BROKER_NAME'] = broker.fullName ?? null;
+        setMeta('BROKER_NAME', { source: 'ORG', confidence: 0.8, sourcePath: 'parties.broker.fullName' });
+      }
+      if (fieldValues['BROKER_EMAIL'] === undefined) {
+        fieldValues['BROKER_EMAIL'] = broker.email ?? null;
+        setMeta('BROKER_EMAIL', { source: 'ORG', confidence: 0.8, sourcePath: 'parties.broker.email' });
+      }
     }
 
     const buyer = (context.parties as any)?.buyer;
     if (buyer) {
-      fieldValues['BUYER_NAME'] ??= buyer.fullName ?? null;
-      fieldValues['BUYER_EMAIL'] ??= buyer.email ?? null;
-      fieldValues['BUYER_PHONE'] ??= buyer.phone ?? null;
+      if (fieldValues['BUYER_NAME'] === undefined) {
+        fieldValues['BUYER_NAME'] = buyer.fullName ?? null;
+        setMeta('BUYER_NAME', { source: 'USER', confidence: 0.75, sourcePath: 'parties.buyer.fullName' });
+      }
+      if (fieldValues['BUYER_EMAIL'] === undefined) {
+        fieldValues['BUYER_EMAIL'] = buyer.email ?? null;
+        setMeta('BUYER_EMAIL', { source: 'USER', confidence: 0.75, sourcePath: 'parties.buyer.email' });
+      }
+      if (fieldValues['BUYER_PHONE'] === undefined) {
+        fieldValues['BUYER_PHONE'] = buyer.phone ?? null;
+        setMeta('BUYER_PHONE', { source: 'USER', confidence: 0.75, sourcePath: 'parties.buyer.phone' });
+      }
     }
 
     const seller = (context.parties as any)?.seller;
     if (seller) {
-      fieldValues['SELLER_NAME'] ??= seller.fullName ?? null;
-      fieldValues['SELLER_EMAIL'] ??= seller.email ?? null;
-      fieldValues['SELLER_PHONE'] ??= seller.phone ?? null;
+      if (fieldValues['SELLER_NAME'] === undefined) {
+        fieldValues['SELLER_NAME'] = seller.fullName ?? null;
+        setMeta('SELLER_NAME', { source: 'USER', confidence: 0.75, sourcePath: 'parties.seller.fullName' });
+      }
+      if (fieldValues['SELLER_EMAIL'] === undefined) {
+        fieldValues['SELLER_EMAIL'] = seller.email ?? null;
+        setMeta('SELLER_EMAIL', { source: 'USER', confidence: 0.75, sourcePath: 'parties.seller.email' });
+      }
+      if (fieldValues['SELLER_PHONE'] === undefined) {
+        fieldValues['SELLER_PHONE'] = seller.phone ?? null;
+        setMeta('SELLER_PHONE', { source: 'USER', confidence: 0.75, sourcePath: 'parties.seller.phone' });
+      }
     }
 
     // Preserve any override keys that do not have an explicit mapping row.
     for (const [key, value] of Object.entries(overrideValues)) {
       if (!(key in fieldValues)) {
         fieldValues[key] = value;
+        setMeta(key, { source: 'USER', confidence: 1 });
       }
+    }
+
+    if (Object.keys(fieldMeta).length > 0) {
+      fieldValues['__fieldMeta'] = fieldMeta;
     }
 
     return { fieldValues, missingRequired };

@@ -207,7 +207,14 @@ export class InsightsService {
     const ownerId = query.ownerId?.trim() || undefined;
     const tier = query.tier?.trim()?.toUpperCase() || undefined;
 
-    const [people, analytics, savedViews] = await Promise.all([
+    const analyticsWhere = {
+      tenantId,
+      ...(ownerId ? { ownerId } : {}),
+      ...(stageIds.length ? { stageId: { in: stageIds } } : {}),
+      ...(tier ? { scoreTier: tier as LeadScoreTier } : {})
+    };
+
+    const [people, analyticsAgg, savedViews] = await Promise.all([
       this.prisma.person.findMany({
         where: {
           tenantId,
@@ -223,12 +230,13 @@ export class InsightsService {
           pipelineStage: { select: { id: true, name: true, order: true } }
         }
       }),
-      this.prisma.leadAnalyticsView.findMany({
-        where: {
-          tenantId,
-          ...(ownerId ? { ownerId } : {}),
-          ...(stageIds.length ? { stageId: { in: stageIds } } : {}),
-          ...(tier ? { scoreTier: tier as LeadScoreTier } : {})
+      this.prisma.leadAnalyticsView.aggregate({
+        where: analyticsWhere,
+        _count: { _all: true },
+        _sum: {
+          avgStageDurationMs: true,
+          stageMovesTotal: true,
+          stageMovesForward: true
         }
       }),
       this.prisma.savedView.findMany({
@@ -241,18 +249,17 @@ export class InsightsService {
 
     const activeLeads = people.length;
 
-    const avgStageDurationMs = analytics.length
-      ? analytics
-          .map((row: any) => toNumber(row.avgStageDurationMs))
-          .filter((value: number | null): value is number => value !== null)
-          .reduce((sum, value) => sum + value, 0) / Math.max(1, analytics.length)
-      : null;
+    const analyticsRowCount = analyticsAgg?._count?._all ?? 0;
+    const avgStageDurationMs =
+      analyticsRowCount > 0
+        ? (toNumber(analyticsAgg?._sum?.avgStageDurationMs) ?? 0) / analyticsRowCount
+        : null;
 
     const avgStageTimeHours =
       avgStageDurationMs === null ? null : Math.round((avgStageDurationMs / (60 * 60 * 1000)) * 10) / 10;
 
-    const totalMoves = analytics.reduce((sum: number, row: any) => sum + (toNumber(row.stageMovesTotal) ?? 0), 0);
-    const forwardMoves = analytics.reduce((sum: number, row: any) => sum + (toNumber(row.stageMovesForward) ?? 0), 0);
+    const totalMoves = toNumber(analyticsAgg?._sum?.stageMovesTotal) ?? 0;
+    const forwardMoves = toNumber(analyticsAgg?._sum?.stageMovesForward) ?? 0;
     const conversionPct = totalMoves > 0 ? Math.round((forwardMoves / totalMoves) * 1000) / 10 : null;
 
     const owners = normalizeOwners(people);

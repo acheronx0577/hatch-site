@@ -3299,12 +3299,12 @@ export default function DraftListings() {
   const isIndeterminate = filteredDraftListings.length > 0 && !isAllSelected && filteredDraftListings.some(listing => selectedListings.includes(listing.id))
 
   return (
-    <div className="relative min-h-screen bg-gray-50 p-6 space-y-6">
+    <div className="relative space-y-6">
       {isImportingDrafts && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="flex items-center gap-3 rounded-lg bg-white px-5 py-4 shadow-xl">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-            <span className="text-sm font-medium text-gray-700">
+          <div className="hatch-glass hatch-glass--elevated flex items-center gap-3 rounded-xl px-5 py-4 shadow-brand-md">
+            <Loader2 className="h-5 w-5 animate-spin text-brand-blue-600" />
+            <span className="text-sm font-medium text-slate-700">
               Processing uploaded listings...
             </span>
           </div>
@@ -3313,8 +3313,8 @@ export default function DraftListings() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Draft Listings</h1>
-          <p className="text-gray-600">
+          <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Draft Listings</h1>
+          <p className="text-sm text-slate-600">
             Manage your property listings in progress ({filteredDraftListings.length} of {draftListings.length} drafts)
           </p>
         </div>
@@ -3326,7 +3326,7 @@ export default function DraftListings() {
               <Badge variant="secondary" className="ml-2">{activeFilterCount}</Badge>
             )}
           </Button>
-          <Button onClick={() => setShowBulkUpload(true)} className="bg-blue-600 hover:bg-blue-700">
+          <Button onClick={() => setShowBulkUpload(true)}>
             <Upload className="w-4 h-4 mr-2" />
             Upload Listings
           </Button>
@@ -3339,7 +3339,7 @@ export default function DraftListings() {
 
       {/* Bulk Actions Bar */}
       {filteredDraftListings.length > 0 && (
-        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+        <Card className="flex items-center justify-between p-4 hover:translate-y-0 hover:shadow-brand">
           <div className="flex items-center space-x-4">
             <Checkbox
               checked={isAllSelected}
@@ -3348,7 +3348,7 @@ export default function DraftListings() {
               }}
               onCheckedChange={handleSelectAll}
             />
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-slate-600">
               {selectedListings.length === 0 
                 ? 'Select listings for bulk actions'
                 : `${selectedListings.length} selected`
@@ -3368,7 +3368,7 @@ export default function DraftListings() {
               </Button>
             </div>
           )}
-        </div>
+        </Card>
       )}
 
       {/* Draft listings grid */}
@@ -3539,15 +3539,17 @@ export default function DraftListings() {
 
       {/* Empty State */}
       {draftListings.length === 0 && (
-        <div className="text-center py-12">
-          <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No draft listings</h3>
-          <p className="text-gray-600 mb-6">Nothing here… yet. Be the first to change that.</p>
-          <Button onClick={() => setShowBulkUpload(true)}>
+        <Card className="p-10 text-center hover:translate-y-0 hover:shadow-brand">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-blue-600/10">
+            <FileText className="h-8 w-8 text-brand-blue-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-slate-900 mb-2">No draft listings</h3>
+          <p className="text-sm text-slate-600 mb-6">Nothing here… yet. Be the first to change that.</p>
+          <Button onClick={() => setShowBulkUpload(true)} className="mx-auto">
             <Upload className="w-4 h-4 mr-2" />
             Upload Your First Listings
           </Button>
-        </div>
+        </Card>
       )}
 
       {/* Property Preview Dialog */}

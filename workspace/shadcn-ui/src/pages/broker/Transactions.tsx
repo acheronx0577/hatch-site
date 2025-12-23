@@ -1,13 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchOrgTransactions, type OrgTransactionRecord } from '@/lib/api/org-transactions';
-import { emitCopilotContext, emitCopilotPrefill } from '@/lib/copilot/events';
+import { useUserRole } from '@/lib/auth/roles';
+import {
+  fetchOrgTransactionActivity,
+  fetchOrgTransactions,
+  updateOrgTransaction,
+  type OrgTransactionActivityEvent,
+  type OrgTransactionRecord,
+  type UpdateOrgTransactionPayload
+} from '@/lib/api/org-transactions';
+import { emitAskHatchOpen } from '@/lib/ask-hatch/events';
+import { cn } from '@/lib/utils';
+import { Eye, Info, LayoutDashboard, Pencil, Sparkles } from 'lucide-react';
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
 
@@ -40,74 +55,34 @@ export default function BrokerTransactions() {
     const closingLabel = txn.closingDate ? new Date(txn.closingDate).toLocaleDateString() : '—';
     const location = [city, state, postalCode].filter(Boolean).join(' ');
     const listingLabel = [addressLine1, location].filter(Boolean).join(', ') || 'Unlinked transaction';
-    const summary = `${listingLabel} · ${statusLabel}${txn.closingDate ? ` · Closing ${closingLabel}` : ''}`;
-    const agentName = txn.agentProfile?.user
-      ? [txn.agentProfile.user.firstName, txn.agentProfile.user.lastName].filter(Boolean).join(' ')
-      : null;
-    const agentEmail = txn.agentProfile?.user?.email ?? null;
+    const title = addressLine1 ? `Transaction · ${addressLine1}` : `Transaction · ${txn.id.slice(-6)}`;
 
-    emitCopilotContext({
-      surface: 'transaction',
-      entityType: 'transaction',
-      entityId: txn.id,
-      summary,
-      contextType: 'transaction',
+    emitAskHatchOpen({
+      title,
+      contextType: 'TRANSACTION',
       contextId: txn.id,
-      metadata: {
-        transactionId: txn.id,
-        status: txn.status,
-        listingId: txn.listingId ?? txn.listing?.id ?? null,
-        listingAddress: {
-          addressLine1: txn.listing?.addressLine1 ?? null,
-          city: txn.listing?.city ?? null,
-          state: txn.listing?.state ?? null,
-          postalCode: txn.listing?.postalCode ?? null
-        },
-        listPrice: txn.listing?.listPrice ?? null,
-        buyerName: txn.buyerName ?? null,
-        sellerName: txn.sellerName ?? null,
-        contractSignedAt: txn.contractSignedAt ?? null,
-        inspectionDate: txn.inspectionDate ?? null,
-        financingDate: txn.financingDate ?? null,
-        closingDate: txn.closingDate ?? null,
-        isCompliant: typeof txn.isCompliant === 'boolean' ? txn.isCompliant : null,
-        requiresAction: Boolean(txn.requiresAction),
-        agent: {
-          name: agentName,
-          email: agentEmail
-        }
+      contextSnapshot: {
+        listingLabel,
+        statusLabel,
+        closingLabel
       }
-    });
-
-    emitCopilotPrefill({
-      personaId: 'hatch_assistant',
-      chatMode: 'team',
-      message: [
-        `Act as my transaction coordinator.`,
-        ``,
-        `Transaction: ${listingLabel} (${txn.id})`,
-        `Status: ${statusLabel}`,
-        `Closing: ${closingLabel}`,
-        agentName || agentEmail ? `Agent: ${[agentName, agentEmail].filter(Boolean).join(' · ')}` : null,
-        ``,
-        `What is missing or overdue on this transaction, and what should we do next? Please give me a prioritized checklist.`
-      ]
-        .filter(Boolean)
-        .join('\n')
     });
   };
 
   if (!orgId) {
-    return <div className="p-8 text-sm text-gray-600">Select an organization to view transactions.</div>;
+    return <div className="text-sm text-gray-600">Select an organization to view transactions.</div>;
   }
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <TransactionsView orgId={orgId} onAskHatch={handleAskHatch} />
     </div>
   );
 }
 
 function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (txn: OrgTransactionRecord) => void }) {
+  const role = useUserRole();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const parseFilter = (value: string | null): TransactionsFilter => {
     if (!value) return 'ALL';
@@ -117,6 +92,9 @@ function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (t
 
   const [filter, setFilter] = useState<TransactionsFilter>(() => parseFilter(searchParams.get('filter')));
   const [agentFilter, setAgentFilter] = useState<string | null>(() => searchParams.get('agent'));
+  const [howItWorksOpen, setHowItWorksOpen] = useState(false);
+  const [detailsTransactionId, setDetailsTransactionId] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: ['broker', 'transactions', orgId],
     queryFn: () => fetchOrgTransactions(orgId),
@@ -124,6 +102,21 @@ function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (t
   });
 
   const transactions = data ?? [];
+  const detailsTransaction = useMemo(() => {
+    if (!detailsTransactionId) return null;
+    return transactions.find((txn) => txn.id === detailsTransactionId) ?? null;
+  }, [detailsTransactionId, transactions]);
+
+  useEffect(() => {
+    const focusId = searchParams.get('focus');
+    if (!focusId || transactions.length === 0) return;
+    if (focusId === detailsTransactionId && detailsOpen) return;
+    setDetailsTransactionId(focusId);
+    setDetailsOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('focus');
+    setSearchParams(next, { replace: true });
+  }, [detailsOpen, detailsTransactionId, searchParams, setSearchParams, transactions.length]);
 
   useEffect(() => {
     const nextAgent = searchParams.get('agent');
@@ -193,162 +186,249 @@ function TransactionsView({ orgId, onAskHatch }: { orgId: string; onAskHatch: (t
     return name || agentFilter;
   }, [agentFilter, transactions]);
 
+  const updateTransaction = useMutation({
+    mutationFn: async (params: { transactionId: string; payload: UpdateOrgTransactionPayload }) => {
+      return updateOrgTransaction(orgId, params.transactionId, params.payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['broker', 'transactions', orgId] });
+      await queryClient.invalidateQueries({ queryKey: ['mission-control', 'overview', orgId] });
+      toast({ title: 'Transaction updated', description: 'Changes saved successfully.' });
+    },
+    onError: (err: unknown) => {
+      const message = err instanceof Error ? err.message : 'Unable to update transaction.';
+      toast({ variant: 'destructive', title: 'Update failed', description: message });
+    }
+  });
+
   return (
     <>
-      <Card className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Mission Control</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Transaction pipeline</h1>
-            <p className="text-sm text-slate-500">
-              Watch contract milestones and compliance flags in one place. TC automation is monitoring deadlines and
-              missing docs for you.
+      <section className="hatch-hero relative overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-[#1F5FFF] via-[#3D86FF] to-[#00C6A2] text-white shadow-[0_30px_80px_rgba(31,95,255,0.35)]">
+        <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_52%)]" />
+        <div className="relative z-10 flex flex-col gap-6 px-6 py-8 md:px-10 md:py-12 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-xl space-y-3">
+            <p className="text-xs uppercase tracking-[0.4em] text-white/80">Mission control</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">Transaction pipeline</h1>
+            <p className="text-sm text-white/85">
+              Watch contract milestones and compliance flags in one place. Hatch keeps an eye on deadlines and missing docs.
             </p>
-            {agentLabel ? (
-              <p className="mt-2 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-600">
-                Filtered to agent: <span className="font-medium text-slate-900">{agentLabel}</span>
-              </p>
-            ) : null}
+            <div className="flex flex-wrap gap-2 text-[11px]">
+              <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur text-white/85">
+                {summary.total} transactions
+              </span>
+              <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur text-white/85">
+                {summary.closingSoon} closing soon
+              </span>
+              {agentLabel ? (
+                <span className="rounded-full border border-white/25 bg-white/10 px-3 py-1 backdrop-blur text-white/85">
+                  Filtered to <span className="font-medium text-white">{agentLabel}</span>
+                </span>
+              ) : null}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {agentFilter ? (
-              <Button variant="outline" onClick={clearAgentFilter}>
-                Clear agent filter
+
+          <div className="grid w-full gap-4 rounded-2xl border border-white/20 bg-white/15 p-5 backdrop-blur sm:grid-cols-2 lg:max-w-xl lg:grid-cols-4">
+            <HeroStat label="Under contract" value={summary.underContract} helper="Active contracts" />
+            <HeroStat label="Contingent" value={summary.contingent} helper="In contingency" />
+            <HeroStat label="Needs attention" value={summary.requiresAction} helper="Docs & deadlines" tone="warning" />
+            <HeroStat label="Closing soon" value={summary.closingSoon} helper="Next 14 days" />
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 bg-white/5 px-6 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" className="bg-white text-blue-700 hover:bg-blue-50" asChild>
+                <Link to="/broker/mission-control">
+                  <LayoutDashboard className="h-4 w-4" /> Back to Mission Control
+                </Link>
               </Button>
-            ) : null}
-            <Button variant="outline" asChild>
-              <Link to="/broker/mission-control">Back to Mission Control</Link>
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <KpiCard label="Total transactions" value={summary.total} helper={`${summary.underContract} under contract`} />
-          <KpiCard label="Contingent" value={summary.contingent} helper={`${summary.closingSoon} closing soon`} />
-          <KpiCard label="Needs attention" value={summary.requiresAction} />
-          <KpiCard label="Closing soon" value={summary.closingSoon} helper="Next 14 days" />
-        </div>
-      </Card>
-
-      <Card className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Transaction table</h2>
-            <p className="text-sm text-slate-500">Surface-level view of brokerage deals.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {filters.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => handleFilterChange(option.id)}
-                className={`rounded-full px-4 py-1 text-sm font-medium ${
-                  filter === option.id ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600'
-                }`}
+              <Button
+                variant="secondary"
+                className="border border-white/25 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+                onClick={() => setHowItWorksOpen(true)}
               >
-                {option.label}
-              </button>
-            ))}
+                <Info className="h-4 w-4" /> How it works
+              </Button>
+              {agentFilter ? (
+                <Button
+                  variant="secondary"
+                  className="border border-white/25 bg-white/10 text-white hover:bg-white/15 hover:text-white"
+                  onClick={clearAgentFilter}
+                >
+                  Clear agent filter
+                </Button>
+              ) : null}
+            </div>
+            <p className="text-xs text-white/70">Tip: Use “Ask Hatch” on any row to get a prioritized TC checklist.</p>
+          </div>
+        </div>
+      </section>
+
+      <Card className="overflow-hidden hover:translate-y-0 hover:shadow-brand">
+        <div className="flex flex-col gap-4 border-b border-[color:var(--hatch-card-border)] px-6 pb-4 pt-6 md:flex-row md:items-end md:justify-between">
+          <div>
+            <h2 className="text-lg font-medium text-slate-900">Transactions</h2>
+            <p className="text-sm text-slate-600">Surface-level view of brokerage deals.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-1 rounded-full border border-[var(--glass-border)] bg-white/25 p-1 backdrop-blur-md dark:bg-white/10">
+              {filters.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => handleFilterChange(option.id)}
+                  className={cn(
+                    'rounded-full px-3 py-1 text-[11px] font-semibold transition-colors duration-200',
+                    filter === option.id
+                      ? 'border border-white/20 bg-white/50 text-slate-900 shadow-brand'
+                      : 'text-slate-600 hover:bg-white/25 hover:text-slate-900 dark:text-ink-100/70 dark:hover:bg-white/10 dark:hover:text-ink-100'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {error ? (
-          <p className="py-6 text-sm text-rose-500">Unable to load transactions.</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-sm text-slate-700">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-2 text-left">Property</th>
-                  <th className="px-4 py-2 text-left">Status</th>
-                  <th className="px-4 py-2 text-left">Agent</th>
-                  <th className="px-4 py-2 text-left">Closing</th>
-                  <th className="px-4 py-2 text-left">TC</th>
-                  <th className="px-4 py-2 text-left">Amount</th>
-                  <th className="px-4 py-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                      Loading transactions…
-                    </td>
-                  </tr>
-                ) : filteredTransactions.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                      No transactions match the selected filter.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTransactions.map((txn) => (
-                    <tr key={txn.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-900">
-                          {txn.listing?.addressLine1 ?? 'Unlinked transaction'}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {txn.listing?.city} {txn.listing?.state} {txn.listing?.postalCode}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge className={getTransactionTone(txn)}>
-                          {formatStatus(txn.status)}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        {txn.agentProfile?.user ? (
-                          <>
-                            <p className="font-medium text-slate-900">
-                              {txn.agentProfile.user.firstName} {txn.agentProfile.user.lastName}
-                            </p>
-                            <p className="text-xs text-slate-500">{txn.agentProfile.user.email}</p>
-                          </>
-                        ) : (
-                          <p className="text-xs text-slate-500">Unassigned</p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Property</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Agent</TableHead>
+              <TableHead>Closing</TableHead>
+              <TableHead>TC</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {error ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-rose-600">
+                  Unable to load transactions.
+                </TableCell>
+              </TableRow>
+            ) : isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
+                  Loading transactions…
+                </TableCell>
+              </TableRow>
+            ) : filteredTransactions.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
+                  No transactions match the selected filter.
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredTransactions.map((txn) => {
+                const needsAttention = txn.requiresAction || txn.isCompliant === false;
+                const isSoon = isClosingSoon(txn.closingDate);
+
+                return (
+                  <TableRow
+                    key={txn.id}
+                    className={cn(needsAttention && 'odd:bg-rose-50/60 even:bg-rose-50/60 hover:bg-rose-50/70')}
+                  >
+                    <TableCell>
+                      <div className="font-medium text-slate-900">
+                        {txn.listing?.addressLine1 ?? 'Unlinked transaction'}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {txn.listing?.city} {txn.listing?.state} {txn.listing?.postalCode}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={statusBadgeVariant(txn.status)}>{formatStatus(txn.status)}</Badge>
+                        {needsAttention ? <Badge variant="danger">Attention</Badge> : null}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {txn.agentProfile?.user ? (
+                        <>
+                          <div className="font-medium text-slate-900">
+                            {txn.agentProfile.user.firstName} {txn.agentProfile.user.lastName}
+                          </div>
+                          <p className="text-xs text-slate-500">{txn.agentProfile.user.email}</p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-slate-500">Unassigned</p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium text-slate-900">
                         {txn.closingDate ? new Date(txn.closingDate).toLocaleDateString() : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        <div className="flex flex-col gap-1 text-xs text-slate-600">
-                          <span className="font-semibold text-slate-800">
-                            {txn.requiresAction || txn.isCompliant === false ? 'Needs attention' : 'Monitoring'}
-                          </span>
-                          {txn.inspectionDate && (
-                            <span>Inspection: {new Date(txn.inspectionDate).toLocaleDateString()}</span>
-                          )}
-                          {txn.financingDate && (
-                            <span>Financing: {new Date(txn.financingDate).toLocaleDateString()}</span>
-                          )}
+                      </div>
+                      {isSoon ? (
+                        <p className="mt-1 text-xs text-amber-700">Closing soon</p>
+                      ) : null}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-2">
+                        <Badge variant={needsAttention ? 'danger' : 'neutral'}>
+                          {needsAttention ? 'Needs attention' : 'Monitoring'}
+                        </Badge>
+                        <div className="space-y-1 text-xs text-slate-600">
+                          {txn.inspectionDate ? (
+                            <p>Inspection: {new Date(txn.inspectionDate).toLocaleDateString()}</p>
+                          ) : null}
+                          {txn.financingDate ? (
+                            <p>Financing: {new Date(txn.financingDate).toLocaleDateString()}</p>
+                          ) : null}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
-                        {txn.listing?.listPrice ? currencyFormatter.format(txn.listing.listPrice) : '—'}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <Button size="sm" variant="secondary" asChild>
-                            <Link to="/broker/compliance">Risk Center</Link>
-                          </Button>
-                          <Button size="sm" variant="ghost" asChild>
-                            <Link to="/broker/mission-control">Mission Control</Link>
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => onAskHatch(txn)}>
-                            Ask Hatch
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-medium text-slate-900">
+                      {txn.listing?.listPrice ? currencyFormatter.format(txn.listing.listPrice) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9"
+                          onClick={() => {
+                            setDetailsTransactionId(txn.id);
+                            setDetailsOpen(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" /> Details
+                        </Button>
+                        <Button size="sm" variant="default" className="h-9" onClick={() => onAskHatch(txn)}>
+                          <Sparkles className="h-4 w-4" /> Ask Hatch
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
       </Card>
+
+      <HowItWorksDialog open={howItWorksOpen} onOpenChange={setHowItWorksOpen} />
+
+      <TransactionDetailsDialog
+        orgId={orgId}
+        role={role}
+        transaction={detailsTransaction}
+        open={detailsOpen}
+        onOpenChange={(next) => {
+          setDetailsOpen(next);
+          if (!next) {
+            setDetailsTransactionId(null);
+          }
+        }}
+        onSave={async (transactionId, payload) => {
+          await updateTransaction.mutateAsync({ transactionId, payload });
+        }}
+        saving={updateTransaction.isPending}
+      />
     </>
   );
 }
@@ -364,21 +444,358 @@ function isClosingSoon(date?: string | null) {
 const formatStatus = (status: string) =>
   status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
 
-function getTransactionTone(txn: OrgTransactionRecord) {
-  if (txn.requiresAction || txn.isCompliant === false) {
-    return 'border border-rose-100 bg-rose-50 text-rose-700';
+const statusBadgeVariant = (status: string) => {
+  switch (status) {
+    case 'CLOSED':
+      return 'success' as const;
+    case 'UNDER_CONTRACT':
+      return 'info' as const;
+    case 'CONTINGENT':
+      return 'warning' as const;
+    default:
+      return 'neutral' as const;
   }
-  if (txn.status === 'CLOSED') return 'border border-emerald-100 bg-emerald-50 text-emerald-700';
-  if (txn.status === 'UNDER_CONTRACT') return 'border border-amber-100 bg-amber-50 text-amber-700';
-  return 'border bg-slate-100 text-slate-700';
+};
+
+function HeroStat({
+  label,
+  value,
+  helper,
+  tone
+}: {
+  label: string;
+  value: number;
+  helper?: string;
+  tone?: 'warning' | 'neutral';
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-2xl bg-white/30 px-4 py-3 text-start shadow-inner shadow-white/20',
+        tone === 'warning' && 'bg-amber-500/15'
+      )}
+    >
+      <p className="text-xs uppercase tracking-wide text-white/80">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-white md:text-4xl">{value}</p>
+      {helper ? <p className="mt-1 text-xs text-white/75">{helper}</p> : null}
+    </div>
+  );
 }
 
-function KpiCard({ label, value, helper }: { label: string; value: number; helper?: string }) {
+function HowItWorksDialog({
+  open,
+  onOpenChange
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   return (
-    <Card className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="text-3xl font-semibold text-slate-900">{value}</p>
-      {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
-    </Card>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[640px]">
+        <DialogHeader>
+          <DialogTitle>How the transaction pipeline works</DialogTitle>
+          <DialogDescription>
+            Hatch tracks milestones as you move a deal through stages. Some stages require key dates or documents.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 text-sm text-slate-700">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Stages</p>
+            <ul className="mt-2 space-y-1">
+              <li>
+                <span className="font-semibold">Pre-contract</span> → intake &amp; parties.
+              </li>
+              <li>
+                <span className="font-semibold">Under contract</span> → contract signed date or a passing purchase contract file.
+              </li>
+              <li>
+                <span className="font-semibold">Contingent</span> → purchase contract + proof of funds (passing compliance).
+              </li>
+              <li>
+                <span className="font-semibold">Closed</span> → closing date + passing closing disclosure.
+              </li>
+              <li>
+                <span className="font-semibold">Cancelled</span> → can be reopened to pre-contract if needed.
+              </li>
+            </ul>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Notes</p>
+            <p className="mt-2">
+              If a stage change is blocked, Hatch will tell you exactly what’s missing (dates or required documents).
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button onClick={() => onOpenChange(false)}>Got it</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const TRANSACTION_STATUSES = [
+  'PRE_CONTRACT',
+  'UNDER_CONTRACT',
+  'CONTINGENT',
+  'CLOSED',
+  'CANCELLED'
+] as const;
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+function TransactionDetailsDialog({
+  orgId,
+  role,
+  transaction,
+  open,
+  onOpenChange,
+  onSave,
+  saving
+}: {
+  orgId: string;
+  role: string;
+  transaction: OrgTransactionRecord | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSave: (transactionId: string, payload: UpdateOrgTransactionPayload) => Promise<void>;
+  saving: boolean;
+}) {
+  const { data: activity, isLoading: activityLoading } = useQuery({
+    queryKey: ['broker', 'transactions', orgId, transaction?.id, 'activity'],
+    queryFn: () => fetchOrgTransactionActivity(orgId, transaction?.id ?? ''),
+    enabled: Boolean(open && transaction?.id),
+    staleTime: 10_000
+  });
+
+  const [form, setForm] = useState(() => ({
+    status: transaction?.status ?? 'PRE_CONTRACT',
+    buyerName: transaction?.buyerName ?? '',
+    sellerName: transaction?.sellerName ?? '',
+    contractSignedAt: toDateInputValue(transaction?.contractSignedAt),
+    inspectionDate: toDateInputValue(transaction?.inspectionDate),
+    financingDate: toDateInputValue(transaction?.financingDate),
+    closingDate: toDateInputValue(transaction?.closingDate),
+    requiresAction: Boolean(transaction?.requiresAction),
+    isCompliant: transaction?.isCompliant ?? true,
+    complianceNotes: transaction?.complianceNotes ?? ''
+  }));
+  const [error, setError] = useState<string | null>(null);
+  const [requirements, setRequirements] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setRequirements(null);
+    setForm({
+      status: transaction?.status ?? 'PRE_CONTRACT',
+      buyerName: transaction?.buyerName ?? '',
+      sellerName: transaction?.sellerName ?? '',
+      contractSignedAt: toDateInputValue(transaction?.contractSignedAt),
+      inspectionDate: toDateInputValue(transaction?.inspectionDate),
+      financingDate: toDateInputValue(transaction?.financingDate),
+      closingDate: toDateInputValue(transaction?.closingDate),
+      requiresAction: Boolean(transaction?.requiresAction),
+      isCompliant: transaction?.isCompliant ?? true,
+      complianceNotes: transaction?.complianceNotes ?? ''
+    });
+  }, [open, transaction]);
+
+  const canEditCompliance = role === 'BROKER' || role === 'ADMIN';
+
+  const listingLabel = transaction?.listing?.addressLine1?.trim() || 'Unlinked transaction';
+  const statusLabel = transaction?.status ? formatStatus(transaction.status) : '—';
+
+  const handleSave = async () => {
+    if (!transaction) return;
+    setError(null);
+    setRequirements(null);
+
+    const payload: UpdateOrgTransactionPayload = {};
+    if (form.status !== transaction.status) payload.status = form.status;
+    if ((form.buyerName || null) !== (transaction.buyerName ?? null)) payload.buyerName = form.buyerName || null;
+    if ((form.sellerName || null) !== (transaction.sellerName ?? null)) payload.sellerName = form.sellerName || null;
+
+    const contractSignedAt = form.contractSignedAt || null;
+    if (contractSignedAt !== (toDateInputValue(transaction.contractSignedAt) || null)) payload.contractSignedAt = contractSignedAt;
+    const inspectionDate = form.inspectionDate || null;
+    if (inspectionDate !== (toDateInputValue(transaction.inspectionDate) || null)) payload.inspectionDate = inspectionDate;
+    const financingDate = form.financingDate || null;
+    if (financingDate !== (toDateInputValue(transaction.financingDate) || null)) payload.financingDate = financingDate;
+    const closingDate = form.closingDate || null;
+    if (closingDate !== (toDateInputValue(transaction.closingDate) || null)) payload.closingDate = closingDate;
+
+    if (canEditCompliance) {
+      if (form.requiresAction !== Boolean(transaction.requiresAction)) payload.requiresAction = form.requiresAction;
+      if (Boolean(form.isCompliant) !== Boolean(transaction.isCompliant)) payload.isCompliant = Boolean(form.isCompliant);
+      if ((form.complianceNotes || null) !== (transaction.complianceNotes ?? null)) payload.complianceNotes = form.complianceNotes || null;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      onOpenChange(false);
+      return;
+    }
+
+    try {
+      await onSave(transaction.id, payload);
+      onOpenChange(false);
+    } catch (err: unknown) {
+      const status = (err as any)?.status ?? (err as any)?.response?.status;
+      const details = (err as any)?.details;
+      if (status === 422 && details && typeof details === 'object') {
+        const missing = (details as any)?.missing;
+        if (Array.isArray(missing)) {
+          setRequirements(missing.map((value) => String(value)));
+        }
+      }
+      setError(err instanceof Error ? err.message : 'Unable to update transaction.');
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[760px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-4 w-4" /> Transaction details
+          </DialogTitle>
+          <DialogDescription>
+            {listingLabel} · {statusLabel}
+          </DialogDescription>
+        </DialogHeader>
+
+        {!transaction ? (
+          <div className="text-sm text-slate-600">Select a transaction to view details.</div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status</label>
+                <select
+                  className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  value={form.status}
+                  onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
+                >
+                  {TRANSACTION_STATUSES.map((status) => (
+                    <option key={status} value={status}>
+                      {formatStatus(status)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Buyer</label>
+                  <Input value={form.buyerName} onChange={(event) => setForm((prev) => ({ ...prev, buyerName: event.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Seller</label>
+                  <Input value={form.sellerName} onChange={(event) => setForm((prev) => ({ ...prev, sellerName: event.target.value }))} />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Contract signed</label>
+                  <Input type="date" value={form.contractSignedAt} onChange={(event) => setForm((prev) => ({ ...prev, contractSignedAt: event.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Inspection</label>
+                  <Input type="date" value={form.inspectionDate} onChange={(event) => setForm((prev) => ({ ...prev, inspectionDate: event.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Financing</label>
+                  <Input type="date" value={form.financingDate} onChange={(event) => setForm((prev) => ({ ...prev, financingDate: event.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Closing</label>
+                  <Input type="date" value={form.closingDate} onChange={(event) => setForm((prev) => ({ ...prev, closingDate: event.target.value }))} />
+                </div>
+              </div>
+
+              {canEditCompliance ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Broker controls</p>
+                  <div className="mt-3 grid gap-3">
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={form.requiresAction}
+                        onChange={(event) => setForm((prev) => ({ ...prev, requiresAction: event.target.checked }))}
+                      />
+                      Requires action
+                    </label>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={form.isCompliant}
+                        onChange={(event) => setForm((prev) => ({ ...prev, isCompliant: event.target.checked }))}
+                      />
+                      Mark compliant
+                    </label>
+                    <Textarea
+                      value={form.complianceNotes}
+                      onChange={(event) => setForm((prev) => ({ ...prev, complianceNotes: event.target.value }))}
+                      placeholder="Compliance notes (optional)"
+                    />
+                  </div>
+                </div>
+              ) : null}
+
+              {requirements && requirements.length > 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  <p className="font-semibold">Stage change blocked</p>
+                  <ul className="mt-2 list-disc pl-5">
+                    {requirements.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {error ? <div className="text-sm text-rose-600">{error}</div> : null}
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Recent activity</p>
+                <div className="mt-3 space-y-2 text-sm text-slate-700">
+                  {activityLoading ? (
+                    <p className="text-sm text-slate-500">Loading activity…</p>
+                  ) : (activity ?? []).length === 0 ? (
+                    <p className="text-sm text-slate-500">No activity recorded yet.</p>
+                  ) : (
+                    (activity ?? []).slice(0, 10).map((event: OrgTransactionActivityEvent) => (
+                      <div key={event.id} className="rounded-lg border border-slate-100 bg-slate-50/40 px-3 py-2">
+                        <p className="font-medium text-slate-900">{event.message ?? event.type}</p>
+                        <p className="text-xs text-slate-500">{new Date(event.createdAt).toLocaleString()}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={() => void handleSave()} disabled={!transaction || saving}>
+            {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

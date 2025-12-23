@@ -9,6 +9,7 @@ import {
   LeadScoreTier,
   LeadTaskStatus,
   LeadTouchpointType,
+  LeadType,
   MessageChannel,
   NotificationType,
   PersonStage,
@@ -75,6 +76,7 @@ export interface LeadListItem {
   phone: string | null;
   score: number;
   scoreTier: LeadScoreTier;
+  leadType: LeadType;
   pipelineId?: string | null;
   pipelineName?: string | null;
   pipelineType?: string | null;
@@ -209,6 +211,10 @@ export class LeadsService {
 
     if (query.pipelineId) {
       where.pipelineId = query.pipelineId;
+    }
+
+    if (query.leadType) {
+      where.leadType = query.leadType;
     }
 
     if (query.stageId?.length) {
@@ -483,6 +489,7 @@ export class LeadsService {
           utmMedium: dto.utmMedium ?? null,
           utmCampaign: dto.utmCampaign ?? null,
           gclid: dto.gclid ?? null,
+          leadType: dto.leadType ? (dto.leadType as LeadType) : LeadType.UNKNOWN,
           doNotContact: dto.doNotContact ?? false
         },
         include: LIST_INCLUDE
@@ -563,6 +570,7 @@ export class LeadsService {
         : { disconnect: true };
     }
     if (dto.doNotContact !== undefined) updateData.doNotContact = dto.doNotContact;
+    if (dto.leadType !== undefined) updateData.leadType = dto.leadType as LeadType;
 
     let stageChanged = false;
     let nextStageId = existing.stageId ?? null;
@@ -1054,6 +1062,7 @@ export class LeadsService {
       phone: person.primaryPhone ?? null,
       score: person.leadScore ?? 0,
       scoreTier: person.scoreTier ?? LeadScoreTier.D,
+      leadType: person.leadType ?? LeadType.UNKNOWN,
       owner,
       stage,
       pipelineId,

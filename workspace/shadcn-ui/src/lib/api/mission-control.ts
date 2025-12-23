@@ -67,12 +67,19 @@ export interface MissionControlOverview {
     unqualifiedLeads: number;
     appointmentsSet: number;
   };
+  leadTypeBreakdown?: {
+    BUYER: number;
+    SELLER: number;
+    UNKNOWN: number;
+  };
   loiStats: {
     totalOfferIntents: number;
-    submittedOfferIntents: number;
-    underReviewOfferIntents: number;
+    draftOfferIntents: number;
+    sentOfferIntents: number;
+    receivedOfferIntents: number;
+    counteredOfferIntents: number;
     acceptedOfferIntents: number;
-    declinedOfferIntents: number;
+    rejectedOfferIntents: number;
   };
   rentalStats: {
     propertiesUnderManagement: number;
@@ -135,12 +142,31 @@ export interface MissionControlAgentRow {
   userId: string;
   name: string;
   email: string;
+  performance?: {
+    modelVersion: string;
+    overallScore: number;
+    confidenceBand: 'HIGH' | 'MEDIUM' | 'DEVELOPING';
+    riskDragPenalty?: number;
+    topDrivers: Array<{
+      label: string;
+      direction: 'positive' | 'negative';
+      metricSummary: string;
+      deepLink?: string;
+    }>;
+    lastUpdated: string;
+  } | null;
   riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   riskScore: number;
   isCompliant: boolean;
   requiresAction: boolean;
+  buyerLeadCount: number;
+  sellerLeadCount: number;
+  unknownLeadCount: number;
+  buyerSellerOrientation: 'BUYER_HEAVY' | 'BALANCED' | 'SELLER_HEAVY' | 'UNKNOWN';
+  buyerSharePercent: number;
   ceHoursRequired?: number | null;
   ceHoursCompleted?: number | null;
+  ceCycleEndAt?: string | null;
   memberships: Array<{ type: string; name: string; status: string }>;
   trainingAssigned: number;
   trainingCompleted: number;
@@ -181,6 +207,7 @@ export interface MissionControlEvent {
   id: string;
   type: string;
   message?: string | null;
+  payload?: Record<string, unknown> | null;
   createdAt: string;
 }
 

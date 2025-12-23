@@ -35,7 +35,7 @@ export interface CaseListResponse {
   nextCursor: string | null;
 }
 
-const buildQuery = (params: Record<string, string | number | undefined>) => {
+const buildQuery = (params: object) => {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') {

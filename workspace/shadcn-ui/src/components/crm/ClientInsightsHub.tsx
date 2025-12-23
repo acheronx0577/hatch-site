@@ -30,6 +30,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
+import { useLeadMessaging } from '@/contexts/LeadMessagingContext';
 
 type ClientInsightsHubProps = {
   tenantId: string;
@@ -368,6 +369,7 @@ export function ClientInsightsHub({ tenantId }: ClientInsightsHubProps) {
   const usingFallback = FORCE_INSIGHTS_DEMO || (!data && !isLoading && !isFetching);
   const payload = (usingFallback ? fallbackPayload : data) ?? ({} as ClientInsightsPayload);
   const navigate = useNavigate();
+  const { openForLead } = useLeadMessaging();
   const activityFeedEntries = payload?.feed ?? payload?.activityFeed ?? [];
   const stageMeta = useMemo(() => {
     const map = new Map<string, { avgTimeHours: number | null; conversionRate: number | null }>();
@@ -386,16 +388,16 @@ export function ClientInsightsHub({ tenantId }: ClientInsightsHubProps) {
       const params = new URLSearchParams();
       params.set('stageId', cell.key);
       if (filters.ownerId) params.set('ownerId', filters.ownerId);
-      navigate(`/broker/leads?${params.toString()}`);
+      navigate(`/broker/crm?${params.toString()}`);
     },
     [navigate, filters.ownerId]
   );
 
   const handleSendMessage = useCallback(
     (leadId: string) => {
-      navigate(`/messages?personId=${leadId}`);
+      openForLead(leadId);
     },
-    [navigate]
+    [openForLead]
   );
 
   const handleStartNurture = useCallback(
@@ -553,7 +555,7 @@ function FilterToolbar({ filters, selected, onChange, onReset, isStale }: Filter
       </div>
       <div className="flex flex-1 flex-wrap gap-3">
         <FilterSelect
-          placeholder="Owner"
+          placeholder="Licensee"
           value={selected.ownerId}
           options={ownerOptions}
           onValueChange={(value) => onChange('ownerId', value)}
@@ -625,7 +627,7 @@ type EngagementHeatmapProps = {
 function EngagementHeatmap({ data, stageMeta = new Map(), onCellSelect }: EngagementHeatmapProps) {
   const sections = [
     { title: 'By Stage', cells: data.byStage },
-    { title: 'By Owner', cells: data.byOwner },
+    { title: 'By Licensee', cells: data.byOwner },
     { title: 'By Tier', cells: data.byTier }
   ];
 

@@ -19,8 +19,7 @@ import { z } from 'zod';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../storage/s3.service';
 import {
-  ORG_ADDON_MARKETING_STUDIO,
-  ORG_ADDON_WHITE_LABEL_MARKETING
+  ORG_ADDON_MARKETING_STUDIO
 } from './constants';
 import { CreateMarketingStudioTemplateDto } from './dto/create-template.dto';
 import { GenerateMarketingStudioAssetDto } from './dto/generate-asset.dto';
@@ -60,8 +59,8 @@ const templateSchema = z.object({
     .default([]),
   watermark: z
     .object({
-      enabled: z.boolean().optional().default(true),
-      text: z.string().optional().default('Hatch'),
+      enabled: z.boolean().optional().default(false),
+      text: z.string().optional().default(''),
       opacity: z.number().min(0).max(1).optional().default(0.12),
       size: z.number().positive().optional().default(42),
       x: z.number().optional(),
@@ -117,9 +116,7 @@ export class MarketingStudioService {
 
   private async getEntitlements(orgId: string): Promise<Entitlements> {
     const globalStudio = (process.env.ADDON_MARKETING_STUDIO ?? 'false').toLowerCase() === 'true';
-    const globalWhiteLabel = (process.env.ADDON_WHITE_LABEL_MARKETING ?? 'false').toLowerCase() === 'true';
-
-    if (globalStudio && globalWhiteLabel) {
+    if (globalStudio) {
       return { marketingStudio: true, whiteLabelMarketing: true };
     }
 
@@ -127,15 +124,15 @@ export class MarketingStudioService {
       where: {
         organizationId: orgId,
         enabled: true,
-        key: { in: [ORG_ADDON_MARKETING_STUDIO, ORG_ADDON_WHITE_LABEL_MARKETING] }
+        key: { in: [ORG_ADDON_MARKETING_STUDIO] }
       },
       select: { key: true }
     });
 
     const enabled = new Set(rows.map((row) => row.key));
     return {
-      marketingStudio: globalStudio || enabled.has(ORG_ADDON_MARKETING_STUDIO),
-      whiteLabelMarketing: globalWhiteLabel || enabled.has(ORG_ADDON_WHITE_LABEL_MARKETING)
+      marketingStudio: enabled.has(ORG_ADDON_MARKETING_STUDIO),
+      whiteLabelMarketing: true
     };
   }
 
@@ -148,9 +145,7 @@ export class MarketingStudioService {
       orderBy: [{ isSystem: 'desc' }, { createdAt: 'desc' }]
     });
 
-    const filtered = entitlements.whiteLabelMarketing
-      ? templates
-      : templates.filter((template) => template.variant !== MarketingStudioTemplateVariant.WHITE_LABEL);
+    const filtered = templates.filter((template) => template.variant === MarketingStudioTemplateVariant.WHITE_LABEL);
 
     const withUrls = await Promise.all(
       filtered.map(async (template) => ({
@@ -169,7 +164,7 @@ export class MarketingStudioService {
       throw new ForbiddenException('Marketing Studio is not enabled for this organization');
     }
 
-    const baseSchema: MarketingStudioTemplateSchema = {
+    const flyerSchema: MarketingStudioTemplateSchema = {
       page: DEFAULT_PAGE,
       imageSlots: [
         { id: 'hero', x: 36, y: 330, width: 540, height: 420, fit: 'cover' }
@@ -183,55 +178,106 @@ export class MarketingStudioService {
         { id: 'agentEmail', x: 36, y: 164, size: 12, maxWidth: 540 },
         { id: 'brokerageName', x: 36, y: 120, size: 10, maxWidth: 540 }
       ],
-      watermark: { enabled: true, text: 'Hatch', opacity: 0.12, size: 42 }
+      watermark: { enabled: false }
     };
 
-    const [hatch, whiteLabel] = await Promise.all([
-      this.prisma.marketingStudioTemplate.upsert({
-        where: { key: 'flyer_basic_hatch' },
-        create: {
-          key: 'flyer_basic_hatch',
-          organizationId: null,
-          name: 'Flyer (Hatch)',
-          description: '1-page listing flyer (Hatch branded).',
-          variant: MarketingStudioTemplateVariant.HATCH_BRANDED,
-          overlayS3Key: null,
-          overlayPageIndex: 0,
-          schema: baseSchema as unknown as Prisma.InputJsonValue,
-          isSystem: true
-        },
-        update: {
-          name: 'Flyer (Hatch)',
-          description: '1-page listing flyer (Hatch branded).',
-          variant: MarketingStudioTemplateVariant.HATCH_BRANDED,
-          schema: baseSchema as unknown as Prisma.InputJsonValue,
-          isSystem: true
-        }
-      }),
-      this.prisma.marketingStudioTemplate.upsert({
-        where: { key: 'flyer_basic_white_label' },
-        create: {
-          key: 'flyer_basic_white_label',
-          organizationId: null,
-          name: 'Flyer (White label)',
-          description: '1-page listing flyer (no Hatch watermark).',
-          variant: MarketingStudioTemplateVariant.WHITE_LABEL,
-          overlayS3Key: null,
-          overlayPageIndex: 0,
-          schema: { ...baseSchema, watermark: { ...baseSchema.watermark, enabled: false } } as unknown as Prisma.InputJsonValue,
-          isSystem: true
-        },
-        update: {
-          name: 'Flyer (White label)',
-          description: '1-page listing flyer (no Hatch watermark).',
-          variant: MarketingStudioTemplateVariant.WHITE_LABEL,
-          schema: { ...baseSchema, watermark: { ...baseSchema.watermark, enabled: false } } as unknown as Prisma.InputJsonValue,
-          isSystem: true
-        }
-      })
-    ]);
+    const flyerTemplate = await this.prisma.marketingStudioTemplate.upsert({
+      where: { key: 'flyer_basic_white_label' },
+      create: {
+        key: 'flyer_basic_white_label',
+        organizationId: null,
+        name: 'Flyer (Default)',
+        description: '1-page listing flyer.',
+        variant: MarketingStudioTemplateVariant.WHITE_LABEL,
+        overlayS3Key: null,
+        overlayPageIndex: 0,
+        schema: flyerSchema as unknown as Prisma.InputJsonValue,
+        isSystem: true
+      },
+      update: {
+        name: 'Flyer (Default)',
+        description: '1-page listing flyer.',
+        variant: MarketingStudioTemplateVariant.WHITE_LABEL,
+        schema: flyerSchema as unknown as Prisma.InputJsonValue,
+        isSystem: true
+      }
+    });
 
-    return { templates: [hatch, whiteLabel] };
+    const socialSchema: MarketingStudioTemplateSchema = {
+      page: { width: 612, height: 612 },
+      imageSlots: [{ id: 'hero', x: 36, y: 170, width: 540, height: 380, fit: 'cover' }],
+      textSlots: [
+        { id: 'address', x: 36, y: 145, size: 16, maxWidth: 540 },
+        { id: 'cityStateZip', x: 36, y: 125, size: 12, maxWidth: 540 },
+        { id: 'price', x: 36, y: 102, size: 14, maxWidth: 540 },
+        { id: 'agentName', x: 36, y: 68, size: 10, maxWidth: 540 },
+        { id: 'agentPhone', x: 36, y: 54, size: 10, maxWidth: 540 },
+        { id: 'agentEmail', x: 36, y: 40, size: 10, maxWidth: 540 },
+        { id: 'brokerageName', x: 36, y: 20, size: 9, maxWidth: 540 }
+      ],
+      watermark: { enabled: false }
+    };
+
+    const socialTemplate = await this.prisma.marketingStudioTemplate.upsert({
+      where: { key: 'social_post_square_white_label' },
+      create: {
+        key: 'social_post_square_white_label',
+        organizationId: null,
+        name: 'Social Post (Square)',
+        description: 'Square social post layout for IG/FB.',
+        variant: MarketingStudioTemplateVariant.WHITE_LABEL,
+        overlayS3Key: null,
+        overlayPageIndex: 0,
+        schema: socialSchema as unknown as Prisma.InputJsonValue,
+        isSystem: true
+      },
+      update: {
+        name: 'Social Post (Square)',
+        description: 'Square social post layout for IG/FB.',
+        variant: MarketingStudioTemplateVariant.WHITE_LABEL,
+        schema: socialSchema as unknown as Prisma.InputJsonValue,
+        isSystem: true
+      }
+    });
+
+    const storySchema: MarketingStudioTemplateSchema = {
+      page: { width: 612, height: 1088 },
+      imageSlots: [{ id: 'hero', x: 36, y: 430, width: 540, height: 610, fit: 'cover' }],
+      textSlots: [
+        { id: 'address', x: 36, y: 395, size: 18, maxWidth: 540 },
+        { id: 'cityStateZip', x: 36, y: 370, size: 12, maxWidth: 540 },
+        { id: 'price', x: 36, y: 342, size: 16, maxWidth: 540 },
+        { id: 'agentName', x: 36, y: 275, size: 12, maxWidth: 540 },
+        { id: 'agentPhone', x: 36, y: 252, size: 12, maxWidth: 540 },
+        { id: 'agentEmail', x: 36, y: 230, size: 12, maxWidth: 540 },
+        { id: 'brokerageName', x: 36, y: 200, size: 10, maxWidth: 540 }
+      ],
+      watermark: { enabled: false }
+    };
+
+    const storyTemplate = await this.prisma.marketingStudioTemplate.upsert({
+      where: { key: 'story_vertical_white_label' },
+      create: {
+        key: 'story_vertical_white_label',
+        organizationId: null,
+        name: 'Story (Vertical)',
+        description: 'Vertical story layout (IG/FB story).',
+        variant: MarketingStudioTemplateVariant.WHITE_LABEL,
+        overlayS3Key: null,
+        overlayPageIndex: 0,
+        schema: storySchema as unknown as Prisma.InputJsonValue,
+        isSystem: true
+      },
+      update: {
+        name: 'Story (Vertical)',
+        description: 'Vertical story layout (IG/FB story).',
+        variant: MarketingStudioTemplateVariant.WHITE_LABEL,
+        schema: storySchema as unknown as Prisma.InputJsonValue,
+        isSystem: true
+      }
+    });
+
+    return { templates: [flyerTemplate, socialTemplate, storyTemplate] };
   }
 
   async presignTemplateUpload(orgId: string, userId: string, dto: PresignMarketingStudioTemplateDto) {
@@ -263,10 +309,7 @@ export class MarketingStudioService {
       throw new ForbiddenException('Marketing Studio is not enabled for this organization');
     }
 
-    const variant = dto.variant ?? MarketingStudioTemplateVariant.HATCH_BRANDED;
-    if (variant === MarketingStudioTemplateVariant.WHITE_LABEL && !entitlements.whiteLabelMarketing) {
-      throw new ForbiddenException('White label marketing is not enabled for this organization');
-    }
+    const variant = MarketingStudioTemplateVariant.WHITE_LABEL;
     if (dto.overlayS3Key) {
       const expectedPrefix = `marketing-templates/${orgId}/`;
       if (!dto.overlayS3Key.startsWith(expectedPrefix)) {
@@ -359,8 +402,8 @@ export class MarketingStudioService {
     if (!template || (template.organizationId && template.organizationId !== orgId)) {
       throw new NotFoundException('Template not found');
     }
-    if (template.variant === MarketingStudioTemplateVariant.WHITE_LABEL && !entitlements.whiteLabelMarketing) {
-      throw new ForbiddenException('White label marketing is not enabled for this organization');
+    if (template.variant !== MarketingStudioTemplateVariant.WHITE_LABEL) {
+      throw new NotFoundException('Template not found');
     }
 
     const templateLayout = templateSchema.parse(template.schema);
@@ -482,16 +525,23 @@ export class MarketingStudioService {
     const results: Record<string, { bytes: Uint8Array; source: { url?: string; s3Key?: string } } | null> = {};
 
     const slotIds = template.imageSlots.map((slot) => slot.id);
-    const fallbackS3Keys = propertyImages.slice(0, slotIds.length);
+    const heroSlotId = template.imageSlots.find((slot) => slot.id === 'hero')?.id ?? null;
+    const heroOverride = heroSlotId ? overrides[heroSlotId] : undefined;
+    const heroIsOverridden = Boolean(heroOverride?.s3Key?.trim() || heroOverride?.url?.trim());
+    const canUseDefaultHero = Boolean(heroSlotId && !heroIsOverridden && propertyImages[0]);
 
-    for (const [index, slotId] of slotIds.entries()) {
+    let fallbackIndex = canUseDefaultHero ? 1 : 0;
+
+    for (const slotId of slotIds) {
       const override = overrides[slotId];
       const candidate = override?.s3Key
         ? { s3Key: override.s3Key }
         : override?.url
           ? { url: override.url }
-          : fallbackS3Keys[index]
-            ? { s3Key: fallbackS3Keys[index] }
+          : canUseDefaultHero && slotId === heroSlotId
+            ? { s3Key: propertyImages[0] }
+            : propertyImages[fallbackIndex]
+              ? { s3Key: propertyImages[fallbackIndex++] }
             : null;
 
       if (!candidate) {
@@ -566,12 +616,14 @@ export class MarketingStudioService {
     if (template.variant === MarketingStudioTemplateVariant.HATCH_BRANDED) {
       const watermark = templateLayout.watermark ?? { enabled: true };
       if (watermark.enabled !== false) {
-        const textValue = watermark.text ?? 'Hatch';
-        const size = watermark.size ?? 42;
-        const opacity = watermark.opacity ?? 0.12;
-        const x = watermark.x ?? pageSize.width - 36 - font.widthOfTextAtSize(textValue, size);
-        const y = watermark.y ?? 36;
-        page.drawText(textValue, { x, y, size, font, color: rgb(0, 0, 0), opacity });
+        const textValue = (watermark.text ?? '').trim();
+        if (textValue) {
+          const size = watermark.size ?? 42;
+          const opacity = watermark.opacity ?? 0.12;
+          const x = watermark.x ?? pageSize.width - 36 - font.widthOfTextAtSize(textValue, size);
+          const y = watermark.y ?? 36;
+          page.drawText(textValue, { x, y, size, font, color: rgb(0, 0, 0), opacity });
+        }
       }
     }
 

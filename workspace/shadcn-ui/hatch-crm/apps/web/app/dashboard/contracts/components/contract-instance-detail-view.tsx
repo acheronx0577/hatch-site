@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
@@ -34,9 +34,20 @@ export function ContractInstanceDetailView({ orgId, contractInstanceId }: Contra
   const [draftFields, setDraftFields] = useState<Record<string, string>>({});
 
   const editableKeys = useMemo(() => instance?.editableKeys ?? [], [instance?.editableKeys]);
+  const initRef = useRef<{ instanceId: string | null; editableKeysSignature: string }>({
+    instanceId: null,
+    editableKeysSignature: ''
+  });
 
   useEffect(() => {
     if (!instance) return;
+
+    const editableKeysSignature = editableKeys.join('|');
+    if (initRef.current.instanceId === instance.id && initRef.current.editableKeysSignature === editableKeysSignature) {
+      return;
+    }
+
+    initRef.current = { instanceId: instance.id, editableKeysSignature };
     setTitle(instance.title);
 
     const next: Record<string, string> = {};
@@ -45,7 +56,7 @@ export function ContractInstanceDetailView({ orgId, contractInstanceId }: Contra
       next[key] = raw === null || raw === undefined ? '' : String(raw);
     }
     setDraftFields(next);
-  }, [instance?.id, editableKeys]);
+  }, [instance, editableKeys]);
 
   const updateMutation = useMutation({
     mutationFn: async () => {
@@ -97,7 +108,7 @@ export function ContractInstanceDetailView({ orgId, contractInstanceId }: Contra
             <p className="text-xs uppercase tracking-wide text-slate-500">Contract</p>
             <h1 className="text-2xl font-semibold text-slate-900">{instance.title}</h1>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge className={getStatusBadge(instance.status)}>{instance.status}</Badge>
+              <Badge className={getStatusBadge(instance.status)}>{formatStatus(instance.status)}</Badge>
               {instance.template?.code ? <Badge variant="outline">{instance.template.code}</Badge> : null}
               {instance.orgListingId ? (
                 <Badge variant="outline">
@@ -207,8 +218,12 @@ function inputTypeForKey(key: string): React.HTMLInputTypeAttribute {
 
 const getStatusBadge = (status: string) => {
   if (status === 'SIGNED') return 'border border-emerald-100 bg-emerald-50 text-emerald-700';
-  if (status === 'SENT') return 'border border-amber-100 bg-amber-50 text-amber-700';
+  if (status === 'OUT_FOR_SIGNATURE') return 'border border-amber-100 bg-amber-50 text-amber-700';
   if (status === 'VOIDED') return 'border border-rose-100 bg-rose-50 text-rose-700';
   return 'border bg-slate-100 text-slate-700';
 };
 
+const formatStatus = (status: string) => {
+  if (status === 'OUT_FOR_SIGNATURE') return 'Sent';
+  return status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
+};

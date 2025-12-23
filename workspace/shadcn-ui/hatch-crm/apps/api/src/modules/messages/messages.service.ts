@@ -293,6 +293,20 @@ export class MessagesService {
       throw new BadRequestException('Unknown tenant context');
     }
 
+    if (dto.providerId) {
+      const existing = await this.prisma.message.findFirst({
+        where: {
+          tenantId: tenant.id,
+          channel: dto.channel,
+          direction: 'INBOUND',
+          providerMessageId: dto.providerId
+        }
+      });
+      if (existing) {
+        return existing;
+      }
+    }
+
     const person = await this.prisma.person.findFirst({
       where: dto.channel === MessageChannel.SMS
         ? { tenantId: tenant.id, primaryPhone: dto.from }

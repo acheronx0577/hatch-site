@@ -8,8 +8,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fetchOrgTransactions, OrgTransactionRecord } from '@/lib/api/org-transactions';
 import { askAiBroker } from '@/lib/api/mission-control';
+import { TransactionsBoard } from './transactions-board';
+import { NewTransactionSheet } from './new-transaction-sheet';
 
 type TransactionsViewProps = {
   orgId: string;
@@ -33,7 +36,10 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
 
 export function TransactionsView({ orgId }: TransactionsViewProps) {
   const searchParams = useSearchParams() as unknown as URLSearchParams | null;
+  const focusAgentProfileId = searchParams?.get('agentProfileId') ?? null;
   const [filter, setFilter] = useState<(typeof filters)[number]['id']>('ALL');
+  const [view, setView] = useState<'board' | 'table'>('board');
+  const [newTransactionOpen, setNewTransactionOpen] = useState(false);
   const [assistant, setAssistant] = useState<{
     transactionId: string | null;
     loading: boolean;
@@ -43,16 +49,33 @@ export function TransactionsView({ orgId }: TransactionsViewProps) {
 
   useEffect(() => {
     const filterParam = searchParams?.get('filter');
-    if (filterParam !== 'missing-docs') {
+    const viewParam = (searchParams?.get('view') ?? '').trim().toLowerCase();
+
+    if (viewParam === 'table') {
+      setView('table');
+    } else if (viewParam === 'board') {
+      setView('board');
+    }
+
+    if (!filterParam) return;
+
+    if (filterParam === 'missing-docs') {
+      const withinDaysRaw = searchParams?.get('withinDays');
+      const withinDays = withinDaysRaw ? Number(withinDaysRaw) : NaN;
+      if (withinDays === 30) {
+        setFilter('MISSING_DOCS_30D');
+      } else {
+        setFilter('MISSING_DOCS');
+      }
+      setView('table');
       return;
     }
 
-    const withinDaysRaw = searchParams?.get('withinDays');
-    const withinDays = withinDaysRaw ? Number(withinDaysRaw) : NaN;
-    if (withinDays === 30) {
-      setFilter('MISSING_DOCS_30D');
-    } else {
-      setFilter('MISSING_DOCS');
+    const normalizedFilter = filterParam.trim().toUpperCase().replace(/-/g, '_');
+    const isKnownFilter = filters.some((option) => option.id === normalizedFilter);
+    if (isKnownFilter) {
+      setFilter(normalizedFilter as (typeof filters)[number]['id']);
+      setView('table');
     }
   }, [searchParams]);
 
@@ -64,16 +87,21 @@ export function TransactionsView({ orgId }: TransactionsViewProps) {
 
   const transactions = useMemo(() => data ?? [], [data]);
 
+  const scopedTransactions = useMemo(() => {
+    if (!focusAgentProfileId) return transactions;
+    return transactions.filter((txn) => txn.agentProfileId === focusAgentProfileId);
+  }, [focusAgentProfileId, transactions]);
+
   const summary = useMemo(() => {
-    const underContract = transactions.filter((txn) => txn.status === 'UNDER_CONTRACT').length;
-    const contingent = transactions.filter((txn) => txn.status === 'CONTINGENT').length;
-    const closingSoon = transactions.filter((txn) => isClosingSoon(txn.closingDate)).length;
-    const requiresAction = transactions.filter((txn) => txn.requiresAction || txn.isCompliant === false).length;
-    return { total: transactions.length, underContract, contingent, closingSoon, requiresAction };
-  }, [transactions]);
+    const underContract = scopedTransactions.filter((txn) => txn.status === 'UNDER_CONTRACT').length;
+    const contingent = scopedTransactions.filter((txn) => txn.status === 'CONTINGENT').length;
+    const closingSoon = scopedTransactions.filter((txn) => isClosingSoon(txn.closingDate)).length;
+    const requiresAction = scopedTransactions.filter((txn) => txn.requiresAction || txn.isCompliant === false).length;
+    return { total: scopedTransactions.length, underContract, contingent, closingSoon, requiresAction };
+  }, [scopedTransactions]);
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((txn) => {
+    return scopedTransactions.filter((txn) => {
       switch (filter) {
         case 'UNDER_CONTRACT':
           return txn.status === 'UNDER_CONTRACT';
@@ -91,16 +119,51 @@ export function TransactionsView({ orgId }: TransactionsViewProps) {
           return true;
       }
     });
-  }, [filter, transactions]);
+  }, [filter, scopedTransactions]);
 
   return (
-    <section className="space-y-6">
+    <Tabs value={view} onValueChange={(value) => setView(value as typeof view)} className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm uppercase tracking-wide text-slate-500">Transactions</p>
           <h1 className="text-2xl font-semibold text-slate-900">Pipeline tracker</h1>
           <p className="text-sm text-slate-500">Monitor contract milestones and closings.</p>
+          {focusAgentProfileId ? (
+            <p className="mt-1 text-xs text-slate-500">
+              Filtered to agent <span className="font-mono">{focusAgentProfileId}</span>.{' '}
+              <Link href="/dashboard/transactions" className="font-semibold text-brand-700 hover:underline">
+                Clear filter
+              </Link>
+            </p>
+          ) : null}
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => setNewTransactionOpen(true)}>New transaction</Button>
+          <TabsList>
+            <TabsTrigger value="board">Board</TabsTrigger>
+            <TabsTrigger value="table">Table</TabsTrigger>
+          </TabsList>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="Transactions" value={summary.total} helper={`${summary.underContract} under contract`} />
+        <KpiCard label="Contingent" value={summary.contingent} helper={`${summary.closingSoon} closing soon`} />
+        <KpiCard label="Needs attention" value={summary.requiresAction} />
+        <KpiCard label="Closing soon" value={summary.closingSoon} helper="Next 14 days" />
+      </div>
+
+      <TabsContent value="board" className="mt-0">
+        {isLoading ? (
+          <Card className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-sm text-slate-500">Loading transactions…</p>
+          </Card>
+        ) : (
+          <TransactionsBoard orgId={orgId} transactions={scopedTransactions} />
+        )}
+      </TabsContent>
+
+      <TabsContent value="table" className="mt-0 space-y-4">
         <div className="flex flex-wrap gap-2">
           {filters.map((option) => (
             <button
@@ -115,131 +178,118 @@ export function TransactionsView({ orgId }: TransactionsViewProps) {
             </button>
           ))}
         </div>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Transactions" value={summary.total} helper={`${summary.underContract} under contract`} />
-        <KpiCard label="Contingent" value={summary.contingent} helper={`${summary.closingSoon} closing soon`} />
-        <KpiCard label="Needs attention" value={summary.requiresAction} />
-        <KpiCard label="Closing soon" value={summary.closingSoon} helper="Next 14 days" />
-      </div>
+        <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Transaction table</h2>
+          <p className="text-sm text-slate-500">Listing, agent assignment, and closing state.</p>
 
-      <Card className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Transaction table</h2>
-        <p className="text-sm text-slate-500">Listing, agent assignment, and closing state.</p>
-
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-left text-sm text-slate-600">
-            <thead className="text-xs uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="py-2 pr-4">Property</th>
-                <th className="py-2 pr-4">Status</th>
-                <th className="py-2 pr-4">Agent</th>
-                <th className="py-2 pr-4">Closing</th>
-                <th className="py-2 pr-4">Amount</th>
-                <th className="py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
+          <div className="mt-4 overflow-x-auto">
+            <table className="min-w-full text-left text-sm text-slate-600">
+              <thead className="text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-sm text-slate-400">
-                    Loading transactions…
-                  </td>
+                  <th className="py-2 pr-4">Property</th>
+                  <th className="py-2 pr-4">Status</th>
+                  <th className="py-2 pr-4">Agent</th>
+                  <th className="py-2 pr-4">Closing</th>
+                  <th className="py-2 pr-4">Amount</th>
+                  <th className="py-2">Actions</th>
                 </tr>
-              ) : filteredTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-6 text-center text-sm text-slate-400">
-                    No transactions match the selected filter.
-                  </td>
-                </tr>
-              ) : (
-                filteredTransactions.map((txn) => (
-                  <tr key={txn.id} className="border-t border-slate-100">
-                    <td className="py-3 pr-4">
-                      <div className="font-medium text-slate-900">
-                        {txn.listing?.addressLine1 ?? 'Unlinked transaction'}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {txn.listing?.city} {txn.listing?.state} {txn.listing?.postalCode}
-                      </div>
-                    </td>
-                    <td className="py-3 pr-4">
-                      <Badge className={getStatusTone(txn)}>{formatStatus(txn.status)}</Badge>
-                    </td>
-                    <td className="py-3 pr-4">
-                      {txn.agentProfile?.user ? (
-                        <div>
-                          <p className="font-medium text-slate-900">
-                            {txn.agentProfile.user.firstName} {txn.agentProfile.user.lastName}
-                          </p>
-                          <p className="text-xs text-slate-500">{txn.agentProfile.user.email}</p>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-slate-500">Unassigned</p>
-                      )}
-                    </td>
-                    <td className="py-3 pr-4">
-                      {txn.closingDate ? new Date(txn.closingDate).toLocaleDateString() : '—'}
-                    </td>
-                    <td className="py-3 pr-4 font-medium text-slate-900">
-                      {txn.listing?.listPrice ? currencyFormatter.format(txn.listing.listPrice) : '—'}
-                    </td>
-                    <td className="py-3 pr-4">
-                      <div className="flex flex-col gap-2">
-                        <Button asChild size="sm" variant="secondary">
-                          <Link href="/dashboard/mission-control">Mission Control</Link>
-                        </Button>
-                        <Button asChild size="sm" variant="ghost">
-                          <Link href="/dashboard/compliance">Compliance</Link>
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => {
-                            setAssistant({ transactionId: txn.id, loading: true, answer: null, error: null });
-                            askAiBroker(orgId, {
-                              question: 'What should I do next for this transaction?',
-                              contextType: 'TRANSACTION',
-                              transactionId: txn.id
-                            })
-                              .then((res) =>
-                                setAssistant({
-                                  transactionId: txn.id,
-                                  loading: false,
-                                  answer: res.answer,
-                                  error: null
-                                })
-                              )
-                              .catch((err) => {
-                                console.error(err);
-                                setAssistant({
-                                  transactionId: txn.id,
-                                  loading: false,
-                                  answer: null,
-                                  error: 'TC assistant is unavailable right now.'
-                                });
-                              });
-                          }}
-                          disabled={assistant.loading && assistant.transactionId === txn.id}
-                        >
-                          {assistant.loading && assistant.transactionId === txn.id ? 'Asking...' : 'Ask TC Assistant'}
-                        </Button>
-                        {assistant.transactionId === txn.id && assistant.answer ? (
-                          <p className="text-xs text-slate-600">AI: {assistant.answer}</p>
-                        ) : null}
-                        {assistant.transactionId === txn.id && assistant.error ? (
-                          <p className="text-xs text-rose-600">{assistant.error}</p>
-                        ) : null}
-                      </div>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-sm text-slate-400">
+                      Loading transactions…
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </section>
+                ) : filteredTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-sm text-slate-400">
+                      No transactions match the selected filter.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTransactions.map((txn) => (
+                    <tr key={txn.id} className="border-t border-slate-100">
+                      <td className="py-3 pr-4">
+                        <div className="font-medium text-slate-900">{txn.listing?.addressLine1 ?? 'Unlinked transaction'}</div>
+                        <div className="text-xs text-slate-500">
+                          {txn.listing?.city} {txn.listing?.state} {txn.listing?.postalCode}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <Badge className={getStatusTone(txn)}>{formatStatus(txn.status)}</Badge>
+                      </td>
+                      <td className="py-3 pr-4">
+                        {txn.agentProfile?.user ? (
+                          <div>
+                            <p className="font-medium text-slate-900">
+                              {txn.agentProfile.user.firstName} {txn.agentProfile.user.lastName}
+                            </p>
+                            <p className="text-xs text-slate-500">{txn.agentProfile.user.email}</p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-500">Unassigned</p>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4">{txn.closingDate ? new Date(txn.closingDate).toLocaleDateString() : '—'}</td>
+                      <td className="py-3 pr-4 font-medium text-slate-900">
+                        {txn.listing?.listPrice ? currencyFormatter.format(txn.listing.listPrice) : '—'}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex flex-col gap-2">
+                          <Button asChild size="sm" variant="secondary">
+                            <Link href="/dashboard/mission-control">Mission Control</Link>
+                          </Button>
+                          <Button asChild size="sm" variant="ghost">
+                            <Link href="/dashboard/compliance">Compliance</Link>
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setAssistant({ transactionId: txn.id, loading: true, answer: null, error: null });
+                              askAiBroker(orgId, {
+                                question: 'What should I do next for this transaction?',
+                                contextType: 'TRANSACTION',
+                                transactionId: txn.id
+                              })
+                                .then((res) =>
+                                  setAssistant({
+                                    transactionId: txn.id,
+                                    loading: false,
+                                    answer: res.answer,
+                                    error: null
+                                  })
+                                )
+                                .catch((err) => {
+                                  console.error(err);
+                                  setAssistant({
+                                    transactionId: txn.id,
+                                    loading: false,
+                                    answer: null,
+                                    error: 'TC assistant is unavailable right now.'
+                                  });
+                                });
+                            }}
+                            disabled={assistant.loading && assistant.transactionId === txn.id}
+                          >
+                            {assistant.loading && assistant.transactionId === txn.id ? 'Asking...' : 'Ask TC Assistant'}
+                          </Button>
+                          {assistant.transactionId === txn.id && assistant.answer ? <p className="text-xs text-slate-600">AI: {assistant.answer}</p> : null}
+                          {assistant.transactionId === txn.id && assistant.error ? <p className="text-xs text-rose-600">{assistant.error}</p> : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </TabsContent>
+
+      <NewTransactionSheet orgId={orgId} open={newTransactionOpen} onOpenChange={setNewTransactionOpen} />
+    </Tabs>
   );
 }
 

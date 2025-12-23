@@ -4,11 +4,13 @@ import { Menu, Search } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useContextualHelp } from '@/components/help/ContextualHelp';
 
 import { useSidebar } from './sidebar-context';
 
 export function Topbar() {
   const { toggleMobile } = useSidebar();
+  const { openPageHelp } = useContextualHelp();
 
   return (
     <header className="sticky top-0 z-20 px-4 pt-4 md:px-8 md:pt-6">
@@ -46,8 +48,9 @@ export function Topbar() {
             variant="ghost"
             size="sm"
             className="hidden text-white/80 hover:bg-white/20 hover:text-white md:inline-flex"
+            onClick={openPageHelp}
           >
-            Support
+            Ask Hatch
           </Button>
           <Button
             variant="secondary"

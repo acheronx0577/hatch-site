@@ -1,6 +1,7 @@
 "use client";
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -15,17 +16,25 @@ type ContractsViewProps = {
 const filters = [
   { id: 'ALL', label: 'All' },
   { id: 'DRAFT', label: 'Draft' },
-  { id: 'SENT', label: 'Sent' },
+  { id: 'OUT_FOR_SIGNATURE', label: 'Sent' },
   { id: 'SIGNED', label: 'Signed' },
   { id: 'VOIDED', label: 'Voided' }
 ] as const;
 
 export function ContractsView({ orgId }: ContractsViewProps) {
   const [filter, setFilter] = useState<(typeof filters)[number]['id']>('ALL');
+  const searchParams = useSearchParams();
+  const transactionId = searchParams.get('transactionId')?.trim() || undefined;
+  const propertyId = searchParams.get('propertyId')?.trim() || undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard', 'contracts', orgId, filter],
-    queryFn: () => listContractInstances(orgId, filter === 'ALL' ? {} : { status: filter }),
+    queryKey: ['dashboard', 'contracts', orgId, filter, transactionId ?? null, propertyId ?? null],
+    queryFn: () =>
+      listContractInstances(orgId, {
+        ...(filter === 'ALL' ? {} : { status: filter }),
+        ...(transactionId ? { transactionId } : {}),
+        ...(propertyId ? { propertyId } : {})
+      }),
     staleTime: 15_000
   });
 
@@ -38,6 +47,24 @@ export function ContractsView({ orgId }: ContractsViewProps) {
           <p className="text-sm uppercase tracking-wide text-slate-500">Contracts</p>
           <h1 className="text-2xl font-semibold text-slate-900">Contract instances</h1>
           <p className="text-sm text-slate-500">Create a contract from a property to auto-fill parties and address fields.</p>
+          {transactionId || propertyId ? (
+            <p className="mt-1 text-xs text-slate-500">
+              Filtered{' '}
+              {transactionId ? (
+                <>
+                  to transaction <span className="font-mono">{transactionId}</span>
+                </>
+              ) : (
+                <>
+                  to property <span className="font-mono">{propertyId}</span>
+                </>
+              )}{' '}
+              ·{' '}
+              <Link href="/dashboard/contracts" className="text-brand-600 hover:underline">
+                Clear
+              </Link>
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           {filters.map((option) => (
@@ -117,12 +144,14 @@ function renderParty(party: ContractInstanceRecord['buyerPerson']): string {
   return party.fullName?.trim() || `${party.firstName ?? ''} ${party.lastName ?? ''}`.trim() || party.id;
 }
 
-const formatStatus = (status: string) => status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
+const formatStatus = (status: string) => {
+  if (status === 'OUT_FOR_SIGNATURE') return 'Sent';
+  return status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
+};
 
 const getStatusBadge = (status: string) => {
   if (status === 'SIGNED') return 'border border-emerald-100 bg-emerald-50 text-emerald-700';
-  if (status === 'SENT') return 'border border-amber-100 bg-amber-50 text-amber-700';
+  if (status === 'OUT_FOR_SIGNATURE') return 'border border-amber-100 bg-amber-50 text-amber-700';
   if (status === 'VOIDED') return 'border border-rose-100 bg-rose-50 text-rose-700';
   return 'border bg-slate-100 text-slate-700';
 };
-

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import { useToast } from '@/components/ui/use-toast'
 
 import {
@@ -203,7 +204,7 @@ export default function CommissionPlansPage() {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle>Loading commission plans…</CardTitle>
@@ -216,7 +217,7 @@ export default function CommissionPlansPage() {
 
   if (error) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle>Unable to load commission plans</CardTitle>
@@ -233,11 +234,12 @@ export default function CommissionPlansPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Commission Plans</h1>
-          <p className="text-gray-600">Manage splits, caps, and assignments for your team.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Compensation</p>
+          <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Commission Plans</h1>
+          <p className="text-sm text-slate-600">Manage splits, caps, and assignments for your team.</p>
         </div>
         <div className="flex gap-3">
           <Button onClick={() => setCreateDialogOpen(true)}>
@@ -257,7 +259,14 @@ export default function CommissionPlansPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {plans.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No commission plans yet. Create one to get started.</p>
+              <div className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-lg)] border border-dashed border-[var(--glass-border)] bg-white/10 p-6 text-center text-sm text-muted-foreground backdrop-blur-md dark:bg-white/5">
+                <Plus className="h-6 w-6 text-brand-blue-600" />
+                <p className="font-medium text-slate-700 dark:text-ink-100">No plans yet.</p>
+                <p className="text-xs text-slate-500 dark:text-ink-100/70">Create a plan to start assigning splits and caps.</p>
+                <Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+                  New Plan
+                </Button>
+              </div>
             ) : (
               <div className="space-y-2">
                 {plans.map((plan) => {
@@ -267,21 +276,21 @@ export default function CommissionPlansPage() {
                       key={plan.id}
                       type="button"
                       onClick={() => setSelectedPlanId(plan.id)}
-                      className={`w-full rounded-lg border p-4 text-left transition hover:shadow ${
-                        isSelected ? 'border-primary shadow' : 'border-border'
+                      className={`w-full rounded-[var(--radius-lg)] border border-[var(--glass-border)] bg-white/10 p-4 text-left backdrop-blur-md transition-colors duration-200 hover:bg-white/20 dark:bg-white/5 dark:hover:bg-white/10 ${
+                        isSelected ? 'ring-2 ring-[color:var(--focus-ring)]' : ''
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-900">{plan.name}</h3>
-                          <p className="text-xs text-gray-500">
+                          <h3 className="text-base font-semibold text-slate-900">{plan.name}</h3>
+                          <p className="text-xs text-slate-500">
                             Updated {format(new Date(plan.updatedAt), 'MMM d, yyyy')}
                           </p>
                         </div>
                         <Badge className={PLAN_COLORS[plan.type]}>{planTypeLabels[plan.type]}</Badge>
                       </div>
-                      {plan.description && <p className="mt-2 text-sm text-gray-600">{plan.description}</p>}
-                      <div className="mt-3 text-xs text-gray-500 flex gap-4">
+                      {plan.description && <p className="mt-2 text-sm text-slate-600">{plan.description}</p>}
+                      <div className="mt-3 flex gap-4 text-xs text-slate-500">
                         <span>Version {plan.version}</span>
                         {plan.isArchived && <span className="text-amber-600">Archived</span>}
                       </div>
@@ -319,7 +328,14 @@ export default function CommissionPlansPage() {
                       <TableCell>{entry.plan.name}</TableCell>
                       <TableCell className="text-right">{formatCurrency(entry.capAmount)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(entry.companyDollarYtd)}</TableCell>
-                      <TableCell className="text-right">{Math.round(entry.progressPct * 100)}%</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-3">
+                          <Progress value={Math.round(entry.progressPct * 100)} className="h-2 w-24 bg-white/40" />
+                          <span className="text-xs font-semibold tabular-nums text-slate-700">
+                            {Math.round(entry.progressPct * 100)}%
+                          </span>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

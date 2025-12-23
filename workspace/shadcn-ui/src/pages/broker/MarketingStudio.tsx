@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchOrgListings } from '@/lib/api/org-listings';
 import { createMarketingCampaign } from '@/lib/api/hatch';
@@ -47,6 +48,15 @@ const templateLayoutSchema = z
 
 type TemplateLayout = z.infer<typeof templateLayoutSchema>;
 
+type QuickFormat = 'FLYER' | 'SOCIAL_POST' | 'STORY' | 'EMAIL';
+
+const QUICK_FORMATS: Array<{ id: QuickFormat; label: string; templateKey: string | null; helper: string }> = [
+  { id: 'FLYER', label: 'Flyer (PDF)', templateKey: 'flyer_basic_white_label', helper: '1-page PDF flyer.' },
+  { id: 'SOCIAL_POST', label: 'Social post (Square)', templateKey: 'social_post_square_white_label', helper: 'Square layout for IG/FB feeds.' },
+  { id: 'STORY', label: 'Story (Vertical)', templateKey: 'story_vertical_white_label', helper: 'Vertical layout for stories.' },
+  { id: 'EMAIL', label: 'Email snippet', templateKey: null, helper: 'Generates caption + subject line (no PDF required).' }
+];
+
 export default function BrokerMarketingStudioPage() {
   const { activeOrgId } = useAuth();
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
@@ -54,6 +64,7 @@ export default function BrokerMarketingStudioPage() {
 
   const [listingId, setListingId] = useState<string>('');
   const [templateId, setTemplateId] = useState<string>('');
+  const [quickFormat, setQuickFormat] = useState<QuickFormat>('FLYER');
   const [textOverrides, setTextOverrides] = useState<Record<string, string>>({});
   const [imageOverrides, setImageOverrides] = useState<Record<string, { url?: string; s3Key?: string }>>({});
   const [imageSlotToAssign, setImageSlotToAssign] = useState<string>('');
@@ -106,6 +117,14 @@ export default function BrokerMarketingStudioPage() {
   const listingImagesData = listingImagesQuery.data?.images;
   const listingImages = useMemo(() => listingImagesData ?? [], [listingImagesData]);
 
+  const missingDefaultTemplateKeys = useMemo(() => {
+    const required = QUICK_FORMATS.map((format) => format.templateKey).filter(Boolean) as string[];
+    const existing = new Set(templates.map((template) => template.key).filter(Boolean) as string[]);
+    return required.filter((key) => !existing.has(key));
+  }, [templates]);
+
+  const showSeedTemplates = templates.length === 0 || missingDefaultTemplateKeys.length > 0;
+
   const selectedTemplate: MarketingStudioTemplate | null = useMemo(() => {
     return templates.find((tpl) => tpl.id === templateId) ?? null;
   }, [templateId, templates]);
@@ -154,6 +173,60 @@ export default function BrokerMarketingStudioPage() {
     };
   }, [selectedListing]);
 
+  const suggestedCopy = useMemo(() => {
+    if (!selectedListing) {
+      return {
+        subject: 'New listing',
+        caption: 'Select a listing to generate suggested copy.',
+        hashtags: '#realestate #homesforsale'
+      };
+    }
+
+    const address = selectedListing.addressLine1;
+    const city = selectedListing.city;
+    const state = selectedListing.state;
+    const location = [city, state].filter(Boolean).join(', ');
+    const price =
+      selectedListing.listPrice && Number.isFinite(Number(selectedListing.listPrice))
+        ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(
+            Number(selectedListing.listPrice)
+          )
+        : null;
+
+    const headline = `${address}${location ? ` · ${location}` : ''}`;
+
+    const caption =
+      quickFormat === 'EMAIL'
+        ? `Hi!\n\nSharing a new listing: ${headline}${price ? ` · ${price}` : ''}.\n\nReply for the brochure or to schedule a showing.`
+        : `Just listed: ${headline}${price ? ` · ${price}` : ''}\n\nDM us for the brochure or to schedule a private showing.`;
+
+    const hashtags = [
+      '#realestate',
+      '#newlisting',
+      city ? `#${city.replace(/\\s+/g, '').toLowerCase()}realestate` : null,
+      state ? `#${state.replace(/\\s+/g, '').toLowerCase()}` : null
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    return {
+      subject: `Listing: ${address}${city ? ` (${city})` : ''}`,
+      caption,
+      hashtags
+    };
+  }, [quickFormat, selectedListing]);
+
+  useEffect(() => {
+    const desiredKey = QUICK_FORMATS.find((format) => format.id === quickFormat)?.templateKey ?? null;
+    if (!desiredKey) return;
+    if (!templates.length) return;
+
+    const match = templates.find((template) => template.key === desiredKey) ?? null;
+    if (match && match.id !== templateId) {
+      setTemplateId(match.id);
+    }
+  }, [quickFormat, templateId, templates]);
+
   useEffect(() => {
     if (!selectedTemplate) {
       setImageSlotToAssign('');
@@ -198,8 +271,12 @@ export default function BrokerMarketingStudioPage() {
   };
 
   const handleGenerate = async () => {
-    if (!listingId || !templateId) {
-      setError('Select a listing and template');
+    if (!listingId) {
+      setError('Select a listing');
+      return;
+    }
+    if (quickFormat !== 'EMAIL' && !templateId) {
+      setError('Select a template (or seed default templates)');
       return;
     }
 
@@ -210,6 +287,9 @@ export default function BrokerMarketingStudioPage() {
     setGenerating(true);
 
     try {
+      if (quickFormat === 'EMAIL') {
+        return;
+      }
       const images = Object.fromEntries(
         Object.entries(imageOverrides)
           .map(([slotId, override]) => {
@@ -383,10 +463,10 @@ export default function BrokerMarketingStudioPage() {
         <>
           <Card>
             <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-              <CardTitle className="text-sm font-semibold">Generate</CardTitle>
-              {templates.length === 0 ? (
+              <CardTitle className="text-sm font-semibold">Quick create</CardTitle>
+              {showSeedTemplates ? (
                 <Button size="sm" variant="outline" onClick={handleSeedTemplates} disabled={templatesQuery.isLoading}>
-                  Seed default templates
+                  {templates.length === 0 ? 'Seed default templates' : 'Sync default templates'}
                 </Button>
               ) : null}
             </CardHeader>
@@ -411,34 +491,67 @@ export default function BrokerMarketingStudioPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">Template</p>
-                  <Select value={templateId} onValueChange={setTemplateId}>
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">Format</p>
+                  <Select value={quickFormat} onValueChange={(value) => setQuickFormat(value as QuickFormat)}>
                     <SelectTrigger>
-                      <SelectValue placeholder={templatesQuery.isLoading ? 'Loading templates…' : 'Select a template'} />
+                      <SelectValue placeholder="Select a format" />
                     </SelectTrigger>
                     <SelectContent>
-                      {templates.map((template) => (
-                        <SelectItem key={template.id} value={template.id}>
-                          {template.name} {template.variant === 'WHITE_LABEL' ? '(White label)' : '(Hatch)'}
+                      {QUICK_FORMATS.map((format) => (
+                        <SelectItem key={format.id} value={format.id}>
+                          {format.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedTemplate?.overlayUrl ? (
-                    <a
-                      href={selectedTemplate.overlayUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-slate-600 underline"
-                    >
-                      View overlay PDF
-                    </a>
-                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    {QUICK_FORMATS.find((format) => format.id === quickFormat)?.helper ?? ''}
+                  </p>
                 </div>
               </div>
 
-              {selectedTemplate ? (
-                <div className="flex flex-col gap-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Suggested copy</p>
+                <Textarea value={suggestedCopy.caption} readOnly rows={4} />
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>Subject: {suggestedCopy.subject}</span>
+                  <span>·</span>
+                  <span>{suggestedCopy.hashtags}</span>
+                </div>
+              </div>
+
+              <details className="rounded-2xl border border-slate-200/70 bg-white/10 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium text-slate-900">Advanced layout</summary>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground">Template</p>
+                    <Select value={templateId} onValueChange={setTemplateId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder={templatesQuery.isLoading ? 'Loading templates…' : 'Select a template'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {templates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {selectedTemplate?.overlayUrl ? (
+                      <a
+                        href={selectedTemplate.overlayUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-slate-600 underline"
+                      >
+                        View overlay PDF
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+
+                {selectedTemplate ? (
+                  <div className="mt-4 flex flex-col gap-4">
                   {imageSlots.length > 0 ? (
                     <div className="space-y-3">
                       <p className="text-xs font-semibold uppercase text-muted-foreground">Image slots</p>
@@ -544,19 +657,22 @@ export default function BrokerMarketingStudioPage() {
                       </div>
                     </div>
                   ) : null}
-                </div>
-              ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-muted-foreground">Select a template to customize slots.</p>
+                )}
+              </details>
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button onClick={handleGenerate} disabled={generating}>
-                  {generating ? 'Generating…' : 'Generate PDF'}
+                  {generating ? 'Generating…' : quickFormat === 'EMAIL' ? 'Generate copy' : 'Generate PDF'}
                 </Button>
-                {generatedUrl ? (
+                {quickFormat !== 'EMAIL' && generatedUrl ? (
                   <a href={generatedUrl} target="_blank" rel="noreferrer" className="text-sm underline">
                     Download generated PDF
                   </a>
                 ) : null}
-                {generatedAsset ? (
+                {quickFormat !== 'EMAIL' && generatedAsset ? (
                   <Button type="button" variant="outline" onClick={handleCreateCampaignDraft} disabled={creatingCampaign}>
                     {creatingCampaign ? 'Creating campaign…' : 'Create campaign draft'}
                   </Button>
@@ -570,11 +686,14 @@ export default function BrokerMarketingStudioPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm font-semibold">Create template</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
+          <details className="rounded-2xl border border-slate-200/70 bg-white/10 px-4 py-3">
+            <summary className="cursor-pointer text-sm font-medium text-slate-900">Template builder (advanced)</summary>
+            <div className="mt-4">
+              <Card className="border border-slate-200/70">
+                <CardHeader>
+                  <CardTitle className="text-sm font-semibold">Create template</CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase text-muted-foreground">Name</p>
@@ -636,8 +755,10 @@ export default function BrokerMarketingStudioPage() {
                   {creatingTemplate ? 'Creating…' : 'Create template'}
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            </div>
+          </details>
 
           {listingId ? (
             <Card>

@@ -30,6 +30,8 @@ import { PlaybookRunnerService } from '../playbooks/playbook-runner.service';
 import { toJsonValue, toNullableJson } from '../common';
 import { calculateLeadScore } from '../leads/lead-score.util';
 import { RoutingService } from '../routing/routing.service';
+import { LeadRoutingOrgMode } from '../routing/dto/routing-settings.dto';
+import { RoutingSettingsService } from '../routing/routing-settings.service';
 import { TrackingService } from '../tracking/tracking.service';
 
 interface LeadFilters {
@@ -88,6 +90,7 @@ export class OrgLeadsService {
     private readonly orgEvents: OrgEventsService,
     private readonly playbooks: PlaybookRunnerService,
     private readonly routing: RoutingService,
+    private readonly routingSettings: RoutingSettingsService,
     private readonly tracking: TrackingService,
     private readonly consents: ConsentsService
   ) {}
@@ -583,12 +586,7 @@ export class OrgLeadsService {
     if (!match) {
       const now = new Date();
 
-      const pipeline = await tx.pipeline.findFirst({
-        where: { tenantId: input.tenantId, isDefault: true },
-        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'asc' }],
-        include: { stages: { orderBy: { order: 'asc' }, take: 1 } }
-      });
-      const stage = pipeline?.stages?.[0] ?? null;
+      const { pipeline, stage } = await this.resolveInboundPipelinePlacement(tx, input.tenantId);
 
       try {
         return await tx.person.create({
@@ -646,6 +644,43 @@ export class OrgLeadsService {
     }
 
     return this.updateCrmPersonFromPortalLead(tx, match, { ...input, firstName, lastName });
+  }
+
+  private async resolveInboundPipelinePlacement(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    preferredPipelineId?: string | null
+  ): Promise<{ pipeline: { id: string } | null; stage: { id: string } | null }> {
+    const resolve = async (where: Prisma.PipelineWhereInput) => {
+      const pipeline = await tx.pipeline.findFirst({
+        where: {
+          tenantId,
+          ...where,
+          stages: { some: {} }
+        },
+        orderBy: [{ isDefault: 'desc' }, { order: 'asc' }, { publishedAt: 'desc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          stages: { orderBy: { order: 'asc' }, take: 1, select: { id: true } }
+        }
+      });
+
+      const stage = pipeline?.stages?.[0] ?? null;
+      return { pipeline: pipeline ? { id: pipeline.id } : null, stage: stage ? { id: stage.id } : null };
+    };
+
+    if (preferredPipelineId) {
+      const preferred = await resolve({ id: preferredPipelineId });
+      if (preferred.pipeline && preferred.stage) return preferred;
+    }
+
+    const byDefault = await resolve({ isDefault: true });
+    if (byDefault.pipeline && byDefault.stage) return byDefault;
+
+    const buyer = await resolve({ type: 'buyer' });
+    if (buyer.pipeline && buyer.stage) return buyer;
+
+    return resolve({});
   }
 
   private async updateCrmPersonFromPortalLead(
@@ -709,6 +744,14 @@ export class OrgLeadsService {
     const portalTag = 'portal_lead';
     const nextTags = match.tags.includes(portalTag) ? match.tags : [...match.tags, portalTag];
 
+    const needsStage = !match.stageId;
+    const needsPipeline = !match.pipelineId;
+
+    const placement =
+      needsStage || needsPipeline
+        ? await this.resolveInboundPipelinePlacement(tx, input.tenantId, match.pipelineId)
+        : { pipeline: null, stage: null };
+
     return tx.person.update({
       where: { id: match.id },
       data: {
@@ -724,6 +767,9 @@ export class OrgLeadsService {
         utmMedium: match.utmMedium ?? input.utmMedium,
         utmCampaign: match.utmCampaign ?? input.utmCampaign,
         gclid: match.gclid ?? input.gclid,
+        pipelineId: needsPipeline && placement.pipeline ? placement.pipeline.id : undefined,
+        stageId: needsStage && placement.stage ? placement.stage.id : undefined,
+        stageEnteredAt: needsStage && placement.stage ? now : undefined,
         lastActivityAt: now
       }
     });
@@ -943,6 +989,30 @@ export class OrgLeadsService {
           data: { agentProfileId: agentProfile.id }
         });
       }
+
+      return;
+    }
+
+    const routingSettings = await this.routingSettings.getSettings({
+      orgId: input.organizationId,
+      tenantId: input.tenantId
+    });
+
+    if (routingSettings.mode === LeadRoutingOrgMode.APPROVAL_POOL) {
+      const ensuredApprovalTeamId =
+        routingSettings.approvalTeamId ??
+        (await this.routingSettings.updateSettings({
+          orgId: input.organizationId,
+          tenantId: input.tenantId,
+          mode: LeadRoutingOrgMode.APPROVAL_POOL
+        })).approvalTeamId;
+
+      await this.routing.assign({
+        tenantId: input.tenantId,
+        person,
+        actorUserId: input.actorUserId,
+        approvalPoolTeamId: ensuredApprovalTeamId ?? undefined
+      });
 
       return;
     }

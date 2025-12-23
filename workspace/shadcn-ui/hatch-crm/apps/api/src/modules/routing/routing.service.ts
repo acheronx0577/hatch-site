@@ -40,6 +40,7 @@ import { RoutingRulesQueryDto } from './dto/routing-query.dto';
 type AssignPayload = {
   tenantId: string;
   person: Prisma.PersonGetPayload<Record<string, never>>;
+  approvalPoolTeamId?: string;
   listing?:
     | (LeadRoutingListingContext & {
         id?: string;
@@ -309,6 +310,8 @@ export class RoutingService {
 
     const agentSnapshots = await this.buildCandidateSnapshots({
       tenantId: payload.tenantId,
+      orgId: tenant.organizationId ?? null,
+      leadType: (payload.person as any)?.leadType ?? null,
       agents,
       listing: listingContext,
       hasConsent: consentState.sms === 'GRANTED' || consentState.email === 'GRANTED',
@@ -546,6 +549,8 @@ export class RoutingService {
 
     const snapshots = await this.buildCandidateSnapshots({
       tenantId,
+      orgId: null,
+      leadType: null,
       agents,
       listing: undefined,
       hasConsent: true,
@@ -991,6 +996,7 @@ export class RoutingService {
     outcome: {
       selectedAgent?: AgentScore;
       assignedAgentId?: string;
+      assignedTeamId?: string;
       fallbackTeamId?: string;
       usedFallback: boolean;
       candidates: RoutingDecisionCandidate[];
@@ -1004,8 +1010,16 @@ export class RoutingService {
     now: Date;
   }): Promise<RouteAssignmentResult> {
     const { payload, outcome, rule, evaluation, quietHours, context, now } = params;
+    const approvalPoolTeamId = payload.approvalPoolTeamId?.trim() || null;
+    const queueForApproval = Boolean(approvalPoolTeamId);
+
+    const assignedAgentId = queueForApproval ? undefined : outcome.assignedAgentId;
+    const assignedTeamId = queueForApproval ? undefined : outcome.assignedTeamId;
+    const fallbackTeamId = queueForApproval ? approvalPoolTeamId ?? undefined : outcome.fallbackTeamId;
+    const fallbackUsed = queueForApproval ? true : outcome.usedFallback;
+
     const assignmentReasons = outcome.selectedAgent
-      ? outcome.selectedAgent.reasons
+      ? this.toAssignmentReasons(outcome.selectedAgent.reasons)
       : [
           {
             type: 'CAPACITY',
@@ -1018,7 +1032,7 @@ export class RoutingService {
       rule,
       tenantId: payload.tenantId,
       leadId: payload.person.id,
-      assignedAgentId: outcome.assignedAgentId,
+      assignedAgentId,
       now
     });
 
@@ -1057,15 +1071,18 @@ export class RoutingService {
     const slaDueAt = timersToCreate.firstTouch?.dueAt ?? null;
 
     const event = await this.prisma.$transaction(async (tx) => {
-      if (outcome.assignedAgentId) {
+      if (assignedAgentId) {
+        const primaryTeamId =
+          outcome.candidateSnapshots
+            .find((candidate) => candidate.snapshot.userId === assignedAgentId)
+            ?.teamIds?.[0] ?? null;
+
         await tx.assignment.create({
           data: {
             tenantId: payload.tenantId,
             personId: payload.person.id,
-            agentId: outcome.assignedAgentId,
-            teamId: outcome.candidateSnapshots
-              .find((candidate) => candidate.snapshot.userId === outcome.assignedAgentId)
-              ?.teamIds?.[0],
+            agentId: assignedAgentId,
+            teamId: assignedTeamId ?? primaryTeamId,
             score: outcome.selectedAgent?.score ?? 0,
             reasons: {
               create: assignmentReasons.map((reason) => ({
@@ -1076,19 +1093,24 @@ export class RoutingService {
             }
           }
         });
-      } else if (outcome.fallbackTeamId) {
+      } else if (fallbackTeamId) {
         await tx.assignment.create({
           data: {
             tenantId: payload.tenantId,
             personId: payload.person.id,
-            teamId: outcome.fallbackTeamId,
-            score: 0,
+            teamId: fallbackTeamId,
+            score: outcome.selectedAgent?.score ?? 0,
             reasons: {
               create: [
+                ...assignmentReasons.map((reason) => ({
+                  type: reason.type as AssignmentReasonType,
+                  weight: reason.weight,
+                  notes: reason.description
+                })),
                 {
                   type: 'TEAM_POND',
                   weight: 1,
-                  notes: 'Fallback pond assignment'
+                  notes: queueForApproval ? 'Broker approval pool' : 'Fallback pond assignment'
                 }
               ]
             }
@@ -1111,8 +1133,8 @@ export class RoutingService {
           mode: rule.mode,
           payload: toJsonValue(eventPayload),
           candidates: toJsonValue(eventCandidates),
-          assignedAgentId: outcome.assignedAgentId ?? null,
-          fallbackUsed: outcome.usedFallback,
+          assignedAgentId: assignedAgentId ?? null,
+          fallbackUsed,
           reasonCodes: toJsonValue(outcome.reasonCodes),
           slaDueAt,
           actorUserId: payload.actorUserId ?? null
@@ -1120,7 +1142,7 @@ export class RoutingService {
       });
     });
 
-    const fallbackTeamId = outcome.fallbackTeamId ?? undefined;
+    const outboxFallbackTeamId = fallbackTeamId ?? undefined;
 
     await this.outbox.enqueue({
       tenantId: payload.tenantId,
@@ -1132,20 +1154,26 @@ export class RoutingService {
       },
       data: {
         ruleId: rule.id,
-        assignedAgentId: outcome.assignedAgentId,
-        fallbackTeamId,
+        assignedAgentId,
+        fallbackTeamId: outboxFallbackTeamId,
         reasonCodes: outcome.reasonCodes
       }
     });
 
-    const selectedAgents = outcome.selectedAgent ? [outcome.selectedAgent] : [];
+    let selectedAgents = outcome.selectedAgent ? [outcome.selectedAgent] : [];
+    if (outcome.selectedAgent && assignedAgentId) {
+      const candidate = outcome.candidateSnapshots.find((entry) => entry.snapshot.userId === assignedAgentId);
+      if (candidate) {
+        selectedAgents = [await this.attachApiReason(outcome.selectedAgent, candidate)];
+      }
+    }
 
     return {
       leadId: payload.person.id,
       tenantId: payload.tenantId,
       selectedAgents,
-      fallbackTeamId,
-      usedFallback: outcome.usedFallback,
+      fallbackTeamId: outboxFallbackTeamId,
+      usedFallback: fallbackUsed,
       quietHours,
       ruleId: rule.id,
       ruleName: rule.name,
@@ -1154,6 +1182,98 @@ export class RoutingService {
       evaluation,
       reasonCodes: outcome.reasonCodes
     };
+  }
+
+  private toAssignmentReasons(reasons: AgentScore['reasons']): AgentScore['reasons'] {
+    const allowed = new Set([
+      'CAPACITY',
+      'PERFORMANCE',
+      'GEOGRAPHY',
+      'PRICE_BAND',
+      'CONSENT',
+      'TEN_DLC',
+      'ROUND_ROBIN',
+      'TEAM_POND'
+    ]);
+    return reasons.filter((reason) => allowed.has(String(reason.type)) && reason.weight > 0);
+  }
+
+  private async attachApiReason(score: AgentScore, candidate: CandidateSnapshot): Promise<AgentScore> {
+    const agentProfile =
+      (candidate.agent.agentProfilesForOrgs ?? []).find(
+        (profile: any) => profile.organizationId === candidate.agent.organizationId
+      ) ?? (candidate.agent.agentProfilesForOrgs ?? [])[0] ?? null;
+
+    const agentProfileId = agentProfile?.id ?? null;
+    const performanceLatestModel = (this.prisma as any).agentPerformanceLatest;
+
+    if (!agentProfileId || typeof performanceLatestModel?.findFirst !== 'function') {
+      return score;
+    }
+
+    try {
+      const latest = await performanceLatestModel.findFirst({
+        where: {
+          organizationId: candidate.agent.organizationId,
+          agentProfileId,
+          modelVersion: 'API_v1'
+        },
+        include: {
+          snapshot: {
+            select: {
+              overallScore: true,
+              confidenceBand: true,
+              responsivenessReliabilityScore: true,
+              capacityLoadScore: true,
+              riskDragPenalty: true
+            }
+          }
+        }
+      });
+
+      const snapshot = latest?.snapshot ?? null;
+      if (!snapshot) {
+        return {
+          ...score,
+          reasons: [
+            ...score.reasons,
+            {
+              type: 'PERFORMANCE' as const,
+              description: 'API_v1: No performance snapshot yet',
+              weight: 0
+            } as any
+          ]
+        };
+      }
+
+      const fit =
+        ((candidate.snapshot.geographyFit ?? 0.7) +
+          (candidate.snapshot.priceBandFit ?? 0.7) +
+          (candidate.snapshot.leadTypeFit ?? 0.75)) /
+        3;
+
+      const overallPct = Math.round(Number(snapshot.overallScore ?? 0) * 100);
+      const band = String(snapshot.confidenceBand ?? 'DEVELOPING');
+      const respPct = Math.round(Number(snapshot.responsivenessReliabilityScore ?? 0) * 100);
+      const capPct = Math.round(Number(snapshot.capacityLoadScore ?? 0) * 100);
+      const fitPct = Math.round(fit * 100);
+      const riskPenalty = Number(snapshot.riskDragPenalty ?? 0);
+
+      const apiReason = {
+        type: 'PERFORMANCE' as const,
+        description: `API_v1 ${overallPct} (${band}) · Fit ${fitPct}% · Resp ${respPct}% · Capacity ${capPct}% · Risk drag ${Math.round(
+          riskPenalty * 100
+        )}pts`,
+        weight: 0
+      };
+
+      return {
+        ...score,
+        reasons: [...score.reasons, apiReason as any]
+      };
+    } catch {
+      return score;
+    }
   }
 
   private prepareSlaTimers(params: {
@@ -1206,6 +1326,7 @@ export class RoutingService {
     now: Date;
     reasonCodes: string[];
   }): Promise<RouteAssignmentResult> {
+    const approvalPoolTeamId = params.payload.approvalPoolTeamId?.trim() || null;
     const payload = {
       context: {
         source: params.context.person.source,
@@ -1219,27 +1340,49 @@ export class RoutingService {
     assertJsonSafe(payload, 'leadRouteEvent.payload');
     assertJsonSafe(params.reasonCodes, 'leadRouteEvent.reasonCodes');
 
-    const event = await this.prisma.leadRouteEvent.create({
-      data: {
-        tenantId: params.payload.tenantId,
-        leadId: params.payload.person.id,
-        personId: params.payload.person.id,
-        matchedRuleId: null,
-        mode: RoutingMode.FIRST_MATCH,
-        payload: toJsonValue(payload),
-        candidates: toJsonValue([]),
-        assignedAgentId: null,
-        fallbackUsed: true,
-        reasonCodes: toJsonValue(params.reasonCodes),
-        actorUserId: params.payload.actorUserId ?? null
+    const event = await this.prisma.$transaction(async (tx) => {
+      if (approvalPoolTeamId) {
+        await tx.assignment.create({
+          data: {
+            tenantId: params.payload.tenantId,
+            personId: params.payload.person.id,
+            teamId: approvalPoolTeamId,
+            score: 0,
+            reasons: {
+              create: [
+                {
+                  type: 'TEAM_POND',
+                  weight: 1,
+                  notes: 'Broker approval pool'
+                }
+              ]
+            }
+          }
+        });
       }
+
+      return tx.leadRouteEvent.create({
+        data: {
+          tenantId: params.payload.tenantId,
+          leadId: params.payload.person.id,
+          personId: params.payload.person.id,
+          matchedRuleId: null,
+          mode: RoutingMode.FIRST_MATCH,
+          payload: toJsonValue(payload),
+          candidates: toJsonValue([]),
+          assignedAgentId: null,
+          fallbackUsed: true,
+          reasonCodes: toJsonValue(params.reasonCodes),
+          actorUserId: params.payload.actorUserId ?? null
+        }
+      });
     });
 
     return {
       leadId: params.payload.person.id,
       tenantId: params.payload.tenantId,
       selectedAgents: [],
-      fallbackTeamId: undefined,
+      fallbackTeamId: approvalPoolTeamId ?? undefined,
       usedFallback: true,
       quietHours: params.quietHours,
       ruleId: undefined,
@@ -1283,6 +1426,72 @@ export class RoutingService {
       }
     }
     return teamMembers;
+  }
+
+  private normalizeTeamRoles(includeRoles?: string[] | null) {
+    if (!includeRoles || includeRoles.length === 0) return [];
+    return Array.from(
+      new Set(
+        includeRoles
+          .map((role) => role.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    );
+  }
+
+  private candidateMatchesTeamRoles(candidate: CandidateSnapshot, teamId: string, includeRoles?: string[] | null) {
+    const allowed = this.normalizeTeamRoles(includeRoles);
+    if (allowed.length === 0) return true;
+    const membership = candidate.agent.memberships?.find((entry) => entry.teamId === teamId);
+    const role = membership?.role?.trim().toLowerCase() ?? 'member';
+    return allowed.includes(role);
+  }
+
+  private filterTeamTargetMembers(teamId: string, members: CandidateSnapshot[], includeRoles?: string[] | null) {
+    const allowed = this.normalizeTeamRoles(includeRoles);
+    if (allowed.length === 0) {
+      return members;
+    }
+    return members.filter((candidate) => this.candidateMatchesTeamRoles(candidate, teamId, allowed));
+  }
+
+  private membershipCreatedAt(candidate: CandidateSnapshot, teamId: string): number {
+    const membership = candidate.agent.memberships?.find((entry) => entry.teamId === teamId);
+    if (!membership?.createdAt) return Number.POSITIVE_INFINITY;
+    return membership.createdAt.getTime();
+  }
+
+  private async pickRoundRobinCandidate(tenantId: string, teamId: string, candidates: CandidateSnapshot[]) {
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0];
+
+    const ordered = [...candidates].sort((a, b) => {
+      const aCreated = this.membershipCreatedAt(a, teamId);
+      const bCreated = this.membershipCreatedAt(b, teamId);
+      if (aCreated !== bCreated) return aCreated - bCreated;
+      return a.snapshot.userId.localeCompare(b.snapshot.userId);
+    });
+
+    const last = await this.prisma.assignment.findFirst({
+      where: {
+        tenantId,
+        teamId,
+        agentId: { not: null }
+      },
+      orderBy: { assignedAt: 'desc' },
+      select: { agentId: true }
+    });
+
+    const lastAgentId = last?.agentId ?? null;
+    const startIndex = lastAgentId ? ordered.findIndex((candidate) => candidate.snapshot.userId === lastAgentId) + 1 : 0;
+
+    for (let offset = 0; offset < ordered.length; offset += 1) {
+      const idx = (startIndex + offset) % ordered.length;
+      const candidate = ordered[idx];
+      if (candidate) return candidate;
+    }
+
+    return ordered[0] ?? null;
   }
 
   private evaluateStringSetFilter(
@@ -1373,7 +1582,7 @@ export class RoutingService {
     });
   }
 
-  private applyFirstMatchRule(params: {
+  private async applyFirstMatchRule(params: {
     rule: Prisma.RoutingRuleGetPayload<Record<string, never>>;
     agentSnapshots: Map<string, CandidateSnapshot>;
     teamMembers: Map<string, CandidateSnapshot[]>;
@@ -1407,7 +1616,11 @@ export class RoutingService {
       }
 
       if (target.type === 'TEAM') {
-        const members = params.teamMembers.get(target.id) ?? [];
+        const members = this.filterTeamTargetMembers(
+          target.id,
+          params.teamMembers.get(target.id) ?? [],
+          target.includeRoles
+        );
         for (const member of members) {
           considered.set(member.snapshot.userId, member);
           recordEligibility(member, target.agentFilter);
@@ -1416,6 +1629,7 @@ export class RoutingService {
     }
 
     let assigned: CandidateSnapshot | undefined;
+    let assignedTeamId: string | undefined;
     let selectedScore: AgentScore | null = null;
     let fallbackTeamId = params.fallback?.teamId ?? undefined;
     let usedFallback = false;
@@ -1444,7 +1658,11 @@ export class RoutingService {
       }
 
       if (target.type === 'TEAM') {
-        const members = params.teamMembers.get(target.id) ?? [];
+        const members = this.filterTeamTargetMembers(
+          target.id,
+          params.teamMembers.get(target.id) ?? [],
+          target.includeRoles
+        );
         const available = members.filter(
           (candidate) =>
             candidate.gatingReasons.length === 0 &&
@@ -1453,6 +1671,19 @@ export class RoutingService {
         if (available.length === 0) {
           continue;
         }
+
+        if (target.strategy === 'ROUND_ROBIN') {
+          const candidate = await this.pickRoundRobinCandidate(params.rule.tenantId, target.id, available);
+          if (!candidate) continue;
+          const score = this.computeScore(candidate.snapshot);
+          if (!score) continue;
+          assigned = candidate;
+          assignedTeamId = target.id;
+          selectedScore = score;
+          reasonCodes.push('ROUND_ROBIN');
+          break;
+        }
+
         const scored = available
           .map((candidate) => ({
             candidate,
@@ -1464,8 +1695,9 @@ export class RoutingService {
           continue;
         }
         assigned = scored[0].candidate;
+        assignedTeamId = target.id;
         selectedScore = scored[0].score;
-        reasonCodes.push(target.strategy === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : 'BEST_FIT');
+        reasonCodes.push('BEST_FIT');
         break;
       }
 
@@ -1493,9 +1725,27 @@ export class RoutingService {
         }
 
         if (target.type === 'TEAM') {
-          const members = params.teamMembers.get(target.id) ?? [];
+          const members = this.filterTeamTargetMembers(
+            target.id,
+            params.teamMembers.get(target.id) ?? [],
+            target.includeRoles
+          );
           const available = members.filter((candidate) => candidate.gatingReasons.length === 0);
           if (available.length === 0) continue;
+
+          if (target.strategy === 'ROUND_ROBIN') {
+            const candidate = await this.pickRoundRobinCandidate(params.rule.tenantId, target.id, available);
+            if (!candidate) continue;
+            const score = this.computeScore(candidate.snapshot);
+            if (!score) continue;
+            assigned = candidate;
+            assignedTeamId = target.id;
+            selectedScore = score;
+            reasonCodes.push('ROUND_ROBIN', 'RELAXED_AGENT_FILTERS');
+            relaxed = true;
+            break;
+          }
+
           const scored = available
             .map((candidate) => ({
               candidate,
@@ -1505,8 +1755,9 @@ export class RoutingService {
             .sort((a, b) => b.score.score - a.score.score);
           if (scored.length === 0) continue;
           assigned = scored[0].candidate;
+          assignedTeamId = target.id;
           selectedScore = scored[0].score;
-          reasonCodes.push(target.strategy === 'ROUND_ROBIN' ? 'ROUND_ROBIN' : 'BEST_FIT', 'RELAXED_AGENT_FILTERS');
+          reasonCodes.push('BEST_FIT', 'RELAXED_AGENT_FILTERS');
           relaxed = true;
           break;
         }
@@ -1547,6 +1798,7 @@ export class RoutingService {
     return {
       selectedAgent: selectedScore ?? undefined,
       assignedAgentId: assigned?.snapshot.userId,
+      assignedTeamId,
       fallbackTeamId,
       usedFallback: usedFallback || !assigned,
       candidates,
@@ -1588,7 +1840,11 @@ export class RoutingService {
         considered.set(candidate.snapshot.userId, candidate);
         recordEligibility(candidate, target.agentFilter);
       } else if (target.type === 'TEAM') {
-        const members = params.teamMembers.get(target.id) ?? [];
+        const members = this.filterTeamTargetMembers(
+          target.id,
+          params.teamMembers.get(target.id) ?? [],
+          target.includeRoles
+        );
         for (const member of members) {
           considered.set(member.snapshot.userId, member);
           recordEligibility(member, target.agentFilter);
@@ -1638,6 +1894,15 @@ export class RoutingService {
 
     const selectedAgent = strictSelectedAgent ?? relaxedResult?.selectedAgents[0];
     const assignedCandidate = selectedAgent ? considered.get(selectedAgent.userId) : undefined;
+    const assignedTeamId =
+      selectedAgent && assignedCandidate && !targets.some((target) => target.type === 'AGENT' && target.id === selectedAgent.userId)
+        ? targets.find(
+            (target) =>
+              target.type === 'TEAM' &&
+              assignedCandidate.teamIds.includes(target.id) &&
+              this.candidateMatchesTeamRoles(assignedCandidate, target.id, target.includeRoles)
+          )?.id
+        : undefined;
     const effectiveResult = strictSelectedAgent ? strictResult : relaxedResult ?? strictResult;
     const relaxed = Boolean(needsRelax && selectedAgent && relaxedResult && !relaxedResult.usedFallback);
     if (relaxed) {
@@ -1667,6 +1932,7 @@ export class RoutingService {
     return {
       selectedAgent: selectedAgent ?? undefined,
       assignedAgentId: selectedAgent?.userId,
+      assignedTeamId,
       fallbackTeamId: effectiveResult.fallbackTeamId ?? params.fallback?.teamId ?? undefined,
       usedFallback,
       candidates,
@@ -1739,6 +2005,8 @@ export class RoutingService {
 
   private async buildCandidateSnapshots(params: {
     tenantId: string;
+    orgId: string | null;
+    leadType?: string | null;
     agents: AgentWithRelations[];
     listing?: LeadRoutingListingContext;
     hasConsent: boolean;
@@ -1766,6 +2034,33 @@ export class RoutingService {
       performanceByAgent.set(stat.agentId, entry);
     }
 
+    const leadTypeGroups =
+      params.orgId && agentIds.length
+        ? await this.prisma.person.groupBy({
+            by: ['ownerId', 'leadType'],
+            where: {
+              organizationId: params.orgId,
+              deletedAt: null,
+              stageId: { not: null },
+              ownerId: { in: agentIds }
+            },
+            _count: { _all: true }
+          })
+        : [];
+
+    const leadTypeCountsByOwnerId = new Map<string, { buyer: number; seller: number }>();
+    for (const group of leadTypeGroups) {
+      const ownerId = group.ownerId ?? null;
+      if (!ownerId) continue;
+      const entry = leadTypeCountsByOwnerId.get(ownerId) ?? { buyer: 0, seller: 0 };
+      if (String(group.leadType).toUpperCase() === 'BUYER') {
+        entry.buyer += group._count._all;
+      } else if (String(group.leadType).toUpperCase() === 'SELLER') {
+        entry.seller += group._count._all;
+      }
+      leadTypeCountsByOwnerId.set(ownerId, entry);
+    }
+
     const snapshots = new Map<string, CandidateSnapshot>();
     for (const agent of params.agents) {
       const routingProfile = this.resolveAgentRoutingProfile(agent);
@@ -1774,6 +2069,36 @@ export class RoutingService {
       const geographyFit = this.computeGeographyFit(agent, params.listing);
       const priceBandFit = this.computePriceBandFit(agent, params.listing);
       const activePipeline = agent.tours.length;
+      const typeCounts = leadTypeCountsByOwnerId.get(agent.id) ?? { buyer: 0, seller: 0 };
+      const knownTotal = typeCounts.buyer + typeCounts.seller;
+      const buyerShare = knownTotal > 0 ? typeCounts.buyer / knownTotal : null;
+      const orientation =
+        buyerShare === null
+          ? 'UNKNOWN'
+          : buyerShare >= 0.67
+            ? 'BUYER_HEAVY'
+            : buyerShare <= 0.33
+              ? 'SELLER_HEAVY'
+              : 'BALANCED';
+      const leadType = String(params.leadType ?? '').toUpperCase();
+      const leadTypeFit =
+        leadType === 'BUYER'
+          ? orientation === 'BUYER_HEAVY'
+            ? 1
+            : orientation === 'BALANCED'
+              ? 0.85
+              : orientation === 'SELLER_HEAVY'
+                ? 0.6
+                : 0.75
+          : leadType === 'SELLER'
+            ? orientation === 'SELLER_HEAVY'
+              ? 1
+              : orientation === 'BALANCED'
+                ? 0.85
+                : orientation === 'BUYER_HEAVY'
+                  ? 0.6
+                  : 0.75
+            : 0.75;
 
       const snapshot: AgentSnapshot = {
         userId: agent.id,
@@ -1783,6 +2108,7 @@ export class RoutingService {
         geographyFit,
         priceBandFit,
         keptApptRate: keptRate,
+        leadTypeFit,
         consentReady: params.hasConsent,
         tenDlcReady: params.tenDlcReady,
         teamId: agent.memberships?.[0]?.teamId,

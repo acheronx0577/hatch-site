@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Loader2, Sparkles, Plus } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Loader2, Plus } from 'lucide-react';
 
 import PipelineBoard from '@/components/crm/PipelineBoard';
 import { ClientInsightsHub } from '@/components/crm/ClientInsightsHub';
@@ -41,7 +41,9 @@ type HeroNavItem = {
 
 export default function BrokerCRMPage() {
   const { toast } = useToast();
-  const { session, user } = useAuth();
+  const { session, user, userId, isBroker } = useAuth();
+  const [searchParams] = useSearchParams();
+  const ownerIdQuery = searchParams.get('ownerId') ?? undefined;
   const senderName = useMemo(() => {
     const { displayName } = resolveUserIdentity(session?.profile ?? {}, user?.email ?? undefined, 'Your Account');
     return displayName || undefined;
@@ -84,25 +86,6 @@ export default function BrokerCRMPage() {
       setHeroTab(nextTab);
     },
     [heroTab, leads.length, pipelines]
-  );
-
-  const handleOpenCopilot = useCallback(
-    (source: 'crm_hero' | 'hero_nav' = 'crm_hero') => {
-      void trackEvent({
-        name: 'copilot.opened',
-        category: 'copilot',
-        tenantId: TENANT_ID,
-        properties: {
-          source,
-          personaId: copilotPersonaId,
-          heroTab,
-          leadCount: leads.length,
-          pipelineId: pipelines[0]?.id ?? null
-        }
-      });
-      openCopilot();
-    },
-    [copilotPersonaId, heroTab, leads.length, openCopilot, pipelines]
   );
 
   const handleStartPersonaChat = useCallback(
@@ -210,9 +193,10 @@ export default function BrokerCRMPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
+      const ownerId = isBroker ? ownerIdQuery : userId ?? undefined;
       const [pipelineData, leadResponse] = await Promise.all([
-        getPipelines(),
-        getLeads({ limit: DEFAULT_LIMIT })
+        getPipelines(TENANT_ID),
+        getLeads({ limit: DEFAULT_LIMIT, ownerId })
       ]);
       setPipelines(pipelineData);
       setLeads(leadResponse.items);
@@ -226,7 +210,7 @@ export default function BrokerCRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [isBroker, ownerIdQuery, toast, userId]);
 
   useEffect(() => {
     void fetchData();
@@ -377,7 +361,6 @@ export default function BrokerCRMPage() {
           stageCount={stageCount}
           metrics={heroMetrics}
           navItems={heroNavItems}
-          onOpenCopilot={handleOpenCopilot}
           activeTab={heroTab}
           onAddLead={() => setAddLeadOpen(true)}
         />
@@ -456,16 +439,15 @@ type PipelineHeroProps = {
   stageCount: number;
   metrics: Array<{ label: string; value: string }>;
   navItems: HeroNavItem[];
-  onOpenCopilot: () => void;
   activeTab: 'pipeline' | 'insights' | 'ai_team';
   onAddLead: () => void;
 };
 
-function PipelineHero({ pipelineName, stageCount, metrics, navItems, onOpenCopilot, activeTab, onAddLead }: PipelineHeroProps) {
+function PipelineHero({ pipelineName, stageCount, metrics, navItems, activeTab, onAddLead }: PipelineHeroProps) {
   return (
-    <div className="relative overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-[#1F5FFF] via-[#3D86FF] to-[#00C6A2] text-white shadow-[0_30px_80px_rgba(31,95,255,0.35)]">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_52%)]" />
-      <div className="relative flex flex-col gap-6 px-6 py-8 md:px-10 md:py-12 lg:flex-row lg:items-center lg:justify-between">
+    <div className="hatch-hero relative overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-[#1F5FFF] via-[#3D86FF] to-[#00C6A2] text-white shadow-[0_30px_80px_rgba(31,95,255,0.35)]">
+      <div className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.28),transparent_52%)]" />
+      <div className="relative z-10 flex flex-col gap-6 px-6 py-8 md:px-10 md:py-12 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-3">
           <p className="text-xs uppercase tracking-[0.4em] text-white/80">Customer Relationship Hub</p>
           <div>
@@ -476,9 +458,9 @@ function PipelineHero({ pipelineName, stageCount, metrics, navItems, onOpenCopil
             Active pipeline: <span className="font-medium text-white">{pipelineName}</span> · {stageCount} stages
           </p>
         </div>
-        <div className="grid w-full gap-4 rounded-2xl border border-white/20 bg-white/20 p-5 backdrop-blur sm:grid-cols-3 lg:max-w-xl">
+        <div className="grid w-full gap-4 rounded-2xl border border-white/20 bg-white/15 p-5 backdrop-blur sm:grid-cols-3 lg:max-w-xl">
           {metrics.map((metric) => (
-            <div key={metric.label} className="rounded-2xl bg-white/25 px-4 py-3 text-start shadow-inner shadow-white/20">
+            <div key={metric.label} className="rounded-2xl bg-white/30 px-4 py-3 text-start shadow-inner shadow-white/20">
               <p className="text-xs uppercase tracking-wide text-white/80">{metric.label}</p>
               <p className="mt-2 text-2xl font-semibold text-white">{metric.value}</p>
             </div>
@@ -489,9 +471,9 @@ function PipelineHero({ pipelineName, stageCount, metrics, navItems, onOpenCopil
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <nav className="flex flex-wrap gap-2">
             {navItems.map((item) => {
-              const baseClass = 'rounded-full px-3 py-1 text-xs font-semibold transition';
-              const activeClass = 'border-white bg-white/20 text-white shadow-sm';
-              const inactiveClass = 'border border-white/30 text-white/90 hover:border-white hover:bg-white/10';
+              const baseClass = 'rounded-full px-3 py-1 text-xs font-semibold transition-colors duration-200';
+              const activeClass = 'border border-white/30 bg-white/20 text-white shadow-inner shadow-white/10 backdrop-blur';
+              const inactiveClass = 'text-white/85 hover:bg-white/10 hover:text-white';
 
               if (item.href) {
                 return (
@@ -526,14 +508,6 @@ function PipelineHero({ pipelineName, stageCount, metrics, navItems, onOpenCopil
               onClick={onAddLead}
             >
               <Plus className="mr-2 h-4 w-4" /> Add lead
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              className="bg-white/90 text-blue-600 hover:bg-white"
-              onClick={onOpenCopilot}
-            >
-              <Sparkles className="mr-2 h-4 w-4" /> Open Copilot
             </Button>
           </div>
         </div>

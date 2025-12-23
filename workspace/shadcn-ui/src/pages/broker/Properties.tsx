@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
+import { Eye, Trash2 } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -13,9 +15,16 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
-import { deleteBrokerProperty, type BrokerPropertyRow } from '@/lib/api/properties';
+import { deleteBrokerProperty } from '@/lib/api/properties';
 import { fetchOrgListings, type OrgListingRecord } from '@/lib/api/org-listings';
-import { Separator } from '@/components/ui/separator';
+import {
+  isActiveListingStatus,
+  isExpiringSoon,
+  isFlaggedListingStatus,
+  isPendingListingStatus,
+  summarizeListings
+} from '@/lib/listings/summary';
+import { cn } from '@/lib/utils';
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch';
 
@@ -39,10 +48,10 @@ export default function BrokerProperties() {
   const { activeOrgId } = useAuth();
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
   if (!orgId) {
-    return <div className="p-8 text-sm text-gray-600">Select an organization to view listing inventory.</div>;
+    return <div className="text-sm text-slate-600">Select an organization to view listing inventory.</div>;
   }
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <PropertiesView orgId={orgId} />
     </div>
   );
@@ -78,24 +87,20 @@ function PropertiesView({ orgId }: { orgId: string }) {
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const summary = useMemo(() => {
-    const active = listings.filter((listing) => (listing.status ?? '').toLowerCase() === 'active').length;
-    const pending = listings.filter((listing) => (listing.status ?? '').toLowerCase() === 'pending').length;
-    const flagged = 0;
-    const expiringSoon = 0;
-    return { total: listings.length, active, pending, flagged, expiringSoon };
+    return summarizeListings(listings);
   }, [listings]);
 
   const filteredListings = useMemo(() => {
     return listings.filter((listing) => {
       switch (filter) {
         case 'ACTIVE':
-          return (listing.status ?? '').toLowerCase() === 'active';
+          return isActiveListingStatus(listing.status);
         case 'PENDING':
-          return (listing.status ?? '').toLowerCase().startsWith('pending');
+          return isPendingListingStatus(listing.status);
         case 'FLAGGED':
-          return false;
+          return isFlaggedListingStatus(listing.status);
         case 'EXPIRING':
-          return false;
+          return isExpiringSoon(listing.expiresAt);
         default:
           return true;
       }
@@ -122,110 +127,139 @@ function PropertiesView({ orgId }: { orgId: string }) {
 
   return (
     <>
-      <Card className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Inventory</p>
-            <h1 className="text-2xl font-semibold text-slate-900">Listing pipeline</h1>
-            <p className="text-sm text-slate-500">
-              Track brokerage inventory, expirations, and pending approvals.
-            </p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Inventory</p>
+            <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Listing pipeline</h1>
+            <p className="text-sm text-slate-600">Track brokerage inventory, expirations, and pending approvals.</p>
           </div>
           <Button variant="outline" asChild>
             <Link to="/broker/draft-listings">Manage drafts</Link>
           </Button>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <KpiCard label="Total listings" value={summary.total} />
-          <KpiCard label="Active" value={summary.active} helper={`${summary.pending} pending`} />
-          <KpiCard label="Expiring soon" value={summary.expiringSoon} helper="Next 30 days" />
-          <KpiCard label="Needs approval" value={summary.flagged} helper="Awaiting broker review" />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Total listings" value={summary.total} />
+          <StatCard label="Active" value={summary.active} helper={`${summary.pending} pending`} />
+          <StatCard label="Expiring soon" value={summary.expiringSoon} helper="Next 30 days" />
+          <StatCard label="Needs approval" value={summary.flagged} helper="Awaiting review" tone="warning" />
         </div>
-      </Card>
+      </section>
 
-      <Card className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-4">
+      <Card className="overflow-hidden hover:translate-y-0 hover:shadow-brand">
+        <div className="flex flex-col gap-4 border-b border-[color:var(--hatch-card-border)] px-6 pb-4 pt-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Listing table</h2>
-            <p className="text-sm text-slate-500">Mission Control surfaced listings with basic stats.</p>
+            <h2 className="text-lg font-medium text-slate-900">Listings</h2>
+            <p className="text-sm text-slate-600">Mission Control surfaced listings with basic stats.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {filters.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => handleFilterChange(option.id)}
-                className={`rounded-full px-4 py-1 text-sm font-medium ${
-                  filter === option.id ? 'bg-slate-900 text-white' : 'border border-slate-200 text-slate-600'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-1 rounded-full border border-[var(--glass-border)] bg-white/25 p-1 backdrop-blur-md dark:bg-white/10">
+              {filters.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => handleFilterChange(option.id)}
+                  className={cn(
+                    'rounded-full px-3 py-1 text-[11px] font-semibold transition-colors duration-200',
+                    filter === option.id
+                      ? 'border border-white/20 bg-white/50 text-slate-900 shadow-brand'
+                      : 'text-slate-600 hover:bg-white/25 hover:text-slate-900 dark:text-ink-100/70 dark:hover:bg-white/10 dark:hover:text-ink-100'
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        {error ? (
-          <p className="py-6 text-sm text-rose-500">Unable to load listings.</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-100 text-sm text-slate-700">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-2 text-left">Address</th>
-                  <th className="px-4 py-2 text-left">Status</th>
-                  <th className="px-4 py-2 text-left">Agent</th>
-                  <th className="px-4 py-2 text-left">MLS #</th>
-                  <th className="px-4 py-2 text-left">Price</th>
-                  <th className="px-4 py-2">Expires</th>
-                  <th className="px-4 py-2 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                      Loading properties…
-                    </td>
-                  </tr>
-                ) : filteredListings.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-slate-400">
-                      No listings match the selected filter.
-                    </td>
-                  </tr>
-                ) : (
-                  filteredListings.map((listing) => (
-                    <tr key={listing.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-900">
-                          {listing.addressLine1}
-                          {listing.city ? `, ${listing.city}` : ''}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {listing.city}, {listing.state} {listing.postalCode}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge className={getStatusTone(listing.status)}>{formatStatus(listing.status)}</Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-xs text-slate-500">
-                          {listing.agentProfile?.user ?
-                            `${listing.agentProfile.user.firstName ?? ''} ${listing.agentProfile.user.lastName ?? ''}`.trim() ||
-                            listing.agentProfile.user.email :
-                            'Unassigned'}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{listing.mlsNumber ?? '—'}</td>
-                      <td className="px-4 py-3 font-medium text-slate-900">
-                        {listing.listPrice ? currencyFormatter.format(Number(listing.listPrice)) : '—'}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        — 
-                      </td>
-                      <td className="px-4 py-3 text-right">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Address</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Agent</TableHead>
+              <TableHead>MLS #</TableHead>
+              <TableHead>Price</TableHead>
+              <TableHead>Expires</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {error ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-rose-600">
+                  Unable to load listings.
+                </TableCell>
+              </TableRow>
+            ) : isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
+                  Loading listings…
+                </TableCell>
+              </TableRow>
+            ) : filteredListings.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="py-10 text-center text-sm text-slate-500">
+                  No listings match the selected filter.
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredListings.map((listing) => {
+                const photos = (listing.photos ?? []).filter(Boolean);
+                const cover = listing.coverPhotoUrl || photos[0] || placeholderImg;
+                const agent = listing.agentProfile?.user;
+                const agentLabel = agent
+                  ? `${agent.firstName ?? ''} ${agent.lastName ?? ''}`.trim() || agent.email || 'Agent'
+                  : 'Unassigned';
+
+                return (
+                  <TableRow key={listing.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-14 overflow-hidden rounded-lg border border-white/25 bg-white/30">
+                          <img
+                            src={cover}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              const target = e.currentTarget;
+                              if (target.src !== placeholderImg) target.src = placeholderImg;
+                            }}
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-slate-900">
+                            {listing.addressLine1}
+                            {listing.city ? `, ${listing.city}` : ''}
+                          </div>
+                          <p className="truncate text-xs text-slate-500">
+                            {listing.city}, {listing.state} {listing.postalCode}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={statusBadgeVariant(listing.status)}>{formatStatus(listing.status)}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <p className="text-xs text-slate-600">{agentLabel}</p>
+                    </TableCell>
+                    <TableCell className="text-slate-600">{listing.mlsNumber ?? '—'}</TableCell>
+                    <TableCell className="font-medium text-slate-900">
+                      {listing.listPrice ? currencyFormatter.format(Number(listing.listPrice)) : '—'}
+                    </TableCell>
+                    <TableCell className="text-slate-600">
+                      {listing.expiresAt ? new Date(listing.expiresAt).toLocaleDateString() : '—'}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={`/broker/properties/${listing.id}`}>Open</Link>
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
@@ -234,12 +268,12 @@ function PropertiesView({ orgId }: { orgId: string }) {
                             setPreviewOpen(true);
                           }}
                         >
-                          Preview
+                          <Eye className="h-4 w-4" /> Preview
                         </Button>
                         <Button
-                          size="sm"
-                          variant="destructive"
-                          className="ml-2"
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 text-slate-600 hover:bg-rose-500/10 hover:text-rose-600"
                           disabled={deleteMutation.isLoading}
                           onClick={() => {
                             const confirmDelete = window.confirm('Delete this listing?');
@@ -248,16 +282,17 @@ function PropertiesView({ orgId }: { orgId: string }) {
                             }
                           }}
                         >
-                          Delete
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Delete listing</span>
                         </Button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
       </Card>
 
       <Dialog
@@ -279,7 +314,7 @@ function PropertiesView({ orgId }: { orgId: string }) {
                 const photos = (selectedListing.photos ?? []).filter(Boolean);
                 const cover = selectedListing.coverPhotoUrl || photos[0] || placeholderImg;
                 return (
-                  <div className="overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
+                  <div className="overflow-hidden rounded-xl border border-[var(--glass-border)] bg-white/10">
                     <img
                       src={cover}
                       alt={selectedListing.addressLine1}
@@ -306,7 +341,7 @@ function PropertiesView({ orgId }: { orgId: string }) {
                       .join(', ')}
                   </p>
                   <div className="mt-2 flex items-center gap-2 text-sm text-slate-500">
-                    <Badge variant="outline">{formatStatus(selectedListing.status)}</Badge>
+                    <Badge variant={statusBadgeVariant(selectedListing.status)}>{formatStatus(selectedListing.status)}</Badge>
                     {selectedListing.mlsNumber && <span>MLS #{selectedListing.mlsNumber}</span>}
                   </div>
                 </div>
@@ -415,7 +450,7 @@ function PropertiesView({ orgId }: { orgId: string }) {
                         key={photo + idx}
                         src={photo}
                         alt={`Photo ${idx + 1}`}
-                        className="h-24 w-36 flex-shrink-0 rounded-lg object-cover border border-slate-100 bg-slate-50"
+                        className="h-24 w-36 flex-shrink-0 rounded-lg object-cover border border-[var(--glass-border)] bg-white/10"
                         loading="lazy"
                         referrerPolicy="no-referrer"
                         onError={(e) => {
@@ -429,7 +464,7 @@ function PropertiesView({ orgId }: { orgId: string }) {
               )}
 
               {selectedListing.agentProfile?.user && (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                <div className="rounded-xl border border-[var(--glass-border)] bg-white/25 p-4 text-sm backdrop-blur">
                   <p className="font-medium text-slate-900">Agent</p>
                   <p className="text-slate-700">
                     {selectedListing.agentProfile.user.firstName} {selectedListing.agentProfile.user.lastName}
@@ -454,26 +489,37 @@ function formatStatus(status?: string | null) {
   return status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
 }
 
-function getStatusTone(status: string) {
-  if (status === 'ACTIVE') return 'border border-emerald-100 bg-emerald-50 text-emerald-700';
-  if (status.startsWith('PENDING')) return 'border border-amber-100 bg-amber-50 text-amber-700';
-  if (status === 'PENDING_BROKER_APPROVAL') return 'border border-sky-100 bg-sky-50 text-sky-700';
-  return 'border bg-slate-100 text-slate-700';
-}
+const statusBadgeVariant = (status: string) => {
+  const normalized = (status ?? '').toLowerCase();
+  if (normalized.includes('active')) return 'success' as const;
+  if (normalized.includes('pending') || normalized.includes('approval')) return 'warning' as const;
+  if (normalized.includes('expir')) return 'warning' as const;
+  return 'neutral' as const;
+};
 
-function KpiCard({ label, value, helper }: { label: string; value: number; helper?: string }) {
+function StatCard({
+  label,
+  value,
+  helper,
+  tone
+}: {
+  label: string;
+  value: number;
+  helper?: string;
+  tone?: 'warning';
+}) {
   return (
-    <Card className="rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="text-3xl font-semibold text-slate-900">{value}</p>
-      {helper ? <p className="text-xs text-slate-500">{helper}</p> : null}
+    <Card className={cn('relative overflow-hidden p-6', tone === 'warning' && 'hatch-glass--warning')}>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="mt-3 text-4xl font-semibold tracking-tight text-slate-900">{value}</p>
+      {helper ? <p className="mt-1 text-xs text-slate-500">{helper}</p> : null}
     </Card>
   );
 }
 
 function PreviewStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
+    <div className="rounded-xl border border-[var(--glass-border)] bg-white/25 p-3 backdrop-blur">
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className="text-base font-semibold text-slate-900 whitespace-pre-line">{value}</p>
     </div>

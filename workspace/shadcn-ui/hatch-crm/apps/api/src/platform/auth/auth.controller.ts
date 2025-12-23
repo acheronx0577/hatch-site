@@ -44,6 +44,133 @@ export class AuthController {
     private readonly cognito: CognitoService
   ) {}
 
+  private async ensureTenantForOrg(orgId: string) {
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId } });
+    if (!org) {
+      throw new NotFoundException('Organization not found');
+    }
+
+    const tenant = await this.prisma.tenant.findFirst({ where: { organizationId: orgId } });
+    if (tenant) {
+      return tenant;
+    }
+
+    const derived = (org.name ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+    const slugBase = org.slug ?? (derived || 'org');
+    const slug = `${slugBase}-${org.id.substring(0, 6)}`;
+
+    return this.prisma.tenant.create({
+      data: {
+        organizationId: org.id,
+        name: org.name,
+        slug
+      }
+    });
+  }
+
+  private async acceptAgentInvite(
+    invite: {
+      id: string;
+      organizationId: string;
+      email: string;
+      status: AgentInviteStatus;
+      expiresAt?: Date | null;
+      acceptedByUserId?: string | null;
+    },
+    normalizedEmail: string
+  ) {
+    if (invite.email.toLowerCase() !== normalizedEmail) {
+      throw new BadRequestException('Authenticated email does not match invite email');
+    }
+
+    if (invite.status === AgentInviteStatus.REVOKED) {
+      throw new BadRequestException('Invite has been revoked');
+    }
+
+    const now = new Date();
+    if (invite.status === AgentInviteStatus.PENDING && invite.expiresAt && now > invite.expiresAt) {
+      await this.prisma.agentInvite.update({
+        where: { id: invite.id },
+        data: { status: AgentInviteStatus.EXPIRED }
+      });
+      throw new BadRequestException('Invite has expired');
+    }
+
+    if (invite.status === AgentInviteStatus.EXPIRED) {
+      throw new BadRequestException('Invite has expired');
+    }
+
+    let user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
+    });
+
+    if (user) {
+      const membership = await this.prisma.userOrgMembership.findUnique({
+        where: { userId_orgId: { userId: user.id, orgId: invite.organizationId } }
+      });
+
+      if (!membership) {
+        await this.prisma.userOrgMembership.create({
+          data: {
+            userId: user.id,
+            orgId: invite.organizationId,
+            isOrgAdmin: false
+          }
+        });
+      }
+    } else {
+      const tenant = await this.ensureTenantForOrg(invite.organizationId);
+
+      user = await this.prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          organizationId: invite.organizationId,
+          tenantId: tenant.id,
+          role: UserRole.AGENT,
+          // No password hash - using Cognito auth only
+          firstName: normalizedEmail.split('@')[0],
+          lastName: ''
+        },
+        select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
+      });
+
+      await this.prisma.userOrgMembership.create({
+        data: {
+          userId: user.id,
+          orgId: invite.organizationId,
+          isOrgAdmin: false
+        }
+      });
+
+      await this.prisma.agentProfile.upsert({
+        where: { organizationId_userId: { organizationId: invite.organizationId, userId: user.id } },
+        update: {},
+        create: {
+          userId: user.id,
+          organizationId: invite.organizationId
+        }
+      });
+    }
+
+    if (invite.status === AgentInviteStatus.PENDING) {
+      await this.prisma.agentInvite.update({
+        where: { id: invite.id },
+        data: { status: AgentInviteStatus.ACCEPTED, acceptedByUserId: user.id }
+      });
+    } else if (invite.status === AgentInviteStatus.ACCEPTED && !invite.acceptedByUserId) {
+      await this.prisma.agentInvite.update({
+        where: { id: invite.id },
+        data: { acceptedByUserId: user.id }
+      });
+    }
+
+    return user;
+  }
+
   private resolveCookieSecure(req: FastifyRequest): boolean {
     const override = (process.env.COOKIE_SECURE ?? '').trim().toLowerCase();
     if (override === 'true') return true;
@@ -148,6 +275,11 @@ export class AuthController {
   @Get('cognito/login')
   cognitoLogin(@Query('redirect') redirectTo: string | undefined, @Res() reply: FastifyReply) {
     const normalized = this.normalizeRedirectTarget(redirectTo);
+    if (!this.cognito.isConfigured()) {
+      throw new BadRequestException(
+        'Cognito is not configured. Set COGNITO_DOMAIN, COGNITO_CLIENT_ID, and COGNITO_CALLBACK_URL.'
+      );
+    }
     const url = this.cognito.generateLoginUrl(normalized);
     return reply.redirect(url, 302);
   }
@@ -339,86 +471,20 @@ export class AuthController {
     if (inviteToken) {
       const invite = await this.prisma.agentInvite.findUnique({
         where: { token: inviteToken },
-        include: { organization: true }
+        select: {
+          id: true,
+          organizationId: true,
+          email: true,
+          status: true,
+          expiresAt: true,
+          acceptedByUserId: true
+        }
       });
 
       if (!invite) {
         throw new NotFoundException('Invite not found');
       }
-
-      if (invite.email.toLowerCase() !== normalizedEmail) {
-        throw new BadRequestException('Authenticated email does not match invite email');
-      }
-
-      if (invite.status !== AgentInviteStatus.PENDING) {
-        throw new BadRequestException(`Invite already ${invite.status.toLowerCase()}`);
-      }
-
-      if (invite.expiresAt && new Date() > invite.expiresAt) {
-        throw new BadRequestException('Invite has expired');
-      }
-
-      user = await this.prisma.user.findUnique({
-        where: { email: normalizedEmail },
-        select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
-      });
-
-      if (user) {
-        const membership = await this.prisma.userOrgMembership.findUnique({
-          where: { userId_orgId: { userId: user.id, orgId: invite.organizationId } }
-        });
-
-        if (!membership) {
-          await this.prisma.userOrgMembership.create({
-            data: {
-              userId: user.id,
-              orgId: invite.organizationId,
-              isOrgAdmin: false
-            }
-          });
-        }
-      } else {
-        const tenant = await this.prisma.tenant.findFirst({
-          where: { organizationId: invite.organizationId }
-        });
-
-        if (!tenant) {
-          throw new NotFoundException('Tenant not found for organization');
-        }
-
-        user = await this.prisma.user.create({
-          data: {
-            email: normalizedEmail,
-            organizationId: invite.organizationId,
-            tenantId: tenant.id,
-            role: UserRole.AGENT,
-            // No password hash - using Cognito auth only
-            firstName: normalizedEmail.split('@')[0],
-            lastName: ''
-          },
-          select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
-        });
-
-        await this.prisma.userOrgMembership.create({
-          data: {
-            userId: user.id,
-            orgId: invite.organizationId,
-            isOrgAdmin: false
-          }
-        });
-
-        await this.prisma.agentProfile.create({
-          data: {
-            userId: user.id,
-            organizationId: invite.organizationId
-          }
-        });
-      }
-
-      await this.prisma.agentInvite.update({
-        where: { id: invite.id },
-        data: { status: AgentInviteStatus.ACCEPTED }
-      });
+      user = await this.acceptAgentInvite(invite, normalizedEmail);
     } else {
       const candidates = [normalizedEmail];
       if (placeholderEmail !== normalizedEmail) {
@@ -436,56 +502,101 @@ export class AuthController {
       }
 
       if (!user) {
-        if (!this.isCognitoAutoProvisionEnabled()) {
+        const pendingInvites = this.isEmailLike(normalizedEmail)
+          ? await this.prisma.agentInvite.findMany({
+              where: { email: normalizedEmail, status: AgentInviteStatus.PENDING },
+              orderBy: { createdAt: 'desc' },
+              take: 10,
+              select: {
+                id: true,
+                organizationId: true,
+                email: true,
+                status: true,
+                expiresAt: true,
+                acceptedByUserId: true
+              }
+            })
+          : [];
+
+        const now = new Date();
+        const validInvites = pendingInvites.filter((invite) => (invite.expiresAt ? invite.expiresAt > now : true));
+        const expiredInviteIds = pendingInvites
+          .filter((invite) => invite.expiresAt ? invite.expiresAt <= now : false)
+          .map((invite) => invite.id);
+
+        if (expiredInviteIds.length > 0) {
+          await this.prisma.agentInvite.updateMany({
+            where: { id: { in: expiredInviteIds }, status: AgentInviteStatus.PENDING },
+            data: { status: AgentInviteStatus.EXPIRED }
+          });
+        }
+
+        if (validInvites.length > 0) {
+          const orgIds = new Set(validInvites.map((invite) => invite.organizationId));
+          if (orgIds.size > 1) {
+            throw new BadRequestException(
+              'Multiple pending invites were found for this email. Please use the invite link for the organization you want to join.'
+            );
+          }
+          user = await this.acceptAgentInvite(validInvites[0], normalizedEmail);
+        }
+
+        if (user) {
+          // Invite-based provisioning succeeded; skip auto-provision logic.
+        } else if (pendingInvites.length > 0 && expiredInviteIds.length === pendingInvites.length && !this.isCognitoAutoProvisionEnabled()) {
+          throw new BadRequestException('Invite has expired');
+        } else if (!this.isCognitoAutoProvisionEnabled()) {
           throw new UnauthorizedException('No user found for this account');
         }
 
-        const defaultOrgId = process.env.DEFAULT_ORG_ID ?? 'org-hatch';
-        const defaultTenantId = process.env.DEFAULT_TENANT_ID ?? 'tenant-hatch';
+        if (!user) {
+          const defaultOrgId = process.env.DEFAULT_ORG_ID ?? 'org-hatch';
+          const defaultTenantId = process.env.DEFAULT_TENANT_ID ?? 'tenant-hatch';
 
-        // Ensure default org + tenant exist for local/dev.
-        await this.prisma.organization.upsert({
-          where: { id: defaultOrgId },
-          update: {},
-          create: {
-            id: defaultOrgId,
-            name: process.env.DEFAULT_ORG_NAME ?? 'Hatch'
-          }
-        });
-        const tenant = await this.prisma.tenant.upsert({
-          where: { id: defaultTenantId },
-          update: {},
-          create: {
-            id: defaultTenantId,
-            organizationId: defaultOrgId,
-            name: process.env.DEFAULT_TENANT_NAME ?? 'Hatch',
-            slug: process.env.DEFAULT_TENANT_SLUG ?? defaultTenantId
-          }
-        });
+          // Ensure default org + tenant exist for local/dev.
+          await this.prisma.organization.upsert({
+            where: { id: defaultOrgId },
+            update: {},
+            create: {
+              id: defaultOrgId,
+              name: process.env.DEFAULT_ORG_NAME ?? 'Hatch'
+            }
+          });
+          const tenant = await this.prisma.tenant.upsert({
+            where: { id: defaultTenantId },
+            update: {},
+            create: {
+              id: defaultTenantId,
+              organizationId: defaultOrgId,
+              name: process.env.DEFAULT_TENANT_NAME ?? 'Hatch',
+              slug: process.env.DEFAULT_TENANT_SLUG ?? defaultTenantId
+            }
+          });
 
-        const emailToStore = this.isEmailLike(normalizedEmail) ? normalizedEmail : placeholderEmail;
-        const baseName = normalizedEmail.split('@')[0] || 'User';
-        const role = this.resolveCognitoAutoProvisionRole();
+          const emailToStore = this.isEmailLike(normalizedEmail) ? normalizedEmail : placeholderEmail;
+          const baseName = normalizedEmail.split('@')[0] || 'User';
+          const role = this.resolveCognitoAutoProvisionRole();
 
-        user = await this.prisma.user.create({
-          data: {
-            email: emailToStore,
-            firstName: baseName,
-            lastName: '',
-            role,
-            organizationId: tenant.organizationId,
-            tenantId: tenant.id
-          },
-          select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
-        });
+          user = await this.prisma.user.create({
+            data: {
+              email: emailToStore,
+              firstName: baseName,
+              lastName: '',
+              role,
+              organizationId: tenant.organizationId,
+              tenantId: tenant.id
+            },
+            select: { id: true, email: true, role: true, tenantId: true, organizationId: true }
+          });
 
-        await this.prisma.userOrgMembership.create({
-          data: {
-            userId: user.id,
-            orgId: user.organizationId,
-            isOrgAdmin: false
-          }
-        });
+          await this.prisma.userOrgMembership.create({
+            data: {
+              userId: user.id,
+              orgId: user.organizationId,
+              isOrgAdmin: false
+            }
+          });
+        }
       }
     }
 

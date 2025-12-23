@@ -1,7 +1,9 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsEmail, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsOptional, IsString } from 'class-validator';
 
 import { LeadFitInput, toBoolean } from './create-lead.dto';
+
+const LEAD_TYPE_VALUES = ['BUYER', 'SELLER', 'UNKNOWN'] as const;
 
 export class UpdateLeadDto {
   @IsOptional()
@@ -31,6 +33,10 @@ export class UpdateLeadDto {
   @IsOptional()
   @IsString()
   stageId?: string;
+
+  @IsOptional()
+  @IsIn(LEAD_TYPE_VALUES)
+  leadType?: (typeof LEAD_TYPE_VALUES)[number];
 
   @IsOptional()
   @IsString()
@@ -74,4 +80,3 @@ export class UpdateLeadDto {
   @IsString()
   notes?: string;
 }
-

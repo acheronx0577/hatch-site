@@ -1,6 +1,1 @@
-import { IsString } from 'class-validator';
-
-export class AssignLeadDto {
-  @IsString()
-  agentProfileId!: string;
-}
+export { AssignLeadDto } from '../../leads/dto/assign-lead.dto';

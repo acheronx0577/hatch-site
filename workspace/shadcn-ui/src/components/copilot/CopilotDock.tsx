@@ -675,7 +675,6 @@ function ToolsList({ persona }: { persona: AiPersona | null }) {
                 </div>
                 <p className="text-xs text-slate-500">
                   {meta.description}
-                  {meta.comingSoon && ' · coming soon'}
                 </p>
               </div>
             );

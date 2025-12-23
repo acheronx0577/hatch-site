@@ -78,9 +78,9 @@ async function main() {
     }
   }
 
-  const outDir = join(moduleDir, '../../openapi');
-  mkdirSync(outDir, { recursive: true });
-  const outPath = join(outDir, 'openapi.lite.json');
+  const repoRoot = join(moduleDir, '../../..');
+  const outPath = join(repoRoot, '.tmp', 'spec-smoke', 'openapi.lite.json');
+  mkdirSync(dirname(outPath), { recursive: true });
   console.log('[spec-smoke] writing spec to', outPath);
   writeFileSync(outPath, JSON.stringify(document, null, 2));
 

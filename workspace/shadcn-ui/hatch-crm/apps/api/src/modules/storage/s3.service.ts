@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import {
+  CreateBucketCommand,
   GetObjectCommand,
+  HeadBucketCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client
@@ -11,16 +13,16 @@ import fetch from 'node-fetch';
 
 @Injectable()
 export class S3Service {
-  private readonly client = new S3Client({
-    region: process.env.AWS_REGION ?? 'us-east-2',
-    credentials:
-      process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
-        ? {
-            accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-            secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
-          }
-        : undefined
-  });
+  private readonly endpoint = (process.env.S3_ENDPOINT ?? process.env.AWS_S3_ENDPOINT ?? '').trim() || undefined;
+  private readonly forcePathStyle = this.resolveForcePathStyle(this.endpoint);
+  private readonly ensuredBuckets = new Set<string>();
+  private readonly client: S3Client;
+
+  private readonly dataBucket =
+    process.env.AWS_S3_BUCKET_DATA ??
+    process.env.AWS_S3_BUCKET_EXTERNAL_DATA ??
+    process.env.AWS_S3_BUCKET_AGGREGATORS ??
+    '';
 
   private readonly docsBucket =
     process.env.AWS_S3_BUCKET_DOCS ??
@@ -44,8 +46,101 @@ export class S3Service {
     process.env.S3_PUBLIC_BASE_URL_PROPERTY ??
     process.env.S3_PUBLIC_BASE_URL;
 
+  constructor() {
+    const region = process.env.AWS_REGION ?? 'us-east-2';
+    this.client = new S3Client({
+      region,
+      credentials:
+        process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+          ? {
+              accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+              secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+            }
+          : undefined,
+      ...(this.endpoint
+        ? {
+            endpoint: this.endpoint,
+            forcePathStyle: this.forcePathStyle
+          }
+        : {})
+    });
+  }
+
+  isConfigured(): boolean {
+    return Boolean(this.defaultBucket);
+  }
+
+  private resolveForcePathStyle(endpoint: string | undefined): boolean {
+    const configured = (process.env.S3_FORCE_PATH_STYLE ?? process.env.AWS_S3_FORCE_PATH_STYLE ?? '').trim();
+    if (configured) {
+      return configured.toLowerCase() === 'true';
+    }
+
+    if (!endpoint) {
+      return false;
+    }
+
+    try {
+      const url = new URL(endpoint);
+      const host = url.hostname.toLowerCase();
+      if (host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost')) {
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+
+    return false;
+  }
+
+  private shouldAutoCreateBuckets(): boolean {
+    const configured = (process.env.S3_AUTO_CREATE_BUCKETS ?? process.env.S3_AUTO_CREATE_BUCKET ?? '').trim();
+    if (configured) {
+      return configured.toLowerCase() === 'true';
+    }
+
+    if (process.env.NODE_ENV === 'production') {
+      return false;
+    }
+
+    if (!this.endpoint) {
+      return false;
+    }
+
+    try {
+      const url = new URL(this.endpoint);
+      const host = url.hostname.toLowerCase();
+      return host === 'localhost' || host === '127.0.0.1' || host.endsWith('.localhost');
+    } catch {
+      return false;
+    }
+  }
+
+  private async ensureBucketExists(bucket: string) {
+    if (!bucket) return;
+    if (this.ensuredBuckets.has(bucket)) return;
+    if (!this.shouldAutoCreateBuckets()) return;
+
+    try {
+      await this.client.send(new HeadBucketCommand({ Bucket: bucket }));
+      this.ensuredBuckets.add(bucket);
+      return;
+    } catch {
+      // continue to attempt create
+    }
+
+    try {
+      await this.client.send(new CreateBucketCommand({ Bucket: bucket }));
+    } catch {
+      // ignore (bucket may already exist, or permissions may block)
+    }
+
+    this.ensuredBuckets.add(bucket);
+  }
+
   async uploadObject(key: string, body: Buffer | string | Readable, contentType: string) {
     const bucket = this.resolveBucket({ key });
+    await this.ensureBucketExists(bucket);
 
     const cmd = new PutObjectCommand({
       Bucket: bucket,
@@ -101,6 +196,7 @@ export class S3Service {
 
   async getObjectStream(key: string): Promise<Readable> {
     const bucket = this.resolveBucket({ key });
+    await this.ensureBucketExists(bucket);
     const cmd = new GetObjectCommand({
       Bucket: bucket,
       Key: key
@@ -128,6 +224,7 @@ export class S3Service {
 
   async getPresignedUrl(key: string, expiresInSeconds = 900): Promise<string> {
     const bucket = this.resolveBucket({ key });
+    await this.ensureBucketExists(bucket);
     const cmd = new GetObjectCommand({
       Bucket: bucket,
       Key: key
@@ -141,6 +238,7 @@ export class S3Service {
     expiresInSeconds?: number;
   }): Promise<string> {
     const bucket = this.resolveBucket({ key: params.key });
+    await this.ensureBucketExists(bucket);
     const cmd = new PutObjectCommand({
       Bucket: bucket,
       Key: params.key,
@@ -151,6 +249,10 @@ export class S3Service {
 
   buildPublicUrl(key: string): string {
     const bucket = this.resolveBucket({ key });
+    if (!this.publicBaseForBucket(bucket) && this.endpoint) {
+      const endpoint = this.endpoint.replace(/\/+$/, '');
+      return `${endpoint}/${bucket}/${key.replace(/^\/+/, '')}`;
+    }
     const base =
       this.publicBaseForBucket(bucket) || `https://${bucket}.s3.${this.region}.amazonaws.com`;
     return `${base.replace(/\/+$/, '')}/${key.replace(/^\/+/, '')}`;
@@ -158,6 +260,7 @@ export class S3Service {
 
   async searchKeys(params: { prefix?: string; contains: string[]; maxKeys?: number }): Promise<string[]> {
     const bucket = this.resolveBucket({ prefix: params.prefix });
+    await this.ensureBucketExists(bucket);
 
     const prefix = params.prefix;
     const contains = params.contains.map((value) => value.toLowerCase()).filter(Boolean);
@@ -197,9 +300,20 @@ export class S3Service {
   private resolveBucket(input: { key?: string; prefix?: string }): string {
     const target = input.key ?? input.prefix ?? '';
     const isPropertyMedia = target.startsWith('property-images/');
+    const isExternalData =
+      target.startsWith('raw/') ||
+      target.startsWith('normalized/') ||
+      target.startsWith('manifests/') ||
+      target.startsWith('public-records/') ||
+      target.startsWith('batchdata/') ||
+      target.startsWith('mls-raw/');
 
     if (isPropertyMedia && this.mediaBucket) {
       return this.mediaBucket;
+    }
+
+    if (isExternalData && this.dataBucket) {
+      return this.dataBucket;
     }
 
     if (!isPropertyMedia && this.docsBucket) {
@@ -216,7 +330,9 @@ export class S3Service {
       return this.defaultBucket;
     }
 
-    throw new Error('AWS_S3_BUCKET is not configured');
+    throw new ServiceUnavailableException(
+      'Object storage is not configured. Set AWS_S3_BUCKET (and for local MinIO: S3_ENDPOINT, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).'
+    );
   }
 
   private publicBaseForBucket(bucket: string): string | undefined {

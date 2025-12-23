@@ -40,11 +40,11 @@ export const PlaybooksList: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Playbooks</h1>
-          <p className="text-sm text-muted-foreground">Automate broker workflows with triggers and actions.</p>
+          <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Playbooks</h1>
+          <p className="text-sm text-slate-600">Automate broker workflows with triggers and actions.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setAiOpen(true)}>

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { FileText, MessageCircle } from 'lucide-react'
@@ -6,10 +6,10 @@ import { FileText, MessageCircle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ChatWindow } from '@/components/chat/ChatWindow'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient } from '@/lib/api/client'
 import { fetchOrgForms, type OrgForm } from '@/lib/api/forms'
+import { emitAskHatchOpen } from '@/lib/ask-hatch/events'
 
 const DEFAULT_ORG_ID = import.meta.env.VITE_ORG_ID ?? 'org-hatch'
 
@@ -41,8 +41,6 @@ function humanJurisdiction(key: JurisdictionKey) {
 export default function FormsLibrary() {
   const { activeOrgId } = useAuth()
   const orgId = activeOrgId ?? DEFAULT_ORG_ID
-  const [chatOpen, setChatOpen] = useState(false)
-  const [initialPrompt, setInitialPrompt] = useState<string | undefined>(undefined)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['forms-library', orgId],
@@ -94,23 +92,22 @@ export default function FormsLibrary() {
   }
 
   const handleAskHatch = (form: OrgForm) => {
-    const jurisdictionLabel = humanJurisdiction(normalizeJurisdiction(form.jurisdiction))
-    setInitialPrompt(
-      `Explain the purpose of the form "${form.title}" and how it's used in a ${jurisdictionLabel} transaction.`
-    )
-    setChatOpen(true)
+    emitAskHatchOpen({
+      title: `Form · ${form.title}`,
+      contextType: 'GENERAL'
+    })
   }
 
   if (!orgId) {
-    return <div className="p-6 text-sm text-muted-foreground">Select an organization to view forms.</div>
+    return <div className="text-sm text-muted-foreground">Select an organization to view forms.</div>
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-col gap-2">
         <div>
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Resources</p>
-          <h1 className="text-2xl font-semibold text-gray-900">Forms Library</h1>
+          <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Forms Library</h1>
         </div>
         <p className="text-sm text-muted-foreground max-w-3xl">
           Browse the ingested Florida, NABOR, and Fannie Mae forms. Open a form to preview/download,
@@ -204,7 +201,6 @@ export default function FormsLibrary() {
           </Card>
         ))}
 
-      <ChatWindow open={chatOpen} onClose={() => setChatOpen(false)} initialPrompt={initialPrompt} />
     </div>
   )
 }

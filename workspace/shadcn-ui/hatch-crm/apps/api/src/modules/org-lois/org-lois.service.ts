@@ -50,12 +50,32 @@ export class OrgLoisService {
   }
 
   private normalizeStatus(status: string) {
-    const normalized = status.toUpperCase();
-    const allowed = Object.values(OfferIntentStatus) as string[];
-    if (!allowed.includes(normalized)) {
-      throw new ForbiddenException('Invalid offer intent status');
+    const normalized = status.toUpperCase().trim();
+    const allowed: OfferIntentStatus[] = [
+      OfferIntentStatus.DRAFT,
+      OfferIntentStatus.SENT,
+      OfferIntentStatus.RECEIVED,
+      OfferIntentStatus.COUNTERED,
+      OfferIntentStatus.ACCEPTED,
+      OfferIntentStatus.REJECTED
+    ];
+
+    if (allowed.includes(normalized as OfferIntentStatus)) {
+      return normalized as OfferIntentStatus;
     }
-    return normalized as OfferIntentStatus;
+
+    // Backward compatibility: map legacy statuses into the new lifecycle.
+    switch (normalized) {
+      case OfferIntentStatus.SUBMITTED:
+        return OfferIntentStatus.SENT;
+      case OfferIntentStatus.UNDER_REVIEW:
+        return OfferIntentStatus.RECEIVED;
+      case OfferIntentStatus.DECLINED:
+      case OfferIntentStatus.WITHDRAWN:
+        return OfferIntentStatus.REJECTED;
+      default:
+        throw new ForbiddenException('Invalid offer intent status');
+    }
   }
 
   private async ensureLeadForOfferIntent(orgId: string, listingId: string, consumerId: string | null) {
@@ -121,10 +141,13 @@ export class OrgLoisService {
         listingId: dto.listingId,
         consumerId: consumerId ?? undefined,
         leadId: leadId ?? undefined,
-        status: OfferIntentStatus.SUBMITTED,
+        status: OfferIntentStatus.RECEIVED,
+        buyerName: dto.buyerName ?? undefined,
+        sellerName: dto.sellerName ?? undefined,
         offeredPrice: dto.offeredPrice ?? undefined,
         financingType: dto.financingType ?? undefined,
         closingTimeline: dto.closingTimeline ?? undefined,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
         contingencies: dto.contingencies ?? undefined,
         comments: dto.comments ?? undefined,
         conversationId: conversationId ?? undefined
@@ -154,6 +177,45 @@ export class OrgLoisService {
         offerIntentId: offerIntent.id
       });
     }
+
+    return offerIntent;
+  }
+
+  async createOfferIntentInternal(orgId: string, userId: string, dto: CreateOfferIntentDto) {
+    const role = await this.assertUserInOrg(userId, orgId);
+    if (!role || (role !== UserRole.BROKER && role !== UserRole.AGENT && role !== UserRole.TEAM_LEAD)) {
+      throw new ForbiddenException('Broker or agent access required');
+    }
+
+    await this.assertListing(orgId, dto.listingId);
+    const normalizedStatus = dto.status ? this.normalizeStatus(dto.status) : OfferIntentStatus.DRAFT;
+
+    const offerIntent = await this.prisma.offerIntent.create({
+      data: {
+        organizationId: orgId,
+        listingId: dto.listingId,
+        status: normalizedStatus,
+        buyerName: dto.buyerName ?? undefined,
+        sellerName: dto.sellerName ?? undefined,
+        offeredPrice: dto.offeredPrice ?? undefined,
+        financingType: dto.financingType ?? undefined,
+        closingTimeline: dto.closingTimeline ?? undefined,
+        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+        contingencies: dto.contingencies ?? undefined,
+        comments: dto.comments ?? undefined
+      }
+    });
+
+    await this.orgEvents.logOrgEvent({
+      organizationId: orgId,
+      actorId: userId,
+      type: OrgEventType.ORG_OFFER_INTENT_CREATED,
+      payload: {
+        offerIntentId: offerIntent.id,
+        listingId: offerIntent.listingId,
+        status: offerIntent.status
+      }
+    });
 
     return offerIntent;
   }

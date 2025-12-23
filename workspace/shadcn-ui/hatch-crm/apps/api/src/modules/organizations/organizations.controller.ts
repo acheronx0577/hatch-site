@@ -80,6 +80,50 @@ export class OrganizationsController {
     }));
   }
 
+  @Post(':orgId/invites/:inviteId/resend')
+  @UseGuards(JwtAuthGuard, RolesGuard('broker'))
+  async resendInvite(
+    @Param('orgId') orgId: string,
+    @Param('inviteId') inviteId: string,
+    @Req() req: AuthedRequest
+  ) {
+    const userId = req.user?.userId;
+    if (!userId) throw new Error('Missing user context');
+    const { invite, signupUrl } = await this.orgs.resendAgentInvite(orgId, userId, inviteId);
+    return {
+      id: invite.id,
+      email: invite.email,
+      status: invite.status,
+      organizationId: invite.organizationId,
+      invitedByUserId: invite.invitedByUserId,
+      expiresAt: invite.expiresAt,
+      createdAt: invite.createdAt,
+      signupUrl,
+      token: invite.token
+    };
+  }
+
+  @Post(':orgId/invites/:inviteId/revoke')
+  @UseGuards(JwtAuthGuard, RolesGuard('broker'))
+  async revokeInvite(
+    @Param('orgId') orgId: string,
+    @Param('inviteId') inviteId: string,
+    @Req() req: AuthedRequest
+  ) {
+    const userId = req.user?.userId;
+    if (!userId) throw new Error('Missing user context');
+    const invite = await this.orgs.revokeAgentInvite(orgId, userId, inviteId);
+    return {
+      id: invite.id,
+      email: invite.email,
+      status: invite.status,
+      organizationId: invite.organizationId,
+      invitedByUserId: invite.invitedByUserId,
+      expiresAt: invite.expiresAt,
+      createdAt: invite.createdAt
+    };
+  }
+
   @Get(':orgId/agent-portal-config')
   @UseGuards(JwtAuthGuard, RolesGuard('broker', 'agent', 'team_lead'))
   async getAgentPortalConfig(@Param('orgId') orgId: string, @Req() req: AuthedRequest) {

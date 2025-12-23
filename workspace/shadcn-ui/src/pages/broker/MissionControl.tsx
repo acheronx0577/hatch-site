@@ -8,11 +8,11 @@ export default function MissionControlPage() {
   const orgId = activeOrgId ?? fallbackOrgId
 
   if (!orgId) {
-    return <div className="p-8 text-sm text-gray-600">Select an organization to load Mission Control.</div>
+    return <div className="text-sm text-gray-600">Select an organization to load Mission Control.</div>
   }
 
   return (
-    <div className="flex h-full flex-col gap-6 p-8">
+    <div className="flex h-full flex-col gap-6">
       <MissionControlView orgId={orgId} />
     </div>
   )

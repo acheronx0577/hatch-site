@@ -2,7 +2,7 @@ import { IntersectionType } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 
-import { LeadScoreTier } from '@hatch/db';
+import { LeadScoreTier, LeadType } from '@hatch/db';
 
 import {
   CursorPaginationQueryDto,
@@ -46,4 +46,8 @@ export class ListLeadsQueryDto extends LeadsQueryBaseDto {
   @IsOptional()
   @IsString()
   pipelineId?: string;
+
+  @IsOptional()
+  @IsEnum(LeadType)
+  leadType?: LeadType;
 }

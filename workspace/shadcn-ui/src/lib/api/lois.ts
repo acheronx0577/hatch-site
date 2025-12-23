@@ -1,22 +1,31 @@
 import { apiFetch } from './hatch';
 import { ApiError } from './errors';
 
+export type OfferIntentStatus = 'DRAFT' | 'SENT' | 'RECEIVED' | 'COUNTERED' | 'ACCEPTED' | 'REJECTED';
+
 export interface OfferIntentPayload {
   listingId: string;
+  status?: OfferIntentStatus;
+  buyerName?: string;
+  sellerName?: string;
   offeredPrice?: number;
   financingType?: string;
   closingTimeline?: string;
+  expiresAt?: string;
   contingencies?: string;
   comments?: string;
 }
 
 export interface OfferIntentRecord {
   id: string;
-  status: string;
+  status: OfferIntentStatus | string;
   listingId: string;
+  buyerName?: string | null;
+  sellerName?: string | null;
   offeredPrice?: number | null;
   financingType?: string | null;
   closingTimeline?: string | null;
+  expiresAt?: string | null;
   contingencies?: string | null;
   comments?: string | null;
   createdAt: string;

@@ -2,11 +2,13 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Card } from '@/components/ui/card';
 import { fetchLeads, LeadRecord, updateLeadStatus } from '@/lib/api/leads';
 import { fetchMissionControlAgents } from '@/lib/api/mission-control';
+import type { MissionControlOverview as MissionControlOverviewData } from '@/lib/api/mission-control';
 
 const statusOptions = [
   'NEW',
@@ -22,11 +24,27 @@ interface DashboardLeadsViewProps {
   orgId: string;
 }
 
+const leadsQueryKey = (orgId: string) => ['leads', orgId];
+const missionControlOverviewKey = (orgId: string) => ['mission-control', 'overview', orgId];
+const missionControlAgentsKey = (orgId: string) => ['mission-control', 'agents', orgId];
+
+const leadStatusToStatKey: Partial<Record<string, keyof MissionControlOverviewData['leadStats']>> = {
+  NEW: 'newLeads',
+  CONTACTED: 'contactedLeads',
+  QUALIFIED: 'qualifiedLeads',
+  UNQUALIFIED: 'unqualifiedLeads',
+  APPOINTMENT_SET: 'appointmentsSet'
+};
+
 export function DashboardLeadsView({ orgId }: DashboardLeadsViewProps) {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const focusAgentProfileId = searchParams?.get('agentProfileId') ?? null;
+  const statusFilter = (searchParams?.get('status') ?? '').trim().toUpperCase() || null;
+
   const { data: leads, isLoading } = useQuery({
-    queryKey: ['leads', orgId],
-    queryFn: () => fetchLeads(orgId)
+    queryKey: [...leadsQueryKey(orgId), statusFilter],
+    queryFn: () => fetchLeads(orgId, statusFilter ?? undefined)
   });
   const { data: agents } = useQuery({
     queryKey: ['mission-control', 'agents', orgId, 'lead-assignment'],
@@ -48,12 +66,76 @@ export function DashboardLeadsView({ orgId }: DashboardLeadsViewProps) {
         status: params.status ?? 'NEW',
         agentProfileId: params.agentProfileId
       }),
+    onMutate: async (params) => {
+      const nextStatus = params.status ?? 'NEW';
+
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: leadsQueryKey(orgId) }),
+        queryClient.cancelQueries({ queryKey: missionControlOverviewKey(orgId) }),
+        queryClient.cancelQueries({ queryKey: missionControlAgentsKey(orgId) })
+      ]);
+
+      const previousLeads = queryClient.getQueryData<LeadRecord[]>(leadsQueryKey(orgId));
+      const previousOverview = queryClient.getQueryData<MissionControlOverviewData>(missionControlOverviewKey(orgId));
+
+      const previousLead = previousLeads?.find((lead) => lead.id === params.leadId);
+      const previousStatus = previousLead?.status;
+
+      queryClient.setQueryData<LeadRecord[]>(leadsQueryKey(orgId), (current) => {
+        if (!current) return current;
+        return current.map((lead) =>
+          lead.id === params.leadId
+            ? {
+                ...lead,
+                status: nextStatus,
+                agentProfileId: params.agentProfileId ?? lead.agentProfileId
+              }
+            : lead
+        );
+      });
+
+      if (previousStatus && previousStatus !== nextStatus) {
+        queryClient.setQueryData<MissionControlOverviewData>(missionControlOverviewKey(orgId), (current) => {
+          if (!current) return current;
+          const fromKey = leadStatusToStatKey[previousStatus];
+          const toKey = leadStatusToStatKey[nextStatus];
+
+          if (!fromKey && !toKey) return current;
+
+          const nextLeadStats = { ...current.leadStats };
+          if (fromKey) {
+            nextLeadStats[fromKey] = Math.max(0, (nextLeadStats[fromKey] ?? 0) - 1);
+          }
+          if (toKey) {
+            nextLeadStats[toKey] = (nextLeadStats[toKey] ?? 0) + 1;
+          }
+
+          return { ...current, leadStats: nextLeadStats };
+        });
+      }
+
+      return { previousLeads, previousOverview };
+    },
+    onError: (_error, _params, context) => {
+      if (context?.previousLeads) {
+        queryClient.setQueryData(leadsQueryKey(orgId), context.previousLeads);
+      }
+      if (context?.previousOverview) {
+        queryClient.setQueryData(missionControlOverviewKey(orgId), context.previousOverview);
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leads', orgId] });
+      queryClient.invalidateQueries({ queryKey: leadsQueryKey(orgId) });
+      queryClient.invalidateQueries({ queryKey: missionControlOverviewKey(orgId) });
+      queryClient.invalidateQueries({ queryKey: missionControlAgentsKey(orgId) });
     }
   });
 
-  const leadsToRender = leads ?? [];
+  const leadsToRender = useMemo(() => {
+    const list = leads ?? [];
+    if (!focusAgentProfileId) return list;
+    return list.filter((lead) => lead.agentProfileId === focusAgentProfileId);
+  }, [focusAgentProfileId, leads]);
 
   return (
     <section className="space-y-4">
@@ -61,6 +143,21 @@ export function DashboardLeadsView({ orgId }: DashboardLeadsViewProps) {
         <p className="text-sm uppercase tracking-wide text-slate-500">Leads</p>
         <h1 className="text-2xl font-semibold text-slate-900">Consumer inquiries</h1>
         <p className="text-sm text-slate-500">Assign leads and keep statuses in sync with the portal.</p>
+        {focusAgentProfileId || statusFilter ? (
+          <p className="mt-1 text-xs text-slate-500">
+            Filtered to{' '}
+            {focusAgentProfileId ? (
+              <>
+                agent <span className="font-mono">{focusAgentProfileId}</span>
+              </>
+            ) : null}
+            {focusAgentProfileId && statusFilter ? ' · ' : null}
+            {statusFilter ? <>status <span className="font-mono">{statusFilter}</span></> : null}.{' '}
+            <Link href="/dashboard/leads" className="font-semibold text-brand-700 hover:underline">
+              Clear filter
+            </Link>
+          </p>
+        ) : null}
       </div>
       <Card className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
         <table className="min-w-full divide-y divide-slate-100 text-sm">

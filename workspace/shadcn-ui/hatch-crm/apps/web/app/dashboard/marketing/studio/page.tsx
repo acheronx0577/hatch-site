@@ -21,8 +21,7 @@ import {
   presignMarketingStudioTemplateUpload,
   seedMarketingStudioTemplates,
   type MarketingStudioAsset,
-  type MarketingStudioTemplate,
-  type MarketingStudioTemplateVariant
+  type MarketingStudioTemplate
 } from '@/lib/api/marketing-studio';
 import { useOrgId } from '@/lib/hooks/useOrgId';
 
@@ -66,7 +65,6 @@ export default function MarketingStudioPage() {
 
   const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateDescription, setNewTemplateDescription] = useState('');
-  const [newTemplateVariant, setNewTemplateVariant] = useState<MarketingStudioTemplateVariant>('HATCH_BRANDED');
   const [newTemplateOverlayFile, setNewTemplateOverlayFile] = useState<File | null>(null);
   const [newTemplateOverlayPageIndex, setNewTemplateOverlayPageIndex] = useState('0');
   const [newTemplateSchema, setNewTemplateSchema] = useState<unknown>(BASE_FLYER_SCHEMA);
@@ -107,6 +105,14 @@ export default function MarketingStudioPage() {
 
   const selectedTemplate: MarketingStudioTemplate | null = useMemo(() => {
     return templates.find((tpl) => tpl.id === templateId) ?? null;
+  }, [templateId, templates]);
+
+  useEffect(() => {
+    if (templateId) return;
+    if (templates.length === 0) return;
+    const preferred = templates.find((tpl) => tpl.isSystem) ?? templates[0] ?? null;
+    if (!preferred) return;
+    setTemplateId(preferred.id);
   }, [templateId, templates]);
 
   const selectedListing = useMemo(() => {
@@ -179,7 +185,8 @@ export default function MarketingStudioPage() {
       return next;
     });
 
-    const firstSlotId = templateLayout?.imageSlots?.[0]?.id ?? '';
+    const heroSlotId = templateLayout?.imageSlots?.find((slot) => slot.id === 'hero')?.id ?? '';
+    const firstSlotId = heroSlotId || (templateLayout?.imageSlots?.[0]?.id ?? '');
     setImageSlotToAssign((current) => {
       if (!current) return firstSlotId;
       return allowedImages.has(current) ? current : firstSlotId;
@@ -209,17 +216,16 @@ export default function MarketingStudioPage() {
     setGenerating(true);
 
     try {
-      const images = Object.fromEntries(
-        Object.entries(imageOverrides)
-          .map(([slotId, override]) => {
-            const s3Key = override.s3Key?.trim();
-            const url = override.url?.trim();
-            if (s3Key) return [slotId, { s3Key }] as const;
-            if (url) return [slotId, { url }] as const;
-            return null;
-          })
-          .filter((entry): entry is readonly [string, { url?: string; s3Key?: string }] => Boolean(entry))
-      );
+      const images: Record<string, { url?: string; s3Key?: string }> = {};
+      for (const [slotId, override] of Object.entries(imageOverrides)) {
+        const s3Key = override.s3Key?.trim();
+        const url = override.url?.trim();
+        if (s3Key) {
+          images[slotId] = { s3Key };
+        } else if (url) {
+          images[slotId] = { url };
+        }
+      }
 
       const result = await generateMarketingStudioAsset(orgId, listingId, {
         templateId,
@@ -265,8 +271,10 @@ export default function MarketingStudioPage() {
         `[Download flyer](${assetUrl})`,
         '',
         'Best,',
-        'Hatch'
-      ].join('\n');
+        defaultText.agentName || undefined
+      ]
+        .filter((line): line is string => line !== undefined)
+        .join('\n');
 
       const campaign = await createMarketingCampaign({
         personaId: 'listing_concierge',
@@ -288,6 +296,28 @@ export default function MarketingStudioPage() {
   const handleAssignListingImage = (s3Key: string) => {
     if (!imageSlotToAssign) return;
     setImageOverrides((prev) => ({ ...prev, [imageSlotToAssign]: { s3Key } }));
+
+    const slotIds = imageSlots.map((slot) => slot.id);
+    if (slotIds.length <= 1) return;
+    const currentIndex = slotIds.indexOf(imageSlotToAssign);
+    if (currentIndex === -1) return;
+
+    const isAssigned = (slotId: string) => {
+      if (slotId === imageSlotToAssign) return true;
+      const override = imageOverrides[slotId];
+      return Boolean(override?.s3Key?.trim() || override?.url?.trim());
+    };
+
+    for (let offset = 1; offset <= slotIds.length; offset += 1) {
+      const nextSlotId = slotIds[(currentIndex + offset) % slotIds.length];
+      if (!nextSlotId) continue;
+      if (!isAssigned(nextSlotId)) {
+        setImageSlotToAssign(nextSlotId);
+        return;
+      }
+    }
+
+    setImageSlotToAssign(slotIds[(currentIndex + 1) % slotIds.length] ?? imageSlotToAssign);
   };
 
   const handleCreateTemplate = async () => {
@@ -323,7 +353,6 @@ export default function MarketingStudioPage() {
       const created = await createMarketingStudioTemplate(orgId, {
         name: newTemplateName.trim(),
         description: newTemplateDescription.trim() ? newTemplateDescription.trim() : null,
-        variant: newTemplateVariant,
         overlayS3Key: overlayS3Key ?? null,
         overlayPageIndex: Number.isFinite(overlayPageIndex) ? overlayPageIndex : 0,
         schema: newTemplateSchema
@@ -367,9 +396,7 @@ export default function MarketingStudioPage() {
         <Badge variant="secondary">
           Marketing Studio: {entitlements.marketingStudio ? 'Enabled' : 'Disabled'}
         </Badge>
-        <Badge variant="outline">
-          White label: {entitlements.whiteLabelMarketing ? 'Enabled' : 'Disabled'}
-        </Badge>
+        <Badge variant="outline">White-label only</Badge>
       </div>
 
       {!entitlements.marketingStudio ? (
@@ -422,7 +449,7 @@ export default function MarketingStudioPage() {
                     <SelectContent>
                       {templates.map((template) => (
                         <SelectItem key={template.id} value={template.id}>
-                          {template.name} {template.variant === 'WHITE_LABEL' ? '(White label)' : '(Hatch)'}
+                          {template.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -574,28 +601,10 @@ export default function MarketingStudioPage() {
               <CardTitle className="text-sm font-semibold">Create template</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">Name</p>
-                  <Input value={newTemplateName} onChange={(event) => setNewTemplateName(event.target.value)} placeholder="Flyer (My brand)" />
-                </div>
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase text-muted-foreground">Variant</p>
-                  <Select value={newTemplateVariant} onValueChange={(value) => setNewTemplateVariant(value as MarketingStudioTemplateVariant)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a variant" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="HATCH_BRANDED">Hatch branded</SelectItem>
-                      <SelectItem value="WHITE_LABEL" disabled={!entitlements.whiteLabelMarketing}>
-                        White label
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {!entitlements.whiteLabelMarketing ? (
-                    <p className="text-xs text-muted-foreground">White label templates require the add-on.</p>
-                  ) : null}
-                </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">Name</p>
+                <Input value={newTemplateName} onChange={(event) => setNewTemplateName(event.target.value)} placeholder="Flyer (My brand)" />
+                <p className="text-xs text-muted-foreground">Templates are always generated as white-label.</p>
               </div>
 
               <div className="space-y-2">

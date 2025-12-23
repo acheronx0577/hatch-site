@@ -1,7 +1,9 @@
-import { Body, Controller, Post, Req } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Post, Req, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { OrgMembershipGuard } from '@/platform/security/org-membership.guard';
 import { resolveRequestContext } from '../common/request-context';
 import { S3Service } from '../storage/s3.service';
 
@@ -13,6 +15,7 @@ interface PresignRequestBody {
 
 @ApiTags('property-media')
 @Controller('property-media')
+@UseGuards(JwtAuthGuard, OrgMembershipGuard)
 export class PropertyMediaController {
   constructor(private readonly s3: S3Service) {}
 
@@ -40,7 +43,7 @@ export class PropertyMediaController {
   })
   async presign(@Req() req: FastifyRequest, @Body() body: PresignRequestBody) {
     if (!body?.fileName) {
-      throw new Error('fileName is required');
+      throw new BadRequestException('fileName is required');
     }
 
     const ctx = resolveRequestContext(req);

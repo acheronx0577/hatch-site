@@ -8,7 +8,7 @@ import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
-const Select = SelectPrimitive.Root as typeof SelectPrimitive.Root;
+const Select = SelectPrimitive.Root as unknown as (props: SelectPrimitive.SelectProps) => React.ReactElement | null;
 
 const SelectGroup: typeof SelectPrimitive.Group = SelectPrimitive.Group;
 

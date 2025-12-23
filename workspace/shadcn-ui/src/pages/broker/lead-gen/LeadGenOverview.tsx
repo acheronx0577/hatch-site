@@ -1,15 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format, formatDistanceToNow } from 'date-fns';
-import { BarChart3, Copy, ExternalLink, Plus, Sparkles } from 'lucide-react';
+import { BarChart3, Info, Plus, Sparkles } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import {
@@ -17,7 +15,6 @@ import {
   listLeadGenCampaigns,
   listLeadGenConversions,
   listLeadGenLandingPages,
-  type LeadGenCampaign,
   type LeadGenCampaignMetrics,
   type LeadGenConversionEvent,
   type LeadGenLandingPage
@@ -47,26 +44,6 @@ function toDayKey(date: Date) {
   return format(date, 'yyyy-MM-dd');
 }
 
-function buildShareUrl(params: {
-  orgId: string;
-  landingPageSlug: string;
-  campaign?: LeadGenCampaign | null;
-}) {
-  const base =
-    typeof window !== 'undefined'
-      ? `${window.location.origin}/lp/${encodeURIComponent(params.orgId)}/${encodeURIComponent(params.landingPageSlug)}`
-      : `/lp/${encodeURIComponent(params.orgId)}/${encodeURIComponent(params.landingPageSlug)}`;
-
-  const qs = new URLSearchParams();
-  const campaign = params.campaign ?? null;
-  if (campaign?.utmSource) qs.set('utm_source', campaign.utmSource);
-  if (campaign?.utmMedium) qs.set('utm_medium', campaign.utmMedium);
-  if (campaign?.utmCampaign) qs.set('utm_campaign', campaign.utmCampaign);
-
-  const query = qs.toString();
-  return query ? `${base}?${query}` : base;
-}
-
 function groupLeadCreatedByDay(events: LeadGenConversionEvent[], days: number) {
   const buckets = new Map<string, number>();
   for (const e of events) {
@@ -88,7 +65,6 @@ function groupLeadCreatedByDay(events: LeadGenConversionEvent[], days: number) {
 }
 
 export default function LeadGenOverviewPage() {
-  const { toast } = useToast();
   const { activeOrgId, userId } = useAuth();
   const orgId = activeOrgId ?? DEFAULT_ORG_ID;
 
@@ -96,9 +72,6 @@ export default function LeadGenOverviewPage() {
     () => ({ orgId, userId, tenantId: DEFAULT_TENANT_ID, role: 'BROKER' }),
     [orgId, userId]
   );
-
-  const [selectedLandingPageId, setSelectedLandingPageId] = useState<string>('');
-  const [selectedCampaignId, setSelectedCampaignId] = useState<string>('none');
 
   const overviewQuery = useQuery({
     queryKey: ['lead-gen', 'overview', orgId, userId],
@@ -138,20 +111,6 @@ export default function LeadGenOverviewPage() {
   const conversions = overviewQuery.data?.conversions ?? [];
   const metricsByCampaignId = overviewQuery.data?.metricsByCampaignId ?? {};
 
-  const publishedPages = useMemo(() => landingPages.filter((p) => p.status === 'PUBLISHED'), [landingPages]);
-
-  const selectedLandingPage = useMemo(() => {
-    if (!publishedPages.length) return null;
-    const match = publishedPages.find((p) => p.id === selectedLandingPageId);
-    return match ?? publishedPages[0] ?? null;
-  }, [publishedPages, selectedLandingPageId]);
-
-  const selectedCampaign = useMemo(() => {
-    if (!campaigns.length) return null;
-    if (!selectedCampaignId || selectedCampaignId === 'none') return null;
-    return campaigns.find((c) => c.id === selectedCampaignId) ?? null;
-  }, [campaigns, selectedCampaignId]);
-
   const leadCreatedEvents = useMemo(
     () => conversions.filter((e) => e.eventType === 'LEAD_CREATED').sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)),
     [conversions]
@@ -188,28 +147,13 @@ export default function LeadGenOverviewPage() {
   const series = useMemo(() => groupLeadCreatedByDay(conversions, 7), [conversions]);
   const maxSeries = Math.max(1, ...series.map((d) => d.count));
 
-  const shareUrl = useMemo(() => {
-    if (!selectedLandingPage) return null;
-    return buildShareUrl({ orgId, landingPageSlug: selectedLandingPage.slug, campaign: selectedCampaign });
-  }, [orgId, selectedCampaign, selectedLandingPage]);
-
-  const handleCopy = async () => {
-    if (!shareUrl) return;
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      toast({ title: 'Link copied', description: 'Paste it into ads, email, or socials.' });
-    } catch {
-      window.prompt('Copy this link:', shareUrl);
-    }
-  };
-
   const isEmpty = !overviewQuery.isLoading && !overviewQuery.error && campaigns.length === 0 && landingPages.length === 0;
 
   return (
     <div className="space-y-6">
       <section
         className={cn(
-          'relative overflow-hidden rounded-[32px] border border-slate-200/70',
+          'hatch-hero relative overflow-hidden rounded-[32px] border border-white/20',
           'bg-gradient-to-r from-[#1F5FFF] via-[#3D86FF] to-[#00C6A2]',
           'px-6 py-6 md:px-8 md:py-7 text-white shadow-[0_18px_48px_rgba(15,23,42,0.28)]'
         )}
@@ -217,7 +161,7 @@ export default function LeadGenOverviewPage() {
         <div className="pointer-events-none absolute -left-10 -top-10 h-44 w-44 rounded-full bg-white/15 blur-3xl" />
         <div className="pointer-events-none absolute -right-10 bottom-0 h-44 w-44 rounded-full bg-cyan-300/40 blur-3xl" />
 
-        <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-100/80">
@@ -351,21 +295,35 @@ export default function LeadGenOverviewPage() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200/60 bg-white/30 p-4 backdrop-blur">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Step 1</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">Create a campaign</div>
-                <div className="mt-1 text-xs text-slate-600">Sets your UTMs + budget tracking.</div>
+            <CardContent className="relative grid gap-3 md:grid-cols-2 md:before:absolute md:before:left-1/2 md:before:top-1/2 md:before:h-px md:before:w-12 md:before:-translate-x-1/2 md:before:-translate-y-1/2 md:before:bg-white/30 md:before:content-['']">
+              <div className="rounded-[var(--radius-lg)] border border-white/20 bg-card/[var(--hatch-glass-alpha-recessed)] p-4 backdrop-blur-md">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/35 text-sm font-semibold text-slate-900 shadow-brand backdrop-blur-md">
+                    1
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Step 1</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">Create a campaign</div>
+                    <div className="mt-1 text-xs text-slate-600">Sets your UTMs + budget tracking.</div>
+                  </div>
+                </div>
                 <div className="mt-3">
                   <Button asChild size="sm">
                     <Link to="/broker/marketing/lead-gen/campaigns">Create campaign</Link>
                   </Button>
                 </div>
               </div>
-              <div className="rounded-2xl border border-slate-200/60 bg-white/30 p-4 backdrop-blur">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Step 2</div>
-                <div className="mt-1 text-sm font-semibold text-slate-900">Publish a landing page</div>
-                <div className="mt-1 text-xs text-slate-600">Instant attribution + consent capture.</div>
+              <div className="rounded-[var(--radius-lg)] border border-white/20 bg-card/[var(--hatch-glass-alpha-recessed)] p-4 backdrop-blur-md">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/35 text-sm font-semibold text-slate-900 shadow-brand backdrop-blur-md">
+                    2
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Step 2</div>
+                    <div className="mt-1 text-sm font-semibold text-slate-900">Publish a landing page</div>
+                    <div className="mt-1 text-xs text-slate-600">Instant attribution + consent capture.</div>
+                  </div>
+                </div>
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline">
                     <Link to="/broker/marketing/lead-gen/landing-pages">Create page</Link>
@@ -410,13 +368,13 @@ export default function LeadGenOverviewPage() {
                 <CardTitle className="text-base font-semibold">Start here</CardTitle>
                 <CardDescription className="text-xs">You’ll be live in a few minutes.</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="text-sm text-muted-foreground">
-                  Create a campaign, publish a landing page, and share the link. We’ll route leads into your CRM and log conversion events automatically.
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild size="sm">
-                    <Link to="/broker/marketing/lead-gen/campaigns">Create campaign</Link>
+	              <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+	                <div className="text-sm text-muted-foreground">
+	                  Create a campaign and publish a landing page. We’ll route leads into your CRM and log conversion events automatically.
+	                </div>
+	                <div className="flex flex-wrap gap-2">
+	                  <Button asChild size="sm">
+	                    <Link to="/broker/marketing/lead-gen/campaigns">Create campaign</Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link to="/broker/marketing/lead-gen/landing-pages">Create landing page</Link>
@@ -425,89 +383,13 @@ export default function LeadGenOverviewPage() {
               </CardContent>
             </Card>
           ) : null}
-        </div>
+	        </div>
 
-        <aside className="space-y-6 lg:sticky lg:top-24">
-          <Card className="rounded-[24px]">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold">Share a link</CardTitle>
-              <CardDescription className="text-xs">Pick a published page, optionally attach a campaign, then copy.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <div className="text-xs font-medium text-slate-700">Landing page</div>
-                <Select
-                  value={selectedLandingPage?.id ?? ''}
-                  onValueChange={(value) => setSelectedLandingPageId(value)}
-                  disabled={publishedPages.length === 0}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={publishedPages.length === 0 ? 'Publish a landing page first' : 'Select a page'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {publishedPages.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <div className="text-xs font-medium text-slate-700">Campaign (UTMs)</div>
-                <Select value={selectedCampaignId} onValueChange={setSelectedCampaignId} disabled={campaigns.length === 0}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={campaigns.length === 0 ? 'No campaigns yet' : 'None'} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {campaigns.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {shareUrl ? (
-                <div className="rounded-2xl border border-slate-200/70 bg-white/25 p-3 text-xs text-slate-700 backdrop-blur">
-                  <div className="font-medium text-slate-900">Link</div>
-                  <div className="mt-1 break-all text-slate-600">{shareUrl}</div>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-slate-200/70 bg-white/25 p-3 text-xs text-slate-600 backdrop-blur">
-                  Publish a landing page to get a link.
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button size="sm" className="flex-1" onClick={handleCopy} disabled={!shareUrl}>
-                  <Copy className="mr-2 h-4 w-4" />
-                  Copy
-                </Button>
-                {shareUrl ? (
-                  <Button asChild size="sm" variant="outline" className="flex-1">
-                    <a href={shareUrl} target="_blank" rel="noreferrer">
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      Open
-                    </a>
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="outline" className="flex-1" disabled>
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    Open
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-[24px]">
-            <CardHeader className="pb-4 flex flex-row items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-base font-semibold">Recent leads</CardTitle>
+	        <aside className="space-y-6 lg:sticky lg:top-24">
+	          <Card className="rounded-[24px]">
+	            <CardHeader className="pb-4 flex flex-row items-start justify-between gap-3">
+	              <div>
+	                <CardTitle className="text-base font-semibold">Recent leads</CardTitle>
                 <CardDescription className="text-xs">Newest submissions (last 7 days)</CardDescription>
               </div>
               <Button asChild size="sm" variant="outline">
@@ -525,10 +407,14 @@ export default function LeadGenOverviewPage() {
                   ))}
                 </div>
               ) : recentLeads.length === 0 ? (
-                <div className="rounded-2xl border border-slate-200/60 bg-white/20 p-3 text-sm text-muted-foreground backdrop-blur">
-                  No leads yet. Publish a page and share the link.
-                </div>
-              ) : (
+	                <div className="flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-white/20 p-3 text-sm text-muted-foreground backdrop-blur">
+	                  <Sparkles className="mt-0.5 h-4 w-4 text-brand-blue-600" />
+	                  <div>
+	                    <p className="font-medium text-slate-700">No leads yet.</p>
+	                    <p className="text-xs text-slate-600">Publish a landing page to start capturing submissions.</p>
+	                  </div>
+	                </div>
+	              ) : (
                 recentLeads.map((event) => {
                   const page = event.landingPageId ? landingPages.find((p) => p.id === event.landingPageId) : null;
                   const campaign = event.campaignId ? campaigns.find((c) => c.id === event.campaignId) : null;
@@ -568,10 +454,17 @@ export default function LeadGenOverviewPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-[24px]">
+          <Card className="rounded-[24px] hatch-glass--info">
             <CardHeader className="pb-4">
-              <CardTitle className="text-base font-semibold">Where do leads show up?</CardTitle>
-              <CardDescription className="text-xs">Hatch routes the lead into CRM when possible.</CardDescription>
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full border border-white/25 bg-white/20 text-brand-blue-700 backdrop-blur-md">
+                  <Info className="h-4 w-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">Where do leads show up?</CardTitle>
+                  <CardDescription className="text-xs">Hatch routes the lead into CRM when possible.</CardDescription>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <p>

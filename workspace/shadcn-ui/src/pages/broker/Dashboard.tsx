@@ -112,13 +112,12 @@ export default function BrokerDashboard() {
   }, [totalProperties, activeProperties, draftProperties, totalLeads, hotLeads, totalAgents, monthlyRevenue])
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600 mt-1">
+            <h1 className="text-[30px] font-semibold tracking-tight text-slate-900">Dashboard</h1>
+            <p className="mt-1 text-sm text-slate-600">
               Welcome back! Here's what's happening with your business today.
             </p>
           </div>
@@ -129,7 +128,7 @@ export default function BrokerDashboard() {
             </Button>
             <Dialog open={showBulkUpload} onOpenChange={setShowBulkUpload}>
               <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700">
+                <Button>
                   <Upload className="w-4 h-4 mr-2" />
                   Upload Listings
                 </Button>
@@ -222,7 +221,7 @@ export default function BrokerDashboard() {
                 className="h-20 flex flex-col items-center justify-center"
                 onClick={() => setShowBulkUpload(true)}
               >
-                <Upload className="w-6 h-6 mb-2 text-blue-600" />
+                <Upload className="w-6 h-6 mb-2 text-brand-blue-600" />
                 <span className="text-sm">Bulk Upload</span>
               </Button>
               <Button
@@ -263,14 +262,14 @@ export default function BrokerDashboard() {
                   const Icon = activity.icon
                   return (
                     <div key={activity.id} className="flex items-center space-x-4">
-                      <div className="bg-blue-100 p-2 rounded-full">
-                        <Icon className="w-4 h-4 text-blue-600" />
+                      <div className="bg-brand-blue-600/10 p-2 rounded-full">
+                        <Icon className="w-4 h-4 text-brand-blue-600" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className="text-sm font-medium text-slate-900">
                           {activity.message}
                         </p>
-                        <p className="text-sm text-gray-500">{activity.time}</p>
+                        <p className="text-sm text-slate-500">{activity.time}</p>
                       </div>
                     </div>
                   )
@@ -338,7 +337,10 @@ export default function BrokerDashboard() {
           <CardContent>
             <div className="space-y-4">
               {safeLeads.filter(lead => lead?.status === 'hot').slice(0, 3).map((lead) => (
-                <div key={lead.id} className="flex items-center justify-between p-4 border rounded-lg">
+                <div
+                  key={lead.id}
+                  className="flex items-center justify-between gap-4 rounded-xl border border-[var(--glass-border)] bg-white/20 p-4 backdrop-blur"
+                >
                   <div className="flex items-center space-x-4">
                     <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
                       <span className="text-white font-semibold text-sm">
@@ -347,8 +349,8 @@ export default function BrokerDashboard() {
                     </div>
                     <div>
                       <p className="font-medium">{lead.name || 'Unknown Lead'}</p>
-                      <p className="text-sm text-gray-600">{lead.email || 'No email'}</p>
-                      <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
+                      <p className="text-sm text-slate-600">{lead.email || 'No email'}</p>
+                      <div className="flex items-center space-x-4 text-xs text-slate-500 mt-1">
                         <span>Budget: ${lead.budget?.toLocaleString() || 'N/A'}</span>
                         <span>Score: {lead.score || 0}</span>
                       </div>
@@ -366,8 +368,8 @@ export default function BrokerDashboard() {
               
               {/* Empty state for hot leads */}
               {safeLeads.filter(lead => lead?.status === 'hot').length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <div className="text-center py-8 text-slate-500">
+                  <Users className="w-12 h-12 mx-auto mb-3 text-brand-blue-600/40" />
                   <p>No hot leads at the moment</p>
                   <p className="text-sm">New leads will appear here when they become hot prospects</p>
                 </div>
@@ -375,7 +377,6 @@ export default function BrokerDashboard() {
             </div>
           </CardContent>
         </Card>
-      </div>
     </div>
   )
 }

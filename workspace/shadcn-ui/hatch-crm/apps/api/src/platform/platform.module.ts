@@ -7,6 +7,7 @@ import { AuditInterceptor } from './audit/audit.interceptor';
 import { AuditService } from './audit/audit.service';
 import { CanService } from './security/can.service';
 import { FlsService } from './security/fls.service';
+import { OrgMembershipGuard } from './security/org-membership.guard';
 import { PermissionsGuard } from './security/permissions.guard';
 import { TenancyModule } from './tenancy/tenancy.module';
 
@@ -18,6 +19,7 @@ import { TenancyModule } from './tenancy/tenancy.module';
     FlsService,
     AuditService,
     AuditInterceptor,
+    OrgMembershipGuard,
     {
       provide: APP_GUARD,
       useClass: PermissionsGuard
@@ -27,6 +29,6 @@ import { TenancyModule } from './tenancy/tenancy.module';
       useExisting: AuditInterceptor
     }
   ],
-  exports: [CanService, FlsService, AuditService, AuditInterceptor, AuthModule, TenancyModule]
+  exports: [CanService, FlsService, AuditService, AuditInterceptor, AuthModule, TenancyModule, OrgMembershipGuard]
 })
 export class PlatformModule {}

@@ -1,6 +1,6 @@
 import { apiFetch } from '../api';
 
-export type ContractInstanceStatus = 'DRAFT' | 'SENT' | 'SIGNED' | 'VOIDED';
+export type ContractInstanceStatus = 'DRAFT' | 'OUT_FOR_SIGNATURE' | 'SIGNED' | 'VOIDED';
 
 export type ContractTemplateSummary = {
   id: string;
@@ -141,4 +141,3 @@ export async function updateContractInstance(
     body: JSON.stringify(payload)
   });
 }
-

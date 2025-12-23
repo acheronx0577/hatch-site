@@ -1,12 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, ForbiddenException, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { resolveRequestContext } from '../common/request-context';
 import { TeamService } from './team.service';
 import { CreateTeamMemberDto } from './dto/create-team-member.dto';
 import { UpdateTeamMemberDto } from './dto/update-team-member.dto';
 
 @Controller('team')
+@UseGuards(JwtAuthGuard)
 export class TeamController {
   constructor(private readonly team: TeamService) {}
 
@@ -19,15 +21,22 @@ export class TeamController {
   @Post()
   async create(@Body() dto: CreateTeamMemberDto, @Req() req: FastifyRequest) {
     const ctx = resolveRequestContext(req);
+    if (dto.tenantId && ctx.tenantId && dto.tenantId !== ctx.tenantId) {
+      throw new ForbiddenException('tenantId does not match authenticated tenant');
+    }
     return this.team.create({
       ...dto,
-      tenantId: dto.tenantId ?? ctx.tenantId
+      tenantId: ctx.tenantId ?? dto.tenantId
     });
   }
 
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() dto: UpdateTeamMemberDto) {
-    return this.team.update(id, dto);
+  async update(@Req() req: FastifyRequest, @Param('id') id: string, @Body() dto: UpdateTeamMemberDto) {
+    const ctx = resolveRequestContext(req);
+    if (dto.tenantId && ctx.tenantId && dto.tenantId !== ctx.tenantId) {
+      throw new ForbiddenException('tenantId does not match authenticated tenant');
+    }
+    return this.team.update(id, { ...dto, tenantId: ctx.tenantId ?? dto.tenantId });
   }
 
   @Delete(':id')

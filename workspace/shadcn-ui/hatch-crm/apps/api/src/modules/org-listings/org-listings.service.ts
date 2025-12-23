@@ -1,11 +1,13 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import { OrgListingContactType, OrgListingStatus, PlaybookTriggerType, UserRole } from '@hatch/db';
+import { OrgEventType, OrgListingContactType, OrgListingStatus, PlaybookTriggerType, UserRole } from '@hatch/db';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { OrgEventsService } from '../org-events/org-events.service';
 import { DocumentsAiService } from '@/modules/documents-ai/documents-ai.service';
 import { PlaybookRunnerService } from '../playbooks/playbook-runner.service';
 import { CreateListingDto } from './dto/create-listing.dto';
@@ -20,6 +22,7 @@ export class OrgListingsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly events: OrgEventsService,
     private readonly documentsAi: DocumentsAiService,
     private readonly playbooks: PlaybookRunnerService
   ) {}
@@ -86,6 +89,15 @@ export class OrgListingsService {
         createdByUserId: creatorUserId
       }
     });
+    try {
+      await this.events.logOrgEvent({
+        organizationId: orgId,
+        actorId: creatorUserId,
+        type: OrgEventType.ORG_LISTING_CREATED,
+        message: `Listing created: ${created.addressLine1}, ${created.city}`,
+        payload: { listingId: created.id, status: created.status }
+      });
+    } catch {}
     void this.playbooks
       .runTrigger(orgId, PlaybookTriggerType.LISTING_CREATED, { listingId: created.id })
       .catch(() => undefined);
@@ -123,7 +135,7 @@ export class OrgListingsService {
     const updated = await this.prisma.orgListing.update({
       where: { id: listingId },
       data: {
-        agentProfileId: nextAgentProfile ?? undefined,
+        agentProfileId: nextAgentProfile === null ? null : nextAgentProfile ?? undefined,
         listPrice: dto.listPrice === null ? null : dto.listPrice ?? undefined,
         propertyType: dto.propertyType === null ? null : dto.propertyType ?? undefined,
         bedrooms: dto.bedrooms === null ? null : dto.bedrooms ?? undefined,
@@ -133,6 +145,32 @@ export class OrgListingsService {
         status: dto.status ? (dto.status as OrgListingStatus) : undefined
       }
     });
+    const changedFields: string[] = [];
+    if (updated.agentProfileId !== listing.agentProfileId) changedFields.push('agentProfileId');
+    if (updated.listPrice !== listing.listPrice) changedFields.push('listPrice');
+    if (updated.propertyType !== listing.propertyType) changedFields.push('propertyType');
+    if (updated.bedrooms !== listing.bedrooms) changedFields.push('bedrooms');
+    if (updated.bathrooms !== listing.bathrooms) changedFields.push('bathrooms');
+    if (updated.squareFeet !== listing.squareFeet) changedFields.push('squareFeet');
+    if (updated.expiresAt?.getTime() !== listing.expiresAt?.getTime()) changedFields.push('expiresAt');
+
+    const statusChanged = updated.status !== listing.status;
+    try {
+      await this.events.logOrgEvent({
+        organizationId: orgId,
+        actorId: userId,
+        type: statusChanged ? OrgEventType.ORG_LISTING_STATUS_CHANGED : OrgEventType.ORG_LISTING_UPDATED,
+        message: statusChanged
+          ? `Listing status changed: ${listing.status} → ${updated.status}`
+          : `Listing updated (${changedFields.length ? changedFields.join(', ') : 'details'})`,
+        payload: {
+          listingId: updated.id,
+          statusFrom: listing.status,
+          statusTo: updated.status,
+          changedFields
+        }
+      });
+    } catch {}
     void this.playbooks
       .runTrigger(orgId, PlaybookTriggerType.LISTING_UPDATED, { listingId: updated.id, status: updated.status })
       .catch(() => undefined);
@@ -145,7 +183,7 @@ export class OrgListingsService {
     if (!listing || listing.organizationId !== orgId) {
       throw new NotFoundException('Listing not found');
     }
-    return this.prisma.orgListing.update({
+    const updated = await this.prisma.orgListing.update({
       where: { id: listingId },
       data: {
         status: OrgListingStatus.PENDING_BROKER_APPROVAL,
@@ -154,15 +192,25 @@ export class OrgListingsService {
         brokerApprovedByUserId: null
       }
     });
+    try {
+      await this.events.logOrgEvent({
+        organizationId: orgId,
+        actorId: userId,
+        type: OrgEventType.ORG_LISTING_APPROVAL_REQUESTED,
+        message: `Broker approval requested`,
+        payload: { listingId, statusFrom: listing.status, statusTo: updated.status }
+      });
+    } catch {}
+    return updated;
   }
 
-  async approveListing(orgId: string, brokerUserId: string, listingId: string) {
+  async approveListing(orgId: string, brokerUserId: string, listingId: string, note?: string) {
     await this.assertBroker(brokerUserId, orgId);
     const listing = await this.prisma.orgListing.findUnique({ where: { id: listingId } });
     if (!listing || listing.organizationId !== orgId) {
       throw new NotFoundException('Listing not found');
     }
-    return this.prisma.orgListing.update({
+    const updated = await this.prisma.orgListing.update({
       where: { id: listingId },
       data: {
         status: OrgListingStatus.ACTIVE,
@@ -172,6 +220,88 @@ export class OrgListingsService {
         listedAt: listing.listedAt ?? new Date()
       }
     });
+    try {
+      await this.events.logOrgEvent({
+        organizationId: orgId,
+        actorId: brokerUserId,
+        type: OrgEventType.ORG_LISTING_APPROVED,
+        message: note?.trim()
+          ? `Listing approved · ${note.trim()}`
+          : `Listing approved`,
+        payload: { listingId, statusFrom: listing.status, statusTo: updated.status, note: note?.trim() || null }
+      });
+    } catch {}
+    return updated;
+  }
+
+  async requestListingChanges(orgId: string, brokerUserId: string, listingId: string, note?: string) {
+    await this.assertBroker(brokerUserId, orgId);
+    const listing = await this.prisma.orgListing.findUnique({ where: { id: listingId } });
+    if (!listing || listing.organizationId !== orgId) {
+      throw new NotFoundException('Listing not found');
+    }
+    if (listing.status !== OrgListingStatus.PENDING_BROKER_APPROVAL) {
+      throw new BadRequestException('Listing is not pending broker approval');
+    }
+
+    const updated = await this.prisma.orgListing.update({
+      where: { id: listingId },
+      data: {
+        status: OrgListingStatus.DRAFT,
+        brokerApproved: false,
+        brokerApprovedAt: null,
+        brokerApprovedByUserId: null
+      }
+    });
+
+    try {
+      await this.events.logOrgEvent({
+        organizationId: orgId,
+        actorId: brokerUserId,
+        type: OrgEventType.ORG_LISTING_CHANGES_REQUESTED,
+        message: note?.trim()
+          ? `Changes requested · ${note.trim()}`
+          : `Changes requested`,
+        payload: { listingId, statusFrom: listing.status, statusTo: updated.status, note: note?.trim() || null }
+      });
+    } catch {}
+
+    return updated;
+  }
+
+  async rejectListing(orgId: string, brokerUserId: string, listingId: string, note?: string) {
+    await this.assertBroker(brokerUserId, orgId);
+    const listing = await this.prisma.orgListing.findUnique({ where: { id: listingId } });
+    if (!listing || listing.organizationId !== orgId) {
+      throw new NotFoundException('Listing not found');
+    }
+    if (listing.status !== OrgListingStatus.PENDING_BROKER_APPROVAL) {
+      throw new BadRequestException('Listing is not pending broker approval');
+    }
+
+    const updated = await this.prisma.orgListing.update({
+      where: { id: listingId },
+      data: {
+        status: OrgListingStatus.DRAFT,
+        brokerApproved: false,
+        brokerApprovedAt: null,
+        brokerApprovedByUserId: null
+      }
+    });
+
+    try {
+      await this.events.logOrgEvent({
+        organizationId: orgId,
+        actorId: brokerUserId,
+        type: OrgEventType.ORG_LISTING_REJECTED,
+        message: note?.trim()
+          ? `Listing rejected · ${note.trim()}`
+          : `Listing rejected`,
+        payload: { listingId, statusFrom: listing.status, statusTo: updated.status, note: note?.trim() || null }
+      });
+    } catch {}
+
+    return updated;
   }
 
   async attachListingDocument(orgId: string, userId: string, listingId: string, dto: AttachListingDocumentDto) {
@@ -201,6 +331,44 @@ export class OrgListingsService {
 
     void this.documentsAi.refreshFile(orgId, orgFile.id).catch(() => undefined);
     return result;
+  }
+
+  async listListingActivity(orgId: string, userId: string, listingId: string, limit = 50) {
+    await this.assertUserInOrg(userId, orgId);
+    const listing = await this.prisma.orgListing.findUnique({
+      where: { id: listingId },
+      select: { organizationId: true }
+    });
+    if (!listing || listing.organizationId !== orgId) {
+      throw new NotFoundException('Listing not found');
+    }
+
+    const events = await this.prisma.orgEvent.findMany({
+      where: {
+        organizationId: orgId,
+        OR: [{ payload: { path: ['listingId'], equals: listingId } }]
+      } as any,
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      include: {
+        actor: { select: { firstName: true, lastName: true, email: true } }
+      }
+    });
+
+    return events.map((event) => ({
+      id: event.id,
+      type: event.type,
+      message: event.message,
+      createdAt: event.createdAt.toISOString(),
+      actor: event.actor
+        ? {
+            firstName: event.actor.firstName,
+            lastName: event.actor.lastName,
+            email: event.actor.email
+          }
+        : null,
+      payload: event.payload
+    }));
   }
 
   async listListingsForOrg(orgId: string, userId: string) {

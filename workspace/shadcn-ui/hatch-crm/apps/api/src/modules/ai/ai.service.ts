@@ -6,6 +6,8 @@ import { SemanticSearchService } from '@/modules/search/semantic.service';
 import { LLMClient } from '@/shared/ai/llm.client';
 import type { LlmChatMessage } from '@/shared/ai/llm.constants';
 import { buildSystemPrompt } from './copilot.prompt';
+import type { AiCompletionRequest, AiCompletionResponse } from './foundation/types/ai-request.types';
+import { AiOrchestrationService } from './foundation/ai-orchestration.service';
 
 type DraftPurpose = 'intro' | 'tour' | 'price_drop' | 'checkin';
 
@@ -26,7 +28,8 @@ export class AiService {
 
   constructor(
     private readonly db: PrismaService,
-    private readonly semantic: SemanticSearchService
+    private readonly semantic: SemanticSearchService,
+    private readonly orchestrator: AiOrchestrationService
   ) {
     this.llm = new LLMClient();
     if (!this.llm.isConfigured()) {
@@ -35,7 +38,15 @@ export class AiService {
   }
 
   getProviderStatus() {
-    return this.llm.getStatus();
+    return {
+      ...this.llm.getStatus(),
+      model: AiConfig.model,
+      resolvedModel: this.llm.resolveCompletionModel(AiConfig.model)
+    };
+  }
+
+  complete(request: AiCompletionRequest): Promise<AiCompletionResponse> {
+    return this.orchestrator.complete(request);
   }
 
   async draftMessage({ contactId, purpose, context }: DraftMessageInput): Promise<DraftMessageResult> {

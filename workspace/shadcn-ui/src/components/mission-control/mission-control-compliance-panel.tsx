@@ -1,61 +1,73 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { MissionControlSectionCard } from './MissionControlSectionCard';
 import { MissionControlMetricTile } from './MissionControlMetricTile';
-import { fetchMissionControlCompliance } from '@/lib/api/mission-control';
+import { fetchMissionControlAgents } from '@/lib/api/mission-control';
+import { missionControlAgentsQueryKey } from '@/lib/queryKeys';
 
 type MissionControlCompliancePanelProps = {
   orgId: string;
 };
 
-const complianceQueryKey = (orgId: string) => ['mission-control', 'compliance', orgId];
-
-function humanizeComplianceKey(key: string): string {
-  switch (key) {
-    case 'noncompliant-agents':
-    case '/BROKER/COMPLIANCE?FILTER=NONCOMPLIANT':
-      return 'Agents needing attention';
-    case 'ce-expiring-30d':
-      return 'CE expiring in 30 days';
-    case 'expired-memberships':
-      return 'Expired memberships';
-    default:
-      return key.replace(/[_-]/g, ' ');
-  }
-}
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function MissionControlCompliancePanel({ orgId }: MissionControlCompliancePanelProps) {
   const { data, isLoading } = useQuery({
-    queryKey: complianceQueryKey(orgId),
-    queryFn: () => fetchMissionControlCompliance(orgId),
+    queryKey: missionControlAgentsQueryKey(orgId),
+    queryFn: () => fetchMissionControlAgents(orgId),
     staleTime: 60_000
   });
 
-  const metrics = data
+  const summary = useMemo(() => {
+    const agents = data ?? [];
+    const now = Date.now();
+    const ceThreshold = now + THIRTY_DAYS_MS;
+    const needsAttention = agents.filter((agent) => agent.openComplianceIssues > 0 || agent.requiresAction || !agent.isCompliant);
+    const ceExpiringSoon = agents.filter((agent) => {
+      if (!agent.ceCycleEndAt) return false;
+      const value = new Date(agent.ceCycleEndAt).getTime();
+      return Number.isFinite(value) && value <= ceThreshold;
+    }).length;
+    const expiredMemberships = agents.reduce((sum, agent) => {
+      const count = (agent.memberships ?? []).filter((membership) => membership.status === 'EXPIRED').length;
+      return sum + count;
+    }, 0);
+
+    return {
+      totalAgents: agents.length,
+      needsAttention: needsAttention.length,
+      compliantAgents: Math.max(0, agents.length - needsAttention.length),
+      ceExpiringSoon,
+      expiredMemberships
+    };
+  }, [data]);
+
+  const metrics = (data ?? []).length
     ? [
         {
           key: 'compliant-agents',
           label: 'Compliant agents',
-          value: `${data.compliantAgents}/${data.totalAgents}`,
+          value: `${summary.compliantAgents}/${summary.totalAgents}`,
           tone: 'success' as const
         },
         {
           key: 'noncompliant-agents',
-          label: humanizeComplianceKey('noncompliant-agents'),
-          value: data.nonCompliantAgents,
-          tone: data.nonCompliantAgents > 0 ? ('warning' as const) : ('default' as const)
+          label: 'Agents needing attention',
+          value: summary.needsAttention,
+          tone: summary.needsAttention > 0 ? ('warning' as const) : ('neutral' as const)
         },
         {
           key: 'ce-expiring-30d',
-          label: humanizeComplianceKey('ce-expiring-30d'),
-          value: data.ceExpiringSoon,
-          tone: data.ceExpiringSoon > 0 ? ('warning' as const) : ('muted' as const)
+          label: 'CE expiring in 30 days',
+          value: summary.ceExpiringSoon,
+          tone: summary.ceExpiringSoon > 0 ? ('warning' as const) : ('muted' as const)
         },
         {
           key: 'expired-memberships',
-          label: humanizeComplianceKey('expired-memberships'),
-          value: data.expiredMemberships,
-          tone: data.expiredMemberships > 0 ? ('danger' as const) : ('default' as const)
+          label: 'Expired memberships',
+          value: summary.expiredMemberships,
+          tone: summary.expiredMemberships > 0 ? ('danger' as const) : ('neutral' as const)
         }
       ]
     : [];
@@ -91,10 +103,10 @@ const ComplianceSkeleton = () => (
     {Array.from({ length: 4 }).map((_, idx) => (
       <div
         key={`compliance-skel-${idx}`}
-        className="flex flex-col gap-1 rounded-2xl border border-[color:var(--hatch-card-border)] bg-card/45 p-3 animate-pulse backdrop-blur-sm"
+        className="flex flex-col gap-2 rounded-[var(--radius-md)] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-glass-alpha-recessed)] p-4 backdrop-blur-md"
       >
-        <div className="h-3 w-32 rounded bg-slate-200/70" />
-        <div className="h-5 w-20 rounded bg-slate-300/70" />
+        <div className="hatch-shimmer h-3 w-32 rounded" />
+        <div className="hatch-shimmer h-5 w-20 rounded" />
       </div>
     ))}
   </div>

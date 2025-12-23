@@ -30,7 +30,7 @@ export const MissionControlHero: React.FC<MissionControlHeroProps> = ({
   return (
     <section
       className={cn(
-        'relative overflow-hidden rounded-[32px] border border-slate-200/70',
+        'hatch-hero relative overflow-hidden rounded-[32px] border border-white/20',
         // Hatch CRM-style gradient (match CRM hero)
         'bg-gradient-to-r from-[#1F5FFF] via-[#3D86FF] to-[#00C6A2]',
         'px-6 py-5 md:px-8 md:py-7 text-white shadow-[0_18px_48px_rgba(15,23,42,0.28)]'
@@ -39,7 +39,7 @@ export const MissionControlHero: React.FC<MissionControlHeroProps> = ({
       <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-white/15 blur-3xl" />
       <div className="pointer-events-none absolute -right-10 bottom-0 h-40 w-40 rounded-full bg-cyan-300/40 blur-3xl" />
 
-      <div className="relative flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="relative z-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="max-w-xl space-y-2">
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-100/80">
             Mission control

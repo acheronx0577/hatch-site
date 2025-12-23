@@ -32,7 +32,7 @@ export default function DocumentViewerPage() {
   }
 
   if (!fileId) {
-    return <div className="p-6 text-sm text-muted-foreground">No document selected.</div>
+    return <div className="text-sm text-muted-foreground">No document selected.</div>
   }
 
   return (

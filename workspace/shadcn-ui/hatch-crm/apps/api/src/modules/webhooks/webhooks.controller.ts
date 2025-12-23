@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import type { FastifyRequest } from 'fastify';
 
 import { OutboxService } from '../outbox/outbox.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { ApiModule, ApiStandardErrors } from '../common';
+import { ApiModule, ApiStandardErrors, resolveRequestContext } from '../common';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import {
   WebhookStatusResponseDto,
   WebhookSubscriptionDto,
@@ -17,6 +19,7 @@ import {
 @ApiModule('Webhooks')
 @ApiStandardErrors()
 @Controller('webhooks')
+@UseGuards(JwtAuthGuard)
 export class WebhooksController {
   constructor(
     private readonly prisma: PrismaService,
@@ -41,10 +44,16 @@ export class WebhooksController {
   })
   @ApiOkResponse({ type: WebhookSubscriptionListResponseDto })
   async listSubscriptions(
+    @Req() req: FastifyRequest,
     @Query('limit') limit: string | undefined,
     @Query('cursor') cursor: string | undefined,
     @Query('active') active: string | undefined
   ): Promise<WebhookSubscriptionListResponseDto> {
+    const ctx = resolveRequestContext(req);
+    if (!ctx.tenantId) {
+      return { items: [], nextCursor: null };
+    }
+
     const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
     const take = Math.min(
       Number.isFinite(parsedLimit ?? NaN) ? (parsedLimit as number) : DEFAULT_PAGE_SIZE,
@@ -54,10 +63,10 @@ export class WebhooksController {
     const subscriptions = await this.prisma.webhookSubscription.findMany({
       where:
         active === 'true'
-          ? { isActive: true }
+          ? { tenantId: ctx.tenantId, isActive: true }
           : active === 'false'
-            ? { isActive: false }
-            : {},
+            ? { tenantId: ctx.tenantId, isActive: false }
+            : { tenantId: ctx.tenantId },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: take + 1,
       ...(cursor
@@ -97,8 +106,9 @@ export class WebhooksController {
     }
   })
   @ApiOkResponse({ type: WebhookStatusResponseDto })
-  async flushOutbox(@Body('limit') limit?: number): Promise<WebhookStatusResponseDto> {
-    await this.outbox.processPending(limit ?? 5);
+  async flushOutbox(@Req() req: FastifyRequest, @Body('limit') limit?: number): Promise<WebhookStatusResponseDto> {
+    const ctx = resolveRequestContext(req);
+    await this.outbox.processPending(limit ?? 5, { tenantId: ctx.tenantId });
     return { status: 'ok' };
   }
 
@@ -113,20 +123,22 @@ export class WebhooksController {
   })
   @ApiOkResponse({ type: WebhookStatusResponseDto })
   async simulateDeliver(
+    @Req() req: FastifyRequest,
     @Param('eventType') eventType: string,
     @Body() payload: Record<string, unknown>
   ): Promise<WebhookStatusResponseDto> {
+    const ctx = resolveRequestContext(req);
     await this.outbox.enqueue({
       eventType: eventType as any,
       occurredAt: new Date().toISOString(),
-      tenantId: String(payload?.tenantId ?? ''),
+      tenantId: ctx.tenantId,
       resource: {
         id: String(payload?.resourceId ?? 'resource'),
         type: String(payload?.resourceType ?? 'generic')
       },
       data: payload
     });
-    await this.outbox.processPending(1);
+    await this.outbox.processPending(1, { tenantId: ctx.tenantId });
     return { status: 'queued' };
   }
 }

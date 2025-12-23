@@ -1,9 +1,10 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards, UsePipes, ValidationPipe } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { MessageChannel } from '@hatch/db';
 
 import { MessagesService } from '../messages/messages.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TwilioWebhookGuard } from '../common/twilio-webhook.guard';
 import { TwilioInboundSmsDto } from './dto/twilio-inbound.dto';
 import { TwilioStatusCallbackDto } from './dto/twilio-status.dto';
 
@@ -17,6 +18,14 @@ export class SmsController {
 
   // Twilio Inbound SMS webhook adapter (form-encoded → normalized DTO)
   @Post('inbound')
+  @UseGuards(TwilioWebhookGuard)
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: false,
+      transform: true
+    })
+  )
   @ApiBody({ type: TwilioInboundSmsDto })
   @ApiOkResponse({ schema: { type: 'object', properties: { status: { type: 'string' } } } })
   async inbound(@Body() dto: TwilioInboundSmsDto) {
@@ -36,6 +45,14 @@ export class SmsController {
 
   // Twilio delivery status callback (form-encoded)
   @Post('status')
+  @UseGuards(TwilioWebhookGuard)
+  @UsePipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: false,
+      transform: true
+    })
+  )
   @ApiBody({ type: TwilioStatusCallbackDto })
   @ApiOkResponse({ schema: { type: 'object', properties: { status: { type: 'string' } } } })
   async status(@Body() dto: TwilioStatusCallbackDto) {
@@ -85,4 +102,3 @@ export class SmsController {
     return { status: 'ok' } as const;
   }
 }
-

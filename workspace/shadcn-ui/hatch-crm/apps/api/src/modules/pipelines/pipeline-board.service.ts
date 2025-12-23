@@ -127,11 +127,99 @@ export class PipelineBoardService {
     const filters = this.parseFilters(rawFilters);
     const now = new Date();
 
-    const stages = await Promise.all(
-      pipeline.stages.map((stage) =>
-        this.computeStageSummary(tenantId, pipelineId, stage, filters, now)
-      )
-    );
+    const stageIds = pipeline.stages.map((stage) => stage.id);
+    const whereAllStages = this.buildPersonWhereForStageIds(tenantId, pipelineId, stageIds, filters, now);
+
+    const totalCountsPromise =
+      filters.queueId === 'overdue'
+        ? Promise.resolve([] as Array<{ stageId: string | null; _count: { _all: number } }>)
+        : this.prisma.person.groupBy({
+            by: ['stageId'],
+            where: whereAllStages,
+            _count: { _all: true }
+          });
+
+    const oldestRowsPromise = this.prisma.person.findMany({
+      where: whereAllStages,
+      distinct: ['stageId'],
+      orderBy: [{ stageId: 'asc' }, { stageEnteredAt: 'asc' }, { createdAt: 'asc' }],
+      select: { stageId: true, stageEnteredAt: true, createdAt: true }
+    });
+
+    const slaStageClauses = pipeline.stages
+      .filter((stage) => stage.slaMinutes !== null && stage.slaMinutes !== undefined)
+      .map((stage) => {
+        const threshold = new Date(now.getTime() - stage.slaMinutes! * 60 * 1000);
+        return {
+          stageId: stage.id,
+          OR: [
+            { lastActivityAt: { lt: threshold } },
+            {
+              AND: [{ lastActivityAt: null }, { stageEnteredAt: { lt: threshold } }]
+            }
+          ]
+        } satisfies Prisma.PersonWhereInput;
+      });
+
+    const slaBreachesPromise =
+      slaStageClauses.length === 0
+        ? Promise.resolve([] as Array<{ stageId: string | null; _count: { _all: number } }>)
+        : this.prisma.person.groupBy({
+            by: ['stageId'],
+            where: { AND: [whereAllStages, { OR: slaStageClauses }] },
+            _count: { _all: true }
+          });
+
+    const [totalCounts, oldestRows, slaBreaches] = await Promise.all([
+      totalCountsPromise,
+      oldestRowsPromise,
+      slaBreachesPromise
+    ]);
+
+    const totalCountByStage = new Map<string, number>();
+    for (const group of totalCounts) {
+      if (group.stageId) {
+        totalCountByStage.set(group.stageId, group._count._all);
+      }
+    }
+
+    const slaBreachesByStage = new Map<string, number>();
+    for (const group of slaBreaches) {
+      if (group.stageId) {
+        slaBreachesByStage.set(group.stageId, group._count._all);
+      }
+    }
+
+    const oldestDateByStage = new Map<string, Date>();
+    for (const row of oldestRows) {
+      if (!row.stageId) continue;
+      const date = row.stageEnteredAt ?? row.createdAt ?? null;
+      if (date) {
+        oldestDateByStage.set(row.stageId, date);
+      }
+    }
+
+    const stages = pipeline.stages.map((stage) => {
+      const slaBreachesForStage =
+        stage.slaMinutes === null || stage.slaMinutes === undefined
+          ? 0
+          : slaBreachesByStage.get(stage.id) ?? 0;
+      const count =
+        filters.queueId === 'overdue'
+          ? slaBreachesForStage
+          : totalCountByStage.get(stage.id) ?? 0;
+      const oldestDate = oldestDateByStage.get(stage.id) ?? null;
+      const oldestHours =
+        oldestDate !== null ? Math.max(0, Math.floor(differenceInMinutes(now, oldestDate) / 60)) : 0;
+
+      return {
+        id: stage.id,
+        name: stage.name,
+        count,
+        slaBreaches: slaBreachesForStage,
+        oldestHours
+      };
+    });
 
     return {
       pipelineId: pipeline.id,
@@ -471,6 +559,58 @@ export class PipelineBoardService {
               { stageEnteredAt: { gte: threshold } }
             ]
           }
+        ]
+      });
+      where.AND = normalized;
+    }
+
+    return where;
+  }
+
+  private buildPersonWhereForStageIds(
+    tenantId: string,
+    pipelineId: string,
+    stageIds: string[],
+    filters: BoardFilters,
+    now: Date
+  ): Prisma.PersonWhereInput {
+    const where: Prisma.PersonWhereInput = {
+      tenantId,
+      pipelineId,
+      stageId: { in: stageIds },
+      deletedAt: null
+    };
+
+    if (filters.queueId === 'unassigned') {
+      where.ownerId = null;
+    } else if (filters.ownerId) {
+      where.ownerId = filters.ownerId;
+    }
+
+    if (filters.scoreTier && filters.scoreTier.length > 0) {
+      where.scoreTier = { in: filters.scoreTier };
+    }
+
+    if (filters.preapprovedOnly) {
+      where.leadFit = {
+        is: {
+          preapproved: true
+        }
+      };
+    }
+
+    if (filters.queueId === 'hot') {
+      where.leadScore = { gte: 80 };
+    }
+
+    if (filters.lastActivityDays && filters.lastActivityDays > 0) {
+      const threshold = subDays(now, filters.lastActivityDays);
+      const existing = where.AND;
+      const normalized = Array.isArray(existing) ? existing : existing ? [existing] : [];
+      normalized.push({
+        OR: [
+          { lastActivityAt: { gte: threshold } },
+          { AND: [{ lastActivityAt: null }, { stageEnteredAt: { gte: threshold } }] }
         ]
       });
       where.AND = normalized;

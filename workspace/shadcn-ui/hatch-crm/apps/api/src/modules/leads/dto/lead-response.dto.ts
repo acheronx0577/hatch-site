@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-import { LeadScoreTier, LeadTouchpointType, MessageChannel } from '@hatch/db';
+import { LeadScoreTier, LeadTouchpointType, LeadType, MessageChannel } from '@hatch/db';
 
 import { PaginatedResponseDto } from '../../common/dto/paginated-response.dto';
 
@@ -153,6 +153,9 @@ export class LeadSummaryDto {
 
   @ApiProperty({ enum: LeadScoreTier })
   scoreTier!: LeadScoreTier;
+
+  @ApiProperty({ enum: LeadType })
+  leadType!: LeadType;
 
   @ApiPropertyOptional()
   pipelineId?: string | null;

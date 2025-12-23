@@ -32,9 +32,12 @@ export class OutboxService {
     });
   }
 
-  async processPending(batchSize = 10) {
+  async processPending(batchSize = 10, options: { tenantId?: string } = {}) {
     const pending = await this.prisma.outbox.findMany({
-      where: { status: 'PENDING' },
+      where: {
+        status: 'PENDING',
+        ...(options.tenantId ? { tenantId: options.tenantId } : {})
+      },
       take: batchSize,
       orderBy: [{ createdAt: 'asc' }]
     });

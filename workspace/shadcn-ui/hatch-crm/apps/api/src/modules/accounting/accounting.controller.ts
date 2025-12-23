@@ -1,7 +1,10 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
+import { OrgMembershipGuard } from '@/platform/security/org-membership.guard';
 import { AccountingService } from './accounting.service';
 @Controller('organizations/:orgId/accounting')
+@UseGuards(JwtAuthGuard, OrgMembershipGuard)
 export class AccountingController {
   constructor(private readonly accounting: AccountingService) {}
 

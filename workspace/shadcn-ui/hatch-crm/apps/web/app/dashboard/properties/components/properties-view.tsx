@@ -9,10 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { fetchOrgListings, OrgListingRecord } from '@/lib/api/org-listings';
 
-type PropertiesViewProps = {
-  orgId: string;
-};
-
 const filters = [
   { id: 'ALL', label: 'All' },
   { id: 'ACTIVE', label: 'Active' },
@@ -21,14 +17,21 @@ const filters = [
   { id: 'FLAGGED', label: 'Needs approval' }
 ] as const;
 
+type PropertiesFilterId = (typeof filters)[number]['id'];
+
+type PropertiesViewProps = {
+  orgId: string;
+  initialFilter?: PropertiesFilterId;
+};
+
 const currencyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   maximumFractionDigits: 0
 });
 
-export function PropertiesView({ orgId }: PropertiesViewProps) {
-  const [filter, setFilter] = useState<(typeof filters)[number]['id']>('ALL');
+export function PropertiesView({ orgId, initialFilter }: PropertiesViewProps) {
+  const [filter, setFilter] = useState<PropertiesFilterId>(() => initialFilter ?? 'ALL');
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', 'properties', orgId],

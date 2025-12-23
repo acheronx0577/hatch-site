@@ -1,4 +1,5 @@
 import { apiFetch } from '@/lib/api/hatch';
+import { getCookieConsent, isTrackingAllowed } from '@/lib/cookieConsent';
 
 type AnalyticsEventPayload = {
   name: string;
@@ -9,6 +10,9 @@ type AnalyticsEventPayload = {
 };
 
 export async function trackEvent(payload: AnalyticsEventPayload) {
+  if (!isTrackingAllowed(getCookieConsent())) {
+    return;
+  }
   const body = JSON.stringify({
     ...payload,
     timestamp: new Date().toISOString()

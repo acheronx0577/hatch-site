@@ -22,13 +22,16 @@ export type AiPersonaConfig = {
   collectors: string[];
 };
 
+const DEFAULT_GROK_MODEL =
+  process.env.AI_MODEL_GROK ?? process.env.XAI_MODEL ?? process.env.GROK_MODEL ?? 'grok-4-1-fast-reasoning';
+
 export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
   brokerAssistant: {
     id: 'brokerAssistant',
     name: 'Broker Assistant',
     description:
       'Helps brokers understand compliance, risk, listings, and operations across the brokerage.',
-    model: process.env.AI_BROKER_MODEL ?? 'gpt-4.1',
+    model: process.env.AI_BROKER_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: ['leads', 'listings', 'transactions', 'rentals', 'compliance', 'financials'],
     collectors: ['orgSummary', 'orgRiskSnapshot']
@@ -37,7 +40,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'agentCopilot',
     name: 'Agent Copilot',
     description: 'Provides daily briefings and suggested actions for individual agents.',
-    model: process.env.AI_COPILOT_MODEL ?? 'gpt-4.1-mini',
+    model: process.env.AI_COPILOT_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.3,
     tools: ['leads', 'listings', 'tasks'],
     collectors: ['agentContext', 'agentPipelineSnapshot']
@@ -46,7 +49,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'docClassifier',
     name: 'Document Classifier',
     description: 'Classifies uploaded brokerage documents by purpose.',
-    model: process.env.AI_DOC_CLASSIFIER_MODEL ?? 'gpt-4.1-mini',
+    model: process.env.AI_DOC_CLASSIFIER_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.1,
     tools: [],
     collectors: []
@@ -55,7 +58,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'docComplianceChecker',
     name: 'Document Compliance Checker',
     description: 'Reviews documents for compliance issues across listings, transactions, and rentals.',
-    model: process.env.AI_DOC_COMPLIANCE_MODEL ?? 'gpt-4.1',
+    model: process.env.AI_DOC_COMPLIANCE_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: ['listingContext', 'transactionContext', 'rentalContext']
@@ -64,7 +67,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'playbookGenerator',
     name: 'Automation Builder',
     description: 'Converts natural language instructions into playbook triggers, conditions, and actions.',
-    model: process.env.AI_PLAYBOOK_MODEL ?? 'gpt-4.1',
+    model: process.env.AI_PLAYBOOK_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: ['orgSummary']
@@ -73,7 +76,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'timelineSummarizer',
     name: 'Timeline Summarizer',
     description: 'Summarizes entity timelines into broker-friendly narratives.',
-    model: process.env.AI_TIMELINE_MODEL ?? 'gpt-4.1',
+    model: process.env.AI_TIMELINE_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: []
@@ -82,7 +85,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'brokerCoach',
     name: 'Broker Coach',
     description: 'Provides coaching insights across agents, teams, listings, compliance, risk, and productivity.',
-    model: process.env.AI_COACH_MODEL ?? 'gpt-4.1',
+    model: process.env.AI_COACH_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: [
@@ -101,7 +104,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     name: 'Hatch Assistant',
     description:
       'Answers questions about the brokerage using search, timelines, insights, documents, and recent activity. Can propose next actions.',
-    model: process.env.AI_ASSISTANT_MODEL ?? 'gpt-4.1',
+    model: process.env.AI_ASSISTANT_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: ['orgSummary', 'officeSummary', 'teamSummary', 'liveActivity', 'reportingSummary']
@@ -111,7 +114,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     name: 'Transaction Coordinator',
     description:
       'Monitors transactions, documents, and deadlines; suggests and triggers TC tasks via playbooks.',
-    model: process.env.AI_ASSISTANT_MODEL ?? 'gpt-4.1',
+    model: process.env.AI_ASSISTANT_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: [
@@ -127,7 +130,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'leadNurtureWriter',
     name: 'Lead Nurture Writer',
     description: "Writes follow-up emails and texts based on a lead's profile and timeline.",
-    model: process.env.AI_COPILOT_MODEL ?? 'gpt-4.1-mini',
+    model: process.env.AI_COPILOT_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: ['leadContext', 'timelineForLead']
@@ -136,7 +139,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'leadScorer',
     name: 'Lead Scoring AI',
     description: 'Scores leads and predicts conversion likelihood.',
-    model: process.env.AI_COPILOT_MODEL ?? 'gpt-4.1-mini',
+    model: process.env.AI_COPILOT_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: ['leadContext', 'agentPerformanceSnapshot', 'timelineForLead', 'orgSummary']
@@ -145,7 +148,7 @@ export const AI_PERSONA_REGISTRY: Record<AiPersonaId, AiPersonaConfig> = {
     id: 'revenueForecaster',
     name: 'Revenue Forecaster',
     description: 'Predicts brokerage revenue and pipeline dynamics.',
-    model: process.env.AI_ASSISTANT_MODEL ?? 'gpt-4.1',
+    model: process.env.AI_ASSISTANT_MODEL ?? DEFAULT_GROK_MODEL,
     temperature: 0.2,
     tools: [],
     collectors: ['transactionSummary', 'listingSummary', 'orgSummary', 'performanceSummary']

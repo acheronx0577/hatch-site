@@ -38,6 +38,7 @@ import { ConsumerModule } from './modules/consumer/consumer.module';
 import { ConsumerPortalModule } from './modules/consumer-portal/consumer-portal.module';
 import { DraftsModule } from './modules/drafts/drafts.module';
 import { OpportunitiesModule } from './modules/opportunities/opportunities.module';
+import { SellerOpportunitiesModule } from './modules/seller-opportunities/seller-opportunities.module';
 import { FilesModule } from './modules/files/files.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { OffersModule } from './modules/re/offers/offers.module';
@@ -82,12 +83,15 @@ import { RevenueForecastModule } from './modules/revenue-forecast/revenue-foreca
 import { IngestionModule } from './modules/ingestion/ingestion.module';
 import { QuickBooksModule } from './modules/integrations/quickbooks/quickbooks.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
+import { FinancialsModule } from './modules/financials/financials.module';
 import { OrgLoisModule } from './modules/org-lois/org-lois.module';
 import { AgentProfilesModule } from './modules/agent-profiles/agent-profiles.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { AgentInvitesModule } from './modules/agent-invites/agent-invites.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
 import { LeadGenModule } from './modules/lead-gen/lead-gen.module';
+import { DemoBookingModule } from './modules/demo-booking/demo-booking.module';
+import { PublicRecordsModule } from './modules/public-records/public-records.module';
 
 const isProd = (process.env.NODE_ENV ?? 'development') === 'production';
 const throttlerEnabled =
@@ -216,6 +220,7 @@ const throttlerTtl = Number(process.env.THROTTLER_TTL_MS ?? 60_000);
     CasesModule,
     RulesModule,
     SearchModule,
+    SellerOpportunitiesModule,
     LayoutsModule,
     ViewsModule,
     AuditModule,
@@ -249,11 +254,14 @@ const throttlerTtl = Number(process.env.THROTTLER_TTL_MS ?? 60_000);
     OrgTransactionsModule,
     QuickBooksModule,
     AccountingModule,
+    FinancialsModule,
     AgentProfilesModule,
     OrganizationsModule,
     AgentInvitesModule,
     TrackingModule,
-    LeadGenModule
+    LeadGenModule,
+    DemoBookingModule,
+    PublicRecordsModule
   ],
   controllers: [],
   providers: [

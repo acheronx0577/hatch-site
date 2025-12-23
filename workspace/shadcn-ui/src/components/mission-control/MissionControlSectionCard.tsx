@@ -24,18 +24,21 @@ export const MissionControlSectionCard: React.FC<SectionCardProps> = ({
     <section
       {...rest}
       className={cn(
-        'relative overflow-hidden rounded-[24px] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] p-4 shadow-brand backdrop-blur-[var(--hatch-card-blur)] md:p-5',
+        'relative overflow-hidden rounded-[var(--radius-lg)] border border-[color:var(--hatch-card-border)] bg-card/[var(--hatch-card-alpha)] p-6 shadow-brand backdrop-blur-[var(--hatch-card-blur)]',
         className
       )}
     >
       <header className="mb-3 flex items-center justify-between gap-2">
         <div className="space-y-0.5">
-          <h2 className="text-sm md:text-base font-semibold text-slate-900">{title}</h2>
+          <h2 className="text-lg font-medium text-slate-900">{title}</h2>
           {subtitle ? <p className="text-[11px] text-slate-500">{subtitle}</p> : null}
         </div>
 
         {actionLabel && actionHref ? (
-          <a href={actionHref} className="text-[11px] font-medium text-[#1F5FFF] hover:underline">
+          <a
+            href={actionHref}
+            className="text-[11px] font-semibold text-brand-blue-600 transition-colors duration-200 hover:text-brand-blue-700 hover:underline"
+          >
             {actionLabel}
           </a>
         ) : null}

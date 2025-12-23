@@ -31,7 +31,7 @@ export function Navbar() {
   const navigation = useMemo(
     () => [
       { name: 'For Pros', href: '/#for-pros' },
-      { name: 'Demo', href: '/demo' },
+      { name: 'Book a demo', href: '/demo' },
     ],
     []
   )

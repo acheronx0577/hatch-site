@@ -6,6 +6,7 @@ import { IsOptional, IsString, Matches } from 'class-validator';
 
 import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { resolveRequestContext } from '@/modules/common';
+import { TwilioWebhookGuard } from '@/modules/common/twilio-webhook.guard';
 
 import { VoiceService } from './voice.service';
 
@@ -46,6 +47,7 @@ export class VoiceController {
   // Twilio "Answer URL" — returns TwiML telling Twilio what to do on the call
   // In Twilio, set Answer URL to: https://api.findyourhatch.com/voice/twiml
   @Post('twiml')
+  @UseGuards(TwilioWebhookGuard)
   async handleTwiml(@Res() reply: FastifyReply) {
     // For MVP: just say a short message.
     // Later, we can <Dial> an agent, start a recording, etc.
@@ -63,6 +65,7 @@ export class VoiceController {
 
   // Twilio Status Callback — logs lifecycle and error codes for troubleshooting
   @Post('status')
+  @UseGuards(TwilioWebhookGuard)
   async handleStatus(@Body() body: Record<string, any>, @Res() reply: FastifyReply) {
     const sid = body.CallSid ?? body.CallSid?.toString?.();
     const status = body.CallStatus ?? body.CallStatus?.toString?.();

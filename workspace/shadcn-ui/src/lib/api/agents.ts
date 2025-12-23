@@ -24,6 +24,18 @@ export type InviteAgentPayload = {
   expiresAt?: string;
 };
 
+export type AgentInviteStatus = 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
+
+export type AgentInviteRecord = {
+  id: string;
+  email: string;
+  status: AgentInviteStatus;
+  organizationId: string;
+  invitedByUserId: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
 export async function inviteAgent(orgId: string, payload: InviteAgentPayload) {
   return apiFetch<{
     id: string;
@@ -39,6 +51,21 @@ export async function inviteAgent(orgId: string, payload: InviteAgentPayload) {
     method: 'POST',
     body: payload
   });
+}
+
+export async function listAgentInvites(orgId: string) {
+  return apiFetch<AgentInviteRecord[]>(`organizations/${orgId}/invites`);
+}
+
+export async function resendAgentInvite(orgId: string, inviteId: string) {
+  return apiFetch<AgentInviteRecord & { signupUrl: string; token: string }>(
+    `organizations/${orgId}/invites/${inviteId}/resend`,
+    { method: 'POST' }
+  );
+}
+
+export async function revokeAgentInvite(orgId: string, inviteId: string) {
+  return apiFetch<AgentInviteRecord>(`organizations/${orgId}/invites/${inviteId}/revoke`, { method: 'POST' });
 }
 
 export type UpdateAgentProfileAdminPayload = {
@@ -72,4 +99,42 @@ export async function updateAgentCompliance(orgId: string, agentProfileId: strin
     method: 'PATCH',
     body: payload
   });
+}
+
+export type AgentProfileRecord = {
+  id: string;
+  organizationId: string;
+  userId: string;
+  isCompliant: boolean;
+  requiresAction: boolean;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  riskScore: number;
+  riskFlags?: unknown;
+};
+
+export async function fetchAgentProfile(orgId: string, agentProfileId: string) {
+  return apiFetch<AgentProfileRecord>(`organizations/${orgId}/agents/profile/${agentProfileId}`);
+}
+
+export async function recomputeAgentRisk(orgId: string, agentProfileId: string) {
+  return apiFetch<{ score: number; level: 'LOW' | 'MEDIUM' | 'HIGH' }>(
+    `organizations/${orgId}/ai-broker/agents/${agentProfileId}/recompute-risk`,
+    {
+      method: 'POST'
+    }
+  );
+}
+
+export type AgentRiskAiAnalysis = {
+  agentProfileId: string;
+  riskScore: number;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  summary: string;
+  suggestions: string[];
+  priority: 'none' | 'low' | 'medium' | 'high';
+  generatedAt?: string;
+};
+
+export async function fetchAgentRiskAiAnalysis(orgId: string, agentProfileId: string) {
+  return apiFetch<AgentRiskAiAnalysis>(`organizations/${orgId}/ai-broker/agents/${agentProfileId}/risk-analysis`);
 }

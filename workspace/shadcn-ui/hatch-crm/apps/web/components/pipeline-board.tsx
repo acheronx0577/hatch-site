@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Search,
   Sparkles,
+  Target,
   UserRound,
   XCircle
 } from 'lucide-react';
@@ -31,6 +32,7 @@ import {
   useSensor,
   useSensors
 } from '@dnd-kit/core';
+import { useQueryClient } from '@tanstack/react-query';
 import { CSS } from '@dnd-kit/utilities';
 import { differenceInDays, differenceInMinutes, formatDistanceToNow } from 'date-fns';
 import { FIELD_MAP } from '@hatch/shared/layout';
@@ -38,8 +40,11 @@ import { FIELD_MAP } from '@hatch/shared/layout';
 import { ErrorBanner } from '@/components/error-banner';
 import { LoadMoreButton } from '@/components/load-more-button';
 import { LeadDrawer } from '@/components/leads/lead-drawer';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useApiError } from '@/hooks/use-api-error';
-import { getLeads, LeadSummary, ListLeadsParams, Pipeline, PipelineStage, updateLead } from '@/lib/api';
+import { createLead, getLeads, LeadSummary, ListLeadsParams, Pipeline, PipelineStage, updateLead } from '@/lib/api';
 import { resolveLayout } from '@/lib/api/admin.layouts';
 import { applyLayout } from '@/lib/layouts/applyLayout';
 
@@ -57,12 +62,14 @@ export default function PipelineBoard({
   pageSize
 }: PipelineBoardProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [leads, setLeads] = useState<LeadSummary[]>(initialLeads);
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string>(pipelines[0]?.id ?? '');
   const [ownerFilter, setOwnerFilter] = useState<string>('all');
   const [tierFilter, setTierFilter] = useState<string>('all');
+  const [leadTypeFilter, setLeadTypeFilter] = useState<'all' | 'BUYER' | 'SELLER' | 'UNKNOWN'>('all');
   const [activityFilter, setActivityFilter] = useState<string>('all');
   const [preapprovedOnly, setPreapprovedOnly] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -77,6 +84,16 @@ export default function PipelineBoard({
   const [cardLayoutFields, setCardLayoutFields] = useState<Array<{ field: string; label?: string; order?: number; width?: number }> | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [activeLeadId, setActiveLeadId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createPipelineId, setCreatePipelineId] = useState<string>('');
+  const [createStageId, setCreateStageId] = useState<string>('');
+  const [createFirstName, setCreateFirstName] = useState('');
+  const [createLastName, setCreateLastName] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPhone, setCreatePhone] = useState('');
+  const [createLeadType, setCreateLeadType] = useState<'BUYER' | 'SELLER' | 'UNKNOWN'>('UNKNOWN');
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
 
   const stageLookup = useMemo(() => {
     const map = new Map<
@@ -153,6 +170,9 @@ export default function PipelineBoard({
       if (tierFilter !== 'all') {
         params.scoreTier = [tierFilter];
       }
+      if (leadTypeFilter !== 'all') {
+        params.leadType = leadTypeFilter;
+      }
       if (activityFilter !== 'all') {
         params.lastActivityDays = Number(activityFilter);
       }
@@ -169,6 +189,7 @@ export default function PipelineBoard({
       selectedPipelineId,
       ownerFilter,
       tierFilter,
+      leadTypeFilter,
       activityFilter,
       preapprovedOnly,
       debouncedHasSearch,
@@ -199,6 +220,7 @@ export default function PipelineBoard({
       !debouncedHasSearch &&
       ownerFilter === 'all' &&
       tierFilter === 'all' &&
+      leadTypeFilter === 'all' &&
       activityFilter === 'all' &&
       !preapprovedOnly;
 
@@ -239,6 +261,7 @@ export default function PipelineBoard({
     debouncedHasSearch,
     ownerFilter,
     tierFilter,
+    leadTypeFilter,
     activityFilter,
     preapprovedOnly
   ]);
@@ -278,6 +301,9 @@ export default function PipelineBoard({
       if (tierFilter !== 'all' && lead.scoreTier !== tierFilter) {
         return false;
       }
+      if (leadTypeFilter !== 'all' && (lead.leadType ?? 'UNKNOWN') !== leadTypeFilter) {
+        return false;
+      }
       if (preapprovedOnly && !lead.preapproved) {
         return false;
       }
@@ -312,6 +338,7 @@ export default function PipelineBoard({
     leads,
     ownerFilter,
     tierFilter,
+    leadTypeFilter,
     activityFilter,
     preapprovedOnly,
     selectedPipeline,
@@ -440,15 +467,17 @@ export default function PipelineBoard({
     () =>
       ownerFilter !== 'all' ||
       tierFilter !== 'all' ||
+      leadTypeFilter !== 'all' ||
       activityFilter !== 'all' ||
       preapprovedOnly ||
       hasSearch,
-    [ownerFilter, tierFilter, activityFilter, preapprovedOnly, hasSearch]
+    [ownerFilter, tierFilter, leadTypeFilter, activityFilter, preapprovedOnly, hasSearch]
   );
 
   const resetFilters = useCallback(() => {
     setOwnerFilter('all');
     setTierFilter('all');
+    setLeadTypeFilter('all');
     setActivityFilter('all');
     setPreapprovedOnly(false);
     setSearchQuery('');
@@ -462,9 +491,103 @@ export default function PipelineBoard({
     setGuidedMode((prev) => !prev);
   }, []);
 
+  const openCreateLead = useCallback(
+    (targetStageId?: string) => {
+      const meta = targetStageId ? stageLookup.get(targetStageId) : null;
+      const pipeline = meta?.pipeline ?? selectedPipeline ?? pipelines[0];
+      const stage = meta?.stage ?? pipeline?.stages?.[0] ?? null;
+      if (!pipeline || !stage) {
+        setCreateError('No pipeline stages are configured yet.');
+        setCreateOpen(true);
+        return;
+      }
+
+      setCreatePipelineId(pipeline.id);
+      setCreateStageId(stage.id);
+      setCreateFirstName('');
+      setCreateLastName('');
+      setCreateEmail('');
+      setCreatePhone('');
+      setCreateLeadType('UNKNOWN');
+      setCreateError(null);
+      setCreateOpen(true);
+    },
+    [pipelines, selectedPipeline, stageLookup]
+  );
+
   const requestAddLead = useCallback(() => {
-    setGuidedMode(true);
-  }, []);
+    openCreateLead();
+  }, [openCreateLead]);
+
+  const createPipeline = useMemo(() => {
+    if (createPipelineId) {
+      return pipelines.find((pipeline) => pipeline.id === createPipelineId) ?? null;
+    }
+    return selectedPipeline ?? pipelines[0] ?? null;
+  }, [pipelines, selectedPipeline, createPipelineId]);
+
+  const createStageOptions = useMemo(() => createPipeline?.stages ?? [], [createPipeline]);
+
+  const canSubmitCreateLead = useMemo(() => {
+    const hasIdentity =
+      createFirstName.trim().length > 0 ||
+      createLastName.trim().length > 0 ||
+      createEmail.trim().length > 0 ||
+      createPhone.trim().length > 0;
+    return Boolean(hasIdentity && createPipelineId && createStageId && !isCreating);
+  }, [createFirstName, createLastName, createEmail, createPhone, createPipelineId, createStageId, isCreating]);
+
+  const submitCreateLead = useCallback(async () => {
+    if (isCreating) return;
+
+    const firstName = createFirstName.trim();
+    const lastName = createLastName.trim();
+    const email = createEmail.trim();
+    const phone = createPhone.trim();
+
+    if (!firstName && !lastName && !email && !phone) {
+      setCreateError('Add at least a name, email, or phone number.');
+      return;
+    }
+    if (!createPipelineId || !createStageId) {
+      setCreateError('Select a pipeline stage.');
+      return;
+    }
+
+    setIsCreating(true);
+    setCreateError(null);
+    try {
+      const created = await createLead({
+        firstName: firstName || undefined,
+        lastName: lastName || undefined,
+        email: email || undefined,
+        phone: phone || undefined,
+        pipelineId: createPipelineId,
+        stageId: createStageId,
+        leadType: createLeadType
+      });
+
+      setLeads((prev) => [created, ...prev]);
+      void queryClient.invalidateQueries({ queryKey: ['insights'] });
+      setCreateOpen(false);
+      setActiveLeadId(created.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to create lead.';
+      setCreateError(message);
+    } finally {
+      setIsCreating(false);
+    }
+  }, [
+    isCreating,
+    createFirstName,
+    createLastName,
+    createEmail,
+    createPhone,
+    createPipelineId,
+    createStageId,
+    createLeadType,
+    queryClient
+  ]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -517,6 +640,7 @@ export default function PipelineBoard({
         await updateLead(leadId, { stageId: stage.id, pipelineId: pipeline.id });
         snapshotRef.current = null;
         clearError();
+        void queryClient.invalidateQueries({ queryKey: ['insights'] });
         router.refresh();
       } catch (err) {
         showError(err);
@@ -562,12 +686,24 @@ export default function PipelineBoard({
             />
             <FilterSelect
               icon={UserRound}
-              label="Owner"
+              label="Assigned agent"
               value={ownerFilter}
               onChange={setOwnerFilter}
               options={[
-                { value: 'all', label: 'All owners' },
+                { value: 'all', label: 'All agents' },
                 ...owners.map((owner) => ({ value: owner.id, label: owner.name }))
+              ]}
+            />
+            <FilterSelect
+              icon={Target}
+              label="Lead type"
+              value={leadTypeFilter}
+              onChange={(value) => setLeadTypeFilter(value as typeof leadTypeFilter)}
+              options={[
+                { value: 'all', label: 'Any type' },
+                { value: 'BUYER', label: 'Buyer' },
+                { value: 'SELLER', label: 'Seller' },
+                { value: 'UNKNOWN', label: 'Unknown' }
               ]}
             />
             <FilterSelect
@@ -712,7 +848,7 @@ export default function PipelineBoard({
                     activeLeadId={activeLeadId}
                     isCompact={compactMode}
                     guidedMode={guidedMode}
-                    onRequestAddLead={requestAddLead}
+                    onRequestAddLead={openCreateLead}
                   />
                 );
               })}
@@ -761,6 +897,135 @@ export default function PipelineBoard({
           </div>
         </div>
       )}
+
+      <Sheet
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open);
+          if (!open) {
+            setCreateError(null);
+            setIsCreating(false);
+          }
+        }}
+      >
+        <SheetContent side="right" className="flex w-full flex-col gap-6 overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Add lead</SheetTitle>
+            <SheetDescription>Capture buyer/seller intent and drop them into a pipeline stage.</SheetDescription>
+          </SheetHeader>
+
+          {createError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              {createError}
+            </div>
+          ) : null}
+
+          <form
+            className="grid gap-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitCreateLead();
+            }}
+          >
+            <div className="grid gap-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lead type</label>
+              <select
+                value={createLeadType}
+                onChange={(event) => setCreateLeadType(event.target.value as typeof createLeadType)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                disabled={isCreating}
+              >
+                <option value="UNKNOWN">Unknown</option>
+                <option value="BUYER">Buyer</option>
+                <option value="SELLER">Seller</option>
+              </select>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">First name</label>
+                <Input value={createFirstName} onChange={(e) => setCreateFirstName(e.target.value)} disabled={isCreating} />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Last name</label>
+                <Input value={createLastName} onChange={(e) => setCreateLastName(e.target.value)} disabled={isCreating} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
+                <Input
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  disabled={isCreating}
+                  inputMode="email"
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Phone</label>
+                <Input value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} disabled={isCreating} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pipeline</label>
+                <select
+                  value={createPipelineId}
+                  onChange={(event) => {
+                    const nextPipelineId = event.target.value;
+                    setCreatePipelineId(nextPipelineId);
+                    const nextPipeline = pipelines.find((pipeline) => pipeline.id === nextPipelineId);
+                    const nextStage = nextPipeline?.stages?.[0];
+                    if (nextStage) {
+                      setCreateStageId(nextStage.id);
+                    }
+                  }}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  disabled={isCreating}
+                >
+                  {pipelines.map((pipeline) => (
+                    <option key={pipeline.id} value={pipeline.id}>
+                      {pipeline.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Stage</label>
+                <select
+                  value={createStageId}
+                  onChange={(event) => setCreateStageId(event.target.value)}
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100"
+                  disabled={isCreating}
+                >
+                  {createStageOptions.map((stage) => (
+                    <option key={stage.id} value={stage.id}>
+                      {stage.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <SheetFooter className="mt-2 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateOpen(false)}
+                disabled={isCreating}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!canSubmitCreateLead}>
+                {isCreating ? 'Creating…' : 'Create lead'}
+              </Button>
+            </SheetFooter>
+          </form>
+        </SheetContent>
+      </Sheet>
 
       <LoadMoreButton
         hasNext={Boolean(nextCursor)}
@@ -898,7 +1163,7 @@ interface StageColumnProps {
   activeLeadId: string | null;
   isCompact: boolean;
   guidedMode: boolean;
-  onRequestAddLead: () => void;
+  onRequestAddLead: (stageId?: string) => void;
 }
 
 function StageColumn({
@@ -971,7 +1236,7 @@ function StageColumn({
             </div>
             <button
               type="button"
-              onClick={onRequestAddLead}
+              onClick={() => onRequestAddLead(stage.id)}
               className="rounded-full bg-[var(--hatch-gradient)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(31,95,255,0.35)] hover:animate-[hatch-pulse_1.8s_ease-in-out]"
             >
               Add Lead
@@ -1122,6 +1387,14 @@ function LeadCard({
     typeof lead.score === 'number' && Number.isFinite(lead.score)
       ? Math.round(lead.score)
       : null;
+  const leadType = (lead.leadType ?? 'UNKNOWN').toUpperCase();
+  const leadTypeLabel = leadType === 'BUYER' ? 'Buyer' : leadType === 'SELLER' ? 'Seller' : 'Unknown';
+  const leadTypeTone =
+    leadType === 'BUYER'
+      ? 'bg-indigo-50 text-indigo-700'
+      : leadType === 'SELLER'
+        ? 'bg-emerald-50 text-emerald-700'
+        : 'bg-slate-100 text-slate-700';
   const contactChips = [
     lead.email ? { icon: Mail as LucideIcon, label: lead.email } : null,
     lead.phone ? { icon: Phone as LucideIcon, label: lead.phone } : null
@@ -1175,6 +1448,10 @@ function LeadCard({
                 ))}
               </div>
             )}
+            <span className={clsx('inline-flex w-fit items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold', leadTypeTone)}>
+              <Target className="h-3.5 w-3.5 opacity-80" aria-hidden />
+              {leadTypeLabel}
+            </span>
             {!isCompact && bestAction && (
               <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-1 text-xs font-semibold text-brand-700">
                 <Sparkles className="h-3 w-3" aria-hidden />

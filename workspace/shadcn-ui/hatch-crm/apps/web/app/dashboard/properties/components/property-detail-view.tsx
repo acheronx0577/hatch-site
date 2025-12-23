@@ -42,6 +42,8 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0
 });
 
+const isPresent = <T,>(value: T | null | undefined): value is T => value !== null && value !== undefined;
+
 export function PropertyDetailView({ orgId, listingId }: PropertyDetailViewProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -140,8 +142,8 @@ export function PropertyDetailView({ orgId, listingId }: PropertyDetailViewProps
   });
 
   const templateOptions = useMemo(() => templateSearchQuery.data ?? [], [templateSearchQuery.data]);
-  const buyerOptions = groupedContacts.BUYING.map((row) => row.person).filter(Boolean) as OrgListingContactRecord['person'][];
-  const sellerOptions = groupedContacts.SELLING.map((row) => row.person).filter(Boolean) as OrgListingContactRecord['person'][];
+  const buyerOptions = groupedContacts.BUYING.map((row) => row.person).filter(isPresent);
+  const sellerOptions = groupedContacts.SELLING.map((row) => row.person).filter(isPresent);
 
   const createContractMutation = useMutation({
     mutationFn: () =>
@@ -308,9 +310,9 @@ export function PropertyDetailView({ orgId, listingId }: PropertyDetailViewProps
                         </Link>
                         <p className="text-xs text-slate-500">{instance.template?.code ?? ''}</p>
                       </td>
-                      <td className="py-3 pr-4">
-                        <Badge className={getContractStatusBadge(instance.status)}>{instance.status}</Badge>
-                      </td>
+	                      <td className="py-3 pr-4">
+	                        <Badge className={getContractStatusBadge(instance.status)}>{formatContractStatus(instance.status)}</Badge>
+	                      </td>
                       <td className="py-3 pr-4">{instance.buyerPerson?.fullName ?? '—'}</td>
                       <td className="py-3">{new Date(instance.updatedAt).toLocaleString()}</td>
                     </tr>
@@ -582,8 +584,12 @@ const getListingStatusBadge = (status: string) => {
 
 const getContractStatusBadge = (status: string) => {
   if (status === 'SIGNED') return 'border border-emerald-100 bg-emerald-50 text-emerald-700';
-  if (status === 'SENT') return 'border border-amber-100 bg-amber-50 text-amber-700';
+  if (status === 'OUT_FOR_SIGNATURE') return 'border border-amber-100 bg-amber-50 text-amber-700';
   if (status === 'VOIDED') return 'border border-rose-100 bg-rose-50 text-rose-700';
   return 'border bg-slate-100 text-slate-700';
 };
 
+const formatContractStatus = (status: string) => {
+  if (status === 'OUT_FOR_SIGNATURE') return 'Sent';
+  return status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (char) => char.toUpperCase());
+};

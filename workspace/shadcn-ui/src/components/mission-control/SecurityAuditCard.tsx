@@ -15,7 +15,7 @@ export function SecurityAuditCard({ orgId }: SecurityAuditCardProps) {
       <div className="flex flex-col gap-4">
       <MlsSyncSummaryCard orgId={orgId} />
 
-      <Card className="!rounded-[24px]">
+      <Card className="!rounded-[var(--radius-lg)]">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100">
@@ -32,13 +32,13 @@ export function SecurityAuditCard({ orgId }: SecurityAuditCardProps) {
             <p className="text-sm text-slate-600">Stay investor- and compliance-ready.</p>
             <p className="text-[11px] text-slate-400">Every sensitive action is logged automatically.</p>
           </div>
-          <Button asChild size="sm">
+          <Button asChild size="sm" variant="outline">
             <Link to="/broker/audit-log">Open log</Link>
           </Button>
         </CardContent>
       </Card>
 
-      <Card className="!rounded-[24px]">
+      <Card className="!rounded-[var(--radius-lg)]">
         <CardHeader className="pb-3">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100">

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { ContextualHelpTrigger } from '@/components/help/ContextualHelp';
 import { fetchMlsConfig, MlsConfig, MlsProviderOption, updateMlsConfig } from '@/lib/api/mls';
 
 const DEFAULT_ORG_ID = process.env.NEXT_PUBLIC_ORG_ID ?? 'org-hatch';
@@ -84,7 +85,10 @@ export default function MlsSettingsPage() {
         <CardContent>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label className="block text-sm font-medium text-slate-600">Provider</label>
+              <div className="flex items-center gap-2">
+                <label className="block text-sm font-medium text-slate-600">Provider</label>
+                <ContextualHelpTrigger fieldPath="broker.profile.mlsProvider" className="h-7 w-7 text-slate-500 hover:text-slate-900" />
+              </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {PROVIDERS.map((provider) => (
                   <button
@@ -103,14 +107,20 @@ export default function MlsSettingsPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-slate-600">Office code</label>
+                <div className="flex items-center gap-2">
+                  <label className="block text-sm font-medium text-slate-600">Office code</label>
+                  <ContextualHelpTrigger fieldPath="broker.profile.mlsOfficeCode" className="h-7 w-7 text-slate-500 hover:text-slate-900" />
+                </div>
                 <Input
                   value={config.officeCode ?? ''}
                   onChange={(event) => setConfig((prev) => (prev ? { ...prev, officeCode: event.target.value } : prev))}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-600">Broker ID</label>
+                <div className="flex items-center gap-2">
+                  <label className="block text-sm font-medium text-slate-600">Broker ID</label>
+                  <ContextualHelpTrigger fieldPath="broker.profile.mlsId" className="h-7 w-7 text-slate-500 hover:text-slate-900" />
+                </div>
                 <Input
                   value={config.brokerId ?? ''}
                   onChange={(event) => setConfig((prev) => (prev ? { ...prev, brokerId: event.target.value } : prev))}
@@ -120,14 +130,20 @@ export default function MlsSettingsPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-slate-600">Board name</label>
+                <div className="flex items-center gap-2">
+                  <label className="block text-sm font-medium text-slate-600">Board name</label>
+                  <ContextualHelpTrigger fieldPath="broker.profile.mlsBoardName" className="h-7 w-7 text-slate-500 hover:text-slate-900" />
+                </div>
                 <Input
                   value={config.boardName ?? ''}
                   onChange={(event) => setConfig((prev) => (prev ? { ...prev, boardName: event.target.value } : prev))}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-600">Board URL</label>
+                <div className="flex items-center gap-2">
+                  <label className="block text-sm font-medium text-slate-600">Board URL</label>
+                  <ContextualHelpTrigger fieldPath="broker.profile.mlsBoardUrl" className="h-7 w-7 text-slate-500 hover:text-slate-900" />
+                </div>
                 <Input
                   value={config.boardUrl ?? ''}
                   onChange={(event) => setConfig((prev) => (prev ? { ...prev, boardUrl: event.target.value } : prev))}

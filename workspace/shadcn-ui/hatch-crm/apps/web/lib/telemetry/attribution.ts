@@ -27,6 +27,14 @@ const normalizeParam = (value: string | null): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
+const pickParam = (params: URLSearchParams, keys: string[]): string | null => {
+  for (const key of keys) {
+    const value = normalizeParam(params.get(key));
+    if (value) return value;
+  }
+  return null;
+};
+
 export function getAttribution(): AttributionSnapshot {
   if (typeof window === 'undefined') {
     return emptySnapshot();
@@ -35,9 +43,9 @@ export function getAttribution(): AttributionSnapshot {
   const url = new URL(window.location.href);
   const params = url.searchParams;
 
-  const utmSource = normalizeParam(params.get('utm_source'));
-  const utmMedium = normalizeParam(params.get('utm_medium'));
-  const utmCampaign = normalizeParam(params.get('utm_campaign'));
+  const utmSource = pickParam(params, ['utm_source', 'utmSource']);
+  const utmMedium = pickParam(params, ['utm_medium', 'utmMedium']);
+  const utmCampaign = pickParam(params, ['utm_campaign', 'utmCampaign']);
   const gclid = normalizeParam(params.get('gclid'));
   const fbclid = normalizeParam(params.get('fbclid'));
 
@@ -82,4 +90,3 @@ export function getAttribution(): AttributionSnapshot {
     return emptySnapshot();
   }
 }
-

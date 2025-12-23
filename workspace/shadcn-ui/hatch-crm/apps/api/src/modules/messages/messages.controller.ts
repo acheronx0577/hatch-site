@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBody, ApiOkResponse, ApiQuery } from '@nestjs/swagger';
 import { MessageChannel } from '@hatch/db';
 import type { Message } from '@hatch/db';
+import type { FastifyRequest } from 'fastify';
 
 import { ApiModule, ApiStandardErrors } from '../common';
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { InboundMessageDto } from './dto/inbound-message.dto';
 import { SendEmailDto } from './dto/send-email.dto';
 import { SendSmsDto } from './dto/send-sms.dto';
@@ -14,6 +16,7 @@ import { MAX_PAGE_SIZE } from '../common/dto/cursor-pagination-query.dto';
 @ApiModule('Messaging')
 @ApiStandardErrors()
 @Controller('messages')
+@UseGuards(JwtAuthGuard)
 export class MessagesController {
   constructor(private readonly messages: MessagesService) {}
 
@@ -46,6 +49,7 @@ export class MessagesController {
   })
   @ApiOkResponse({ type: MessageListResponseDto })
   async listMessages(
+    @Req() req: FastifyRequest & { user?: Record<string, unknown> },
     @Query('tenantId') tenantId: string | undefined,
     @Query('channel') channel: MessageChannel | undefined,
     @Query('direction') direction: 'INBOUND' | 'OUTBOUND' | undefined,
@@ -53,8 +57,17 @@ export class MessagesController {
     @Query('limit') limit: string | undefined,
     @Query('cursor') cursor: string | undefined
   ): Promise<MessageListResponseDto> {
+    const authTenantId = typeof req.user?.tenantId === 'string' ? req.user.tenantId : null;
+    const effectiveTenantId = authTenantId ?? tenantId ?? null;
+    if (!effectiveTenantId) {
+      throw new BadRequestException('tenantId is required');
+    }
+    if (authTenantId && tenantId && tenantId !== authTenantId) {
+      throw new ForbiddenException('tenantId does not match authenticated tenant');
+    }
+
     const parsedLimit = limit ? Number.parseInt(limit, 10) : undefined;
-    return this.messages.listMessages(tenantId, {
+    return this.messages.listMessages(effectiveTenantId, {
       channel,
       direction,
       q,
@@ -66,15 +79,47 @@ export class MessagesController {
   @Post('sms')
   @ApiBody({ type: SendSmsDto })
   @ApiOkResponse({ type: MessageResponseDto })
-  async sendSms(@Body() dto: SendSmsDto): Promise<Message> {
-    return this.messages.sendSms(dto);
+  async sendSms(@Req() req: FastifyRequest & { user?: Record<string, unknown> }, @Body() dto: SendSmsDto): Promise<Message> {
+    const authUserId =
+      (typeof req.user?.userId === 'string' ? req.user.userId : null) ??
+      (typeof req.user?.sub === 'string' ? req.user.sub : null);
+    const authTenantId = typeof req.user?.tenantId === 'string' ? req.user.tenantId : null;
+
+    if (authUserId && dto.userId && dto.userId !== authUserId) {
+      throw new ForbiddenException('userId does not match authenticated user');
+    }
+    if (authTenantId && dto.tenantId && dto.tenantId !== authTenantId) {
+      throw new ForbiddenException('tenantId does not match authenticated tenant');
+    }
+
+    return this.messages.sendSms({
+      ...dto,
+      userId: authUserId ?? dto.userId,
+      tenantId: authTenantId ?? dto.tenantId
+    });
   }
 
   @Post('email')
   @ApiBody({ type: SendEmailDto })
   @ApiOkResponse({ type: MessageResponseDto })
-  async sendEmail(@Body() dto: SendEmailDto): Promise<Message> {
-    return this.messages.sendEmail(dto);
+  async sendEmail(@Req() req: FastifyRequest & { user?: Record<string, unknown> }, @Body() dto: SendEmailDto): Promise<Message> {
+    const authUserId =
+      (typeof req.user?.userId === 'string' ? req.user.userId : null) ??
+      (typeof req.user?.sub === 'string' ? req.user.sub : null);
+    const authTenantId = typeof req.user?.tenantId === 'string' ? req.user.tenantId : null;
+
+    if (authUserId && dto.userId && dto.userId !== authUserId) {
+      throw new ForbiddenException('userId does not match authenticated user');
+    }
+    if (authTenantId && dto.tenantId && dto.tenantId !== authTenantId) {
+      throw new ForbiddenException('tenantId does not match authenticated tenant');
+    }
+
+    return this.messages.sendEmail({
+      ...dto,
+      userId: authUserId ?? dto.userId,
+      tenantId: authTenantId ?? dto.tenantId
+    });
   }
 
   @Post('inbound')

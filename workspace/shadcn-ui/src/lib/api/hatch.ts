@@ -345,12 +345,15 @@ export type MessageChannelType = 'EMAIL' | 'SMS' | 'VOICE' | 'IN_APP';
 
 export type LeadTouchpointType = 'MESSAGE' | 'CALL' | 'MEETING' | 'TASK' | 'NOTE' | 'OTHER';
 
+export type LeadType = 'BUYER' | 'SELLER' | 'UNKNOWN';
+
 export type LeadSummary = {
   id: string;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
   phone: string | null;
+  leadType?: LeadType;
   score: number;
   scoreTier: string;
   pipelineId?: string | null;
@@ -795,7 +798,47 @@ export async function convertContactToOpportunity(
   });
 }
 
-export const getPipelines = () => apiFetch<Pipeline[]>('/pipelines');
+const DEFAULT_TENANT_ID = import.meta.env.VITE_TENANT_ID || 'tenant-hatch';
+
+export async function getPipelines(brokerageId?: string) {
+  const resolved = brokerageId?.trim() || DEFAULT_TENANT_ID;
+  const search = new URLSearchParams();
+  if (resolved) {
+    search.set('brokerageId', resolved);
+  }
+  const query = search.toString();
+  const path = query ? `/pipelines?${query}` : '/pipelines';
+  const pipelines = await apiFetch<Pipeline[]>(path);
+  return (pipelines ?? [])
+    .map((pipeline) => ({
+      ...pipeline,
+      stages: [...(pipeline.stages ?? [])].sort((a, b) => a.order - b.order)
+    }))
+    .sort((a, b) => a.order - b.order);
+}
+
+export type PipelineBoardStageSummary = {
+  id: string;
+  name: string;
+  count: number;
+  slaBreaches: number;
+  oldestHours: number;
+};
+
+export type PipelineBoardColumnsResponse = {
+  pipelineId: string;
+  stages: PipelineBoardStageSummary[];
+};
+
+export async function getPipelineBoardColumns(pipelineId: string, filters?: Record<string, unknown>) {
+  const search = new URLSearchParams();
+  if (filters && Object.keys(filters).length > 0) {
+    search.set('filters', JSON.stringify(filters));
+  }
+  const query = search.toString();
+  const path = query ? `/pipelines/${pipelineId}/board/columns?${query}` : `/pipelines/${pipelineId}/board/columns`;
+  return apiFetch<PipelineBoardColumnsResponse>(path);
+}
 
 export interface ListLeadsParams {
   ownerId?: string;
@@ -804,6 +847,7 @@ export interface ListLeadsParams {
   scoreTier?: string[];
   lastActivityDays?: number;
   preapproved?: boolean;
+  leadType?: LeadType;
   limit?: number;
 }
 
@@ -815,6 +859,7 @@ export async function getLeads(params: ListLeadsParams = {}) {
   if (params.scoreTier?.length) search.set('scoreTier', params.scoreTier.join(','));
   if (params.lastActivityDays) search.set('lastActivityDays', String(params.lastActivityDays));
   if (params.preapproved !== undefined) search.set('preapproved', String(params.preapproved));
+  if (params.leadType) search.set('leadType', params.leadType);
   if (params.limit) search.set('limit', String(params.limit));
 
   const query = search.toString();
@@ -840,6 +885,7 @@ export interface UpdateLeadPayload {
   ownerId?: string | null;
   pipelineId?: string;
   stageId?: string;
+  leadType?: LeadType;
 
   // Communication consent
   consentEmail?: boolean;
@@ -853,6 +899,7 @@ export interface UpdateLeadPayload {
     budgetMax?: number | null;
     timeframeDays?: number | null;
     geo?: string | null;
+    inventoryMatch?: number | null;
   } | null;
   notes?: string;
 }
@@ -872,6 +919,7 @@ export type CreateLeadPayload = {
   ownerId?: string;
   pipelineId?: string;
   stageId?: string;
+  leadType?: LeadType;
   consentEmail?: boolean;
   consentSMS?: boolean;
 };
@@ -1385,6 +1433,84 @@ export type RoutingMetricsSummary = {
   agents: Array<{ agentId: string; agentName: string; total: number; keptRate: number }>;
 };
 
+export type LeadRoutingOrgMode = 'AUTOMATIC' | 'APPROVAL_POOL';
+
+export type LeadRoutingSettings = {
+  mode: LeadRoutingOrgMode;
+  approvalTeamId: string | null;
+  approvalTeamName: string | null;
+  updatedAt: string | null;
+};
+
+export type RoutingApprovalCandidate = {
+  agentId: string;
+  fullName: string;
+  score: number | null;
+  reasons: string[];
+};
+
+export type RoutingApprovalQueueItem = {
+  assignmentId: string;
+  personId: string;
+  assignedAt: string;
+  lead: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    leadType: 'BUYER' | 'SELLER' | 'UNKNOWN' | string;
+    stage: string;
+    source: string | null;
+    createdAt: string;
+  };
+  recommended: RoutingApprovalCandidate | null;
+  candidates: RoutingApprovalCandidate[];
+};
+
+export type RoutingApprovalQueueResponse = {
+  items: RoutingApprovalQueueItem[];
+  total: number;
+};
+
+export async function fetchRoutingSettings(tenantId: string) {
+  return apiFetch<LeadRoutingSettings>(`/routing/settings?tenantId=${encodeURIComponent(tenantId)}`);
+}
+
+export async function updateRoutingSettings(
+  tenantId: string,
+  payload: { mode: LeadRoutingOrgMode; approvalTeamId?: string | null }
+) {
+  return apiFetch<LeadRoutingSettings>(`/routing/settings?tenantId=${encodeURIComponent(tenantId)}`, {
+    method: 'PATCH',
+    body: payload
+  });
+}
+
+export async function fetchRoutingApprovalQueue(tenantId: string) {
+  return apiFetch<RoutingApprovalQueueResponse>(`/routing/approval-queue?tenantId=${encodeURIComponent(tenantId)}`);
+}
+
+export async function approveRoutingApprovalQueueItem(params: {
+  tenantId: string;
+  assignmentId: string;
+  agentId?: string | null;
+}) {
+  return apiFetch<{ assignmentId: string; personId: string; agentId: string }>(
+    `/routing/approval-queue/${encodeURIComponent(params.assignmentId)}/approve?tenantId=${encodeURIComponent(params.tenantId)}`,
+    {
+      method: 'POST',
+      body: { agentId: params.agentId ?? null }
+    }
+  );
+}
+
+export async function rejectRoutingApprovalQueueItem(params: { tenantId: string; assignmentId: string }) {
+  return apiFetch<{ assignmentId: string }>(
+    `/routing/approval-queue/${encodeURIComponent(params.assignmentId)}/reject?tenantId=${encodeURIComponent(params.tenantId)}`,
+    { method: 'POST' }
+  );
+}
+
 export async function fetchRoutingRules(tenantId: string) {
   return apiFetch<LeadRoutingRule[]>(`/routing/rules?tenantId=${encodeURIComponent(tenantId)}`);
 }
@@ -1794,6 +1920,24 @@ export interface DraftPdfUploadOptions {
   documentVersion?: string;
 }
 
+export type HatchFieldMappingAvailableField = {
+  field: string;
+  label: string;
+  required?: boolean;
+};
+
+export type HatchFieldMappingSuggestion = {
+  sourceField: string;
+  hatchField: string | null;
+  confidence: number;
+  reasoning?: string;
+  possibleMatches?: string[];
+};
+
+export type HatchFieldMappingResponse = {
+  suggestions: HatchFieldMappingSuggestion[];
+};
+
 export async function uploadDraftPdf(
   file: File,
   options: DraftPdfUploadOptions = {}
@@ -1810,6 +1954,19 @@ export async function uploadDraftPdf(
   return apiFetch<DraftPdfUploadResponse>('/drafts/upload', {
     method: 'POST',
     body: formData
+  });
+}
+
+export async function suggestHatchFieldMappings(input: {
+  sourceFields: string[];
+  sampleValues?: Record<string, Array<string | number>>;
+  availableFields: HatchFieldMappingAvailableField[];
+}): Promise<HatchFieldMappingResponse> {
+  const token = (import.meta.env.VITE_API_TOKEN ?? '').trim();
+  return apiFetch<HatchFieldMappingResponse>('/ai/field-mapping', {
+    method: 'POST',
+    token: token || undefined,
+    body: input
   });
 }
 
@@ -2135,6 +2292,79 @@ export async function chatAiPersona(payload: {
   return apiFetch('ai/personas/chat', {
     method: 'POST',
     body: JSON.stringify(payload)
+  });
+}
+
+export type FollowUpType =
+  | 'after_showing'
+  | 'after_open_house'
+  | 'new_listing_match'
+  | 'price_reduction'
+  | 'just_checking_in'
+  | 'cold_lead_reengagement'
+  | 'offer_update'
+  | 'under_contract_update'
+  | 'closing_reminder'
+  | 'post_closing_followup'
+  | 'anniversary_touchpoint'
+  | 'market_update';
+
+export type AiUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  estimatedCost?: number;
+};
+
+export type FollowUpEmailDraft = {
+  subject: string;
+  body: string;
+  requestId: string;
+  pendingActionId: string | null;
+  requiresApproval: boolean;
+  usage?: AiUsage;
+};
+
+export type FollowUpTextDraft = {
+  text: string;
+  requestId: string;
+  pendingActionId: string | null;
+  requiresApproval: boolean;
+  usage?: AiUsage;
+};
+
+export async function generateFollowUpEmail(payload: {
+  leadId: string;
+  followUpType: FollowUpType;
+  specificGoal?: string;
+}): Promise<FollowUpEmailDraft> {
+  return apiFetch('/ai/follow-up/email', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function generateFollowUpText(payload: {
+  leadId: string;
+  followUpType: FollowUpType;
+  brief?: string;
+}): Promise<FollowUpTextDraft> {
+  return apiFetch('/ai/follow-up/text', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function approveAiPendingAction(pendingActionId: string, notes?: string) {
+  return apiFetch(`/ai/pending-actions/${pendingActionId}/approve`, {
+    method: 'POST',
+    body: JSON.stringify(notes ? { notes } : {})
+  });
+}
+
+export async function sendApprovedFollowUp(pendingActionId: string): Promise<{ ok: boolean; messageId: string }> {
+  return apiFetch(`/ai/follow-up/${pendingActionId}/send`, {
+    method: 'POST'
   });
 }
 

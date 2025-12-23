@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -10,13 +10,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Upload,
   FileSpreadsheet,
-  CheckCircle,
   AlertCircle,
-  AlertTriangle,
   X,
-  Download,
-  Eye,
-  Trash2
+  Loader2,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import type { ExtractedLabelValue } from '@hatch/shared'
@@ -28,7 +24,12 @@ import {
 } from '@/utils/fuzzyFieldMatcher'
 import { MIN_PROPERTY_PHOTOS, MAX_PROPERTY_PHOTOS } from '@/constants/photoRequirements'
 import { toast } from '@/components/ui/use-toast'
-import { uploadDraftPdf, type DraftPdfUploadResponse } from '@/lib/api/hatch'
+import {
+  suggestHatchFieldMappings,
+  uploadDraftPdf,
+  type DraftPdfUploadResponse,
+  type HatchFieldMappingAvailableField
+} from '@/lib/api/hatch'
 
 // Local FieldMapping type (module does not export it)
 type FieldMapping = {
@@ -72,11 +73,63 @@ export interface ValidationError {
 const MAX_PDF_SIZE_MB = 25
 const PDF_VENDOR_FALLBACK = 'Unknown Vendor'
 const PDF_DOCUMENT_VERSION = 'unspecified'
+const MAX_AI_FIELD_MAPPING_BATCHES = 3
 
 const isPdfFile = (file: File) =>
   file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
 
 type PdfCanonicalDraft = DraftPdfUploadResponse['draft']
+
+const AI_FIELD_MAPPING_AVAILABLE_FIELDS: HatchFieldMappingAvailableField[] = [
+  { field: 'MLSNumber', label: 'MLS Number', required: true },
+  { field: 'Status', label: 'Listing Status' },
+  { field: 'ListPrice', label: 'List Price', required: true },
+  { field: 'OriginalListPrice', label: 'Original List Price' },
+
+  { field: 'StreetLine', label: 'Street Address (full)' },
+  { field: 'StreetNumber', label: 'Street Number', required: true },
+  { field: 'StreetName', label: 'Street Name', required: true },
+  { field: 'StreetSuffix', label: 'Street Suffix', required: true },
+  { field: 'UnitNumber', label: 'Unit / Apt' },
+  { field: 'City', label: 'City', required: true },
+  { field: 'State', label: 'State', required: true },
+  { field: 'ZipCode', label: 'ZIP Code', required: true },
+  { field: 'ZipPlus4', label: 'ZIP+4' },
+  { field: 'CountyOrParish', label: 'County' },
+  { field: 'SubdivisionName', label: 'Subdivision' },
+
+  { field: 'PropertyType', label: 'Property Type' },
+  { field: 'PropertySubType', label: 'Property Sub-Type' },
+  { field: 'ArchitecturalStyle', label: 'Architectural Style' },
+
+  { field: 'BedroomsTotal', label: 'Bedrooms' },
+  { field: 'BathroomsTotal', label: 'Bathrooms (total)' },
+  { field: 'BathroomsFull', label: 'Bathrooms (full)' },
+  { field: 'BathroomsHalf', label: 'Bathrooms (half)' },
+  { field: 'LivingArea', label: 'Living Area (sqft)' },
+  { field: 'BuildingAreaTotal', label: 'Total Building Area (sqft)' },
+  { field: 'LotSizeSquareFeet', label: 'Lot Size (sqft)' },
+  { field: 'LotSizeAcres', label: 'Lot Size (acres)' },
+  { field: 'YearBuilt', label: 'Year Built' },
+
+  { field: 'Latitude', label: 'Latitude' },
+  { field: 'Longitude', label: 'Longitude' },
+
+  { field: 'PhotoURLs', label: 'Photo URLs' },
+
+  { field: 'ListingAgentName', label: 'Listing Agent Name' },
+  { field: 'ListingAgentPhone', label: 'Listing Agent Phone' },
+  { field: 'ListingAgentEmail', label: 'Listing Agent Email' },
+  { field: 'ListingAgentLicense', label: 'Listing Agent License' },
+  { field: 'ListingOfficeName', label: 'Listing Office Name' },
+  { field: 'ListingOfficePhone', label: 'Listing Office Phone' },
+  { field: 'ListingOfficeEmail', label: 'Listing Office Email' },
+  { field: 'BrokerageLicense', label: 'Brokerage License' },
+
+  { field: 'PublicRemarks', label: 'Public Remarks / Description' },
+  { field: 'PrivateRemarks', label: 'Private Remarks' },
+  { field: 'ShowingInstructions', label: 'Showing Instructions' }
+];
 
 // Safe lower-case helper to avoid crashes on undefined/null/non-strings
 const safeLower = (v: any) =>
@@ -227,7 +280,10 @@ const ALIAS_TO_STANDARD: Record<string, string> = {
   remarksprivate: 'PrivateRemarks',
 }
 
-const buildHeuristicMappings = (headers: string[]): FieldMapping[] => {
+const buildHeuristicMappings = (
+  headers: string[],
+  overrides: Record<string, string> = {}
+): FieldMapping[] => {
   // Build a quick lookup of standard names declared in MLS_FIELD_DEFINITIONS
   const standardNames = (MLS_FIELD_DEFINITIONS || [])
     .map((d: any) => d?.standardName ?? d?.name ?? d?.key)
@@ -239,6 +295,12 @@ const buildHeuristicMappings = (headers: string[]): FieldMapping[] => {
   headers.forEach((h) => {
     const n = norm(h)
     if (!n) return
+
+    const overridden = overrides[n]
+    if (overridden) {
+      mappings.push({ inputField: h, mlsField: { standardName: overridden } as any, confidence: 0.95 })
+      return
+    }
 
     // 1) Direct match to a known standard name
     if (normStandards.has(n)) {
@@ -726,6 +788,8 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
   const [previewData, setPreviewData] = useState<Record<string, any[]>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [mappingReport, setMappingReport] = useState<{ mapped: number; unmapped: string[] }>({ mapped: 0, unmapped: [] })
+  const [aiOverrides, setAiOverrides] = useState<Record<string, string>>({})
+  const [aiMappingLoading, setAiMappingLoading] = useState(false)
 
   const previewFile = useCallback(async (file: File): Promise<any[] | null> => {
     if (isPdfFile(file)) {
@@ -739,16 +803,6 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
 
     try {
       const data = await readFileData(file)
-      try {
-        const headers = Object.keys((data?.[0] ?? {}))
-        const heuristicMappings = buildHeuristicMappings(headers as string[])
-        const previewStd = toStandardizedRows(data.slice(0, 5), heuristicMappings)
-        if (Array.isArray(previewStd) && previewStd.length) {
-          return previewStd
-        }
-      } catch (_) {
-        // ignore and fall back to original preview below
-      }
       if (data.length > MAX_RECORDS_PER_FILE) {
         setUploadError(`Maximum ${MAX_RECORDS_PER_FILE} listings allowed per file (${file.name})`)
         return null
@@ -845,6 +899,45 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
     }
   }, [previewFile, selectedFiles])
 
+  useEffect(() => {
+    if (selectedFiles.length === 0) {
+      setMappingReport({ mapped: 0, unmapped: [] })
+      return
+    }
+
+    const aggregatedMappings = new Set<string>()
+    const aggregatedUnmapped = new Set<string>()
+
+    selectedFiles.forEach((file) => {
+      if (isPdfFile(file)) return
+      const rows = previewData[file.name]
+      const firstRow = rows?.[0]
+      if (!firstRow || typeof firstRow !== 'object') return
+
+      const headers = Object.keys(firstRow)
+      if (headers.length === 0) return
+
+      const mappings = buildHeuristicMappings(headers, aiOverrides)
+      mappings.forEach((mapping) => {
+        if (mapping?.mlsField?.standardName) {
+          aggregatedMappings.add(mapping.mlsField.standardName)
+        }
+      })
+
+      const mappedInputs = new Set(mappings.map((mapping) => norm(mapping.inputField)))
+      headers.forEach((header) => {
+        if (!mappedInputs.has(norm(header))) {
+          aggregatedUnmapped.add(header)
+        }
+      })
+    })
+
+    setMappingReport({
+      mapped: aggregatedMappings.size,
+      unmapped: Array.from(aggregatedUnmapped)
+    })
+  }, [aiOverrides, previewData, selectedFiles])
+
   const readFileData = (file: File): Promise<any[]> => {
     return new Promise((resolve, reject) => {
       if (isPdfFile(file)) {
@@ -902,7 +995,70 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
     })
   }
 
-  const validateListingData = (data: any[]): { validationErrors: ValidationError[], fieldMappings: FieldMapping[], unmappedHeaders: string[] } => {
+  const buildAiSampleValues = (sourceFields: string[]) => {
+    const sampleValues: Record<string, Array<string | number>> = Object.fromEntries(
+      sourceFields.map((field) => [field, []])
+    )
+
+    Object.values(previewData).forEach((rows) => {
+      if (!Array.isArray(rows)) return
+      rows.forEach((row) => {
+        if (!row || typeof row !== 'object') return
+        sourceFields.forEach((field) => {
+          const samples = sampleValues[field]
+          if (!samples || samples.length >= 3) return
+          const value = (row as any)[field]
+          if (value === undefined || value === null) return
+
+          if (typeof value === 'string') {
+            const trimmed = value.trim()
+            if (!trimmed) return
+            samples.push(trimmed.slice(0, 120))
+            return
+          }
+
+          if (typeof value === 'number' && Number.isFinite(value)) {
+            samples.push(value)
+            return
+          }
+
+          const asText = String(value).trim()
+          if (asText) {
+            samples.push(asText.slice(0, 120))
+          }
+        })
+      })
+    })
+
+    return sampleValues
+  }
+
+  const getAiOverridesForFields = async (sourceFields: string[]): Promise<Record<string, string>> => {
+    if (sourceFields.length === 0) return {}
+
+    const sampleValues = buildAiSampleValues(sourceFields)
+    const response = await suggestHatchFieldMappings({
+      sourceFields,
+      sampleValues,
+      availableFields: AI_FIELD_MAPPING_AVAILABLE_FIELDS
+    })
+
+    const suggestions = Array.isArray(response?.suggestions) ? response.suggestions : []
+    const overrides: Record<string, string> = {}
+    suggestions.forEach((suggestion) => {
+      const sourceField = (suggestion?.sourceField ?? '').trim()
+      const hatchField = (suggestion?.hatchField ?? '').trim()
+      if (!sourceField || !hatchField) return
+      overrides[norm(sourceField)] = hatchField
+    })
+
+    return overrides
+  }
+
+  const validateListingData = (
+    data: any[],
+    overrides: Record<string, string> = aiOverrides
+  ): { validationErrors: ValidationError[], fieldMappings: FieldMapping[], unmappedHeaders: string[] } => {
     const validationErrors: ValidationError[] = []
     let fieldMappings: FieldMapping[] = []
     if (data.length === 0) return { validationErrors, fieldMappings, unmappedHeaders: [] }
@@ -934,7 +1090,7 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
 
     // Fallback: if nothing (or very few) fields were detected, try heuristic matching
     if (!fieldMappings || fieldMappings.length < 3) {
-      const heuristic = buildHeuristicMappings(headers as string[])
+      const heuristic = buildHeuristicMappings(headers as string[], overrides)
       // Merge unique mappings by target standard name (avoid duplicates)
       const byStd = new Map<string, FieldMapping>()
       ;[...(fieldMappings || []), ...heuristic].forEach((m) => {
@@ -967,6 +1123,25 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
     (fieldMappings || []).forEach((m: FieldMapping) => {
       const k = norm(m?.inputField)
       if (k && !byInput.has(k)) byInput.set(k, m)
+    })
+
+    // Apply AI overrides as a last-pass assist (fill gaps / low-confidence mappings).
+    headers.forEach((header) => {
+      const key = norm(header)
+      const overrideStd = overrides[key]
+      if (!overrideStd) return
+
+      const existing = byInput.get(key)
+      const existingConfidence = existing?.confidence ?? 0
+      if (existing && existingConfidence >= 0.8) {
+        return
+      }
+
+      byInput.set(key, {
+        inputField: header,
+        mlsField: { standardName: overrideStd } as any,
+        confidence: 0.95
+      })
     })
 
     // Final MERGED mappings used downstream
@@ -1579,6 +1754,49 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
     setUploadProgress(0)
 
     try {
+      let runtimeOverrides: Record<string, string> = { ...aiOverrides }
+      const aiTried = new Set(Object.keys(runtimeOverrides))
+      let aiBatchesUsed = 0
+      let aiErrorNotified = false
+
+      const tryApplyAiMappings = async (fields: string[]) => {
+        if (!fields || fields.length === 0) return
+        if (aiBatchesUsed >= MAX_AI_FIELD_MAPPING_BATCHES) return
+
+        const unique = Array.from(new Set(fields.map((field) => (field ?? '').trim()).filter(Boolean)))
+        const candidates = unique.filter((field) => !aiTried.has(norm(field))).slice(0, 25)
+        if (candidates.length === 0) return
+
+        setAiMappingLoading(true)
+        try {
+          const newOverrides = await getAiOverridesForFields(candidates)
+          aiBatchesUsed += 1
+
+          candidates.forEach((field) => aiTried.add(norm(field)))
+
+          const hasNew = Object.keys(newOverrides).length > 0
+          if (hasNew) {
+            runtimeOverrides = { ...runtimeOverrides, ...newOverrides }
+            setAiOverrides(runtimeOverrides)
+          }
+        } catch (error) {
+          console.error('AI field mapping failed:', error)
+          candidates.forEach((field) => aiTried.add(norm(field)))
+          if (!aiErrorNotified) {
+            aiErrorNotified = true
+            toast({
+              title: 'AI mapping unavailable',
+              description: 'Continuing with automatic heuristic mapping.',
+              variant: 'warning'
+            })
+          }
+        } finally {
+          setAiMappingLoading(false)
+        }
+      }
+
+      await tryApplyAiMappings(mappingReport.unmapped)
+
       const aggregateListings: DraftListing[] = []
       const aggregatedMappings = new Set<string>()
       const aggregatedUnmapped = new Set<string>()
@@ -1606,7 +1824,13 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
           throw new Error(`${file.name}: Maximum ${MAX_RECORDS_PER_FILE} listings per file exceeded`)
         }
 
-        const { validationErrors, fieldMappings, unmappedHeaders } = validateListingData(data)
+        let validationResult = validateListingData(data, runtimeOverrides)
+        if (validationResult.unmappedHeaders.length > 0) {
+          await tryApplyAiMappings(validationResult.unmappedHeaders)
+          validationResult = validateListingData(data, runtimeOverrides)
+        }
+
+        const { validationErrors, fieldMappings, unmappedHeaders } = validationResult
 
         fieldMappings.forEach((mapping) => {
           if (mapping?.mlsField?.standardName) {
@@ -1693,16 +1917,8 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
     setIsProcessing(false)
     setUploadError(null)
     setMappingReport({ mapped: 0, unmapped: [] })
-  }
-
-  const downloadTemplate = () => {
-    // Create a link to download the new Hatch MLS Template
-    const link = document.createElement('a')
-    link.href = '/templates/Hatch MLS Template.numbers'
-    link.download = 'Hatch MLS Template.numbers'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    setAiOverrides({})
+    setAiMappingLoading(false)
   }
 
   const requiredFields = getRequiredFields()
@@ -1724,18 +1940,6 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Template Download */}
-          <div className="flex justify-between items-center p-4 bg-blue-50 rounded-lg">
-            <div>
-              <h4 className="font-medium">Need a template?</h4>
-              <p className="text-sm text-gray-600">Download our enhanced Hatch MLS template with all {MLS_FIELD_DEFINITIONS.length} supported fields</p>
-            </div>
-            <Button variant="outline" onClick={downloadTemplate} className="text-blue-600 border-blue-200">
-              <Download className="w-4 h-4 mr-2" />
-              Download Template
-            </Button>
-          </div>
-
           {/* Field Mapping Info */}
           {/* File Upload */}
           <div className="space-y-4">
@@ -1779,23 +1983,35 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
                   {mappingReport.unmapped.length ? ` • ${mappingReport.unmapped.length} unmapped` : ''}
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                {mappingReport.unmapped.length > 0 ? (
-                  <div className="text-sm">
-                    <div className="mb-2 text-gray-700 font-medium">Unmapped headers (add aliases for these):</div>
-                    <div className="flex flex-wrap gap-2">
-                      {mappingReport.unmapped.slice(0, 40).map((h) => (
-                        <Badge key={h} variant="secondary">{h}</Badge>
-                      ))}
-                      {mappingReport.unmapped.length > 40 && (
-                        <span className="text-xs text-gray-500">…and {mappingReport.unmapped.length - 40} more</span>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-sm text-green-700">All headers mapped 🎉</div>
-                )}
-              </CardContent>
+	              <CardContent>
+	                {mappingReport.unmapped.length > 0 ? (
+	                  <div className="text-sm">
+	                    <div className="mb-2 text-gray-700 font-medium">Unmapped headers (add aliases for these):</div>
+	                    <div className="flex flex-wrap gap-2">
+	                      {mappingReport.unmapped.slice(0, 40).map((h) => (
+	                        <Badge key={h} variant="secondary">{h}</Badge>
+	                      ))}
+	                      {mappingReport.unmapped.length > 40 && (
+	                        <span className="text-xs text-gray-500">…and {mappingReport.unmapped.length - 40} more</span>
+	                      )}
+	                    </div>
+	                    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+	                      <div className="text-xs text-slate-600">
+	                        {aiMappingLoading ? (
+	                          <span className="inline-flex items-center">
+	                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+	                            AI is mapping your columns…
+	                          </span>
+	                        ) : (
+	                          'AI will assist mapping these columns during upload.'
+	                        )}
+	                      </div>
+	                    </div>
+	                  </div>
+	                ) : (
+	                  <div className="text-sm text-green-700">All headers mapped 🎉</div>
+	                )}
+	              </CardContent>
             </Card>
           )}
 
@@ -1886,16 +2102,16 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
           )}
 
           {/* Processing Progress */}
-          {isProcessing && (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Processing with enhanced field mapping and address parsing...</span>
-                    <span className="text-sm text-gray-500">{uploadProgress}%</span>
-                  </div>
-                  <Progress value={uploadProgress} className="w-full" />
-                </div>
+	          {isProcessing && (
+	            <Card>
+	              <CardContent className="pt-6">
+	                <div className="space-y-4">
+	                  <div className="flex items-center justify-between">
+	                    <span className="text-sm font-medium">Uploading with AI-assisted field mapping...</span>
+	                    <span className="text-sm text-gray-500">{uploadProgress}%</span>
+	                  </div>
+	                  <Progress value={uploadProgress} className="w-full" />
+	                </div>
               </CardContent>
             </Card>
           )}
@@ -1905,13 +2121,13 @@ export default function BulkListingUpload({ isOpen, onClose, onUploadComplete }:
           <Button variant="outline" onClick={onClose} disabled={isProcessing}>
             Cancel
           </Button>
-          <Button 
-            onClick={processUpload} 
-            disabled={selectedFiles.length === 0 || isProcessing}
-          >
-            {isProcessing ? 'Processing with Smart Mapping...' : 'Process Files'}
-          </Button>
-        </DialogFooter>
+	          <Button 
+	            onClick={processUpload} 
+	            disabled={selectedFiles.length === 0 || isProcessing}
+	          >
+	            {isProcessing ? 'Uploading...' : 'Upload'}
+	          </Button>
+	        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

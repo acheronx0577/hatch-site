@@ -4,12 +4,14 @@ import {
   HttpCode,
   HttpStatus,
   Post,
-  Req
+  Req,
+  UseGuards
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
 import type { Multipart, MultipartFile } from '@fastify/multipart';
 import type { DraftMappingResult, ExtractedLabelValue } from '@hatch/shared';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { resolveRequestContext } from '../common/request-context';
 import { DraftsService } from './drafts.service';
 
@@ -28,6 +30,7 @@ interface DraftUploadResponse {
 }
 
 @Controller('drafts')
+@UseGuards(JwtAuthGuard)
 export class DraftsController {
   constructor(private readonly drafts: DraftsService) {}
 

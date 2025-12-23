@@ -1,6 +1,7 @@
-import { BadRequestException, Body, Controller, Get, Post, Query, Req, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
+import { JwtAuthGuard } from '@/auth/jwt-auth.guard';
 import { resolveRequestContext } from '../common/request-context';
 import { ComplianceService } from './compliance.service';
 import { CreateOverrideDto } from './dto/create-override.dto';
@@ -11,11 +12,15 @@ type ComplianceOverridesResult = Awaited<ReturnType<ComplianceService['getOverri
 type ComplianceOverrideRecord = Awaited<ReturnType<ComplianceService['createOverride']>>;
 
 @Controller('compliance')
+@UseGuards(JwtAuthGuard)
 export class ComplianceController {
   constructor(private readonly compliance: ComplianceService) {}
 
   private resolveTenantId(query: GetComplianceStatusDto, req: FastifyRequest) {
     const ctx = resolveRequestContext(req);
+    if (query.tenantId && ctx.tenantId && query.tenantId !== ctx.tenantId) {
+      throw new ForbiddenException('tenantId does not match authenticated tenant');
+    }
     const tenantId = query.tenantId ?? ctx.tenantId;
     if (!tenantId) {
       throw new BadRequestException('tenantId is required');
@@ -64,8 +69,19 @@ export class ComplianceController {
   }
 
   @Post('overrides')
-  async createOverride(@Body() body: CreateOverrideDto): Promise<ComplianceOverrideRecord> {
-    return this.compliance.createOverride(body);
+  async createOverride(@Body() body: CreateOverrideDto, @Req() req: FastifyRequest): Promise<ComplianceOverrideRecord> {
+    const ctx = resolveRequestContext(req);
+    if (body.tenantId && ctx.tenantId && body.tenantId !== ctx.tenantId) {
+      throw new ForbiddenException('tenantId does not match authenticated tenant');
+    }
+    if (body.actorUserId && ctx.userId && body.actorUserId !== ctx.userId) {
+      throw new ForbiddenException('actorUserId does not match authenticated user');
+    }
+    return this.compliance.createOverride({
+      ...body,
+      tenantId: ctx.tenantId ?? body.tenantId,
+      actorUserId: ctx.userId ?? body.actorUserId
+    });
   }
 
   @Post('export')
