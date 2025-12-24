@@ -1254,7 +1254,7 @@ export class MissionControlService {
           SELECT
             l."agentProfileId" AS "agentProfileId",
             COUNT(*)::int AS "total",
-            COUNT(*) FILTER (WHERE oi."status" = ${OfferIntentStatus.ACCEPTED})::int AS "accepted"
+            COUNT(*) FILTER (WHERE oi."status"::text = ${OfferIntentStatus.ACCEPTED})::int AS "accepted"
           FROM "OfferIntent" oi
           JOIN "OrgListing" l ON l."id" = oi."listingId"
           LEFT JOIN "OrgTransaction" t ON t."id" = oi."transactionId"
