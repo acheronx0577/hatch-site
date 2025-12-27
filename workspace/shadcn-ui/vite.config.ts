@@ -12,6 +12,9 @@ export default defineConfig(({ mode }) => ({
     }),
     react(),
   ],
+  optimizeDeps: {
+    include: ["pdfjs-dist"],
+  },
   server: {
     port: 5173,
     proxy: {
